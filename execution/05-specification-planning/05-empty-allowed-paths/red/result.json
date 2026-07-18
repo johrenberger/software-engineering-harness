@@ -1,0 +1,17 @@
+{
+  "behavior": "05-empty-allowed-paths",
+  "test_files": [
+    "tests/unit/artifacts/test_allowed_paths.py"
+  ],
+  "summary": "empty allowed paths fail",
+  "phase": "red",
+  "passed": 0,
+  "failed": "collection",
+  "duration_s": 0.0,
+  "command": "pytest tests/unit/artifacts/test_allowed_paths.py --no-cov",
+  "exit_code": 2,
+  "errors": [
+    "E   ModuleNotFoundError: No module named 'seharness.artifacts.traceability'"
+  ],
+  "recorded_at": "2026-07-18T19:12:36.110881+00:00"
+}

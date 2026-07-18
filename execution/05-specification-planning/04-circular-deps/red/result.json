@@ -1,0 +1,17 @@
+{
+  "behavior": "04-circular-deps",
+  "test_files": [
+    "tests/unit/artifacts/test_dependency_graph.py"
+  ],
+  "summary": "circular task dependencies fail",
+  "phase": "red",
+  "passed": 0,
+  "failed": "collection",
+  "duration_s": 0.0,
+  "command": "pytest tests/unit/artifacts/test_dependency_graph.py --no-cov",
+  "exit_code": 2,
+  "errors": [
+    "E   ModuleNotFoundError: No module named 'seharness.artifacts.traceability'"
+  ],
+  "recorded_at": "2026-07-18T19:12:35.694014+00:00"
+}

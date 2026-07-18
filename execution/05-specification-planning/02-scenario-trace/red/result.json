@@ -1,0 +1,17 @@
+{
+  "behavior": "02-scenario-trace",
+  "test_files": [
+    "tests/unit/artifacts/test_traceability.py"
+  ],
+  "summary": "scenarios trace to requirements",
+  "phase": "red",
+  "passed": 0,
+  "failed": "collection",
+  "duration_s": 0.0,
+  "command": "pytest tests/unit/artifacts/test_traceability.py --no-cov",
+  "exit_code": 2,
+  "errors": [
+    "E   ModuleNotFoundError: No module named 'seharness.artifacts.traceability'"
+  ],
+  "recorded_at": "2026-07-18T19:12:34.830204+00:00"
+}
