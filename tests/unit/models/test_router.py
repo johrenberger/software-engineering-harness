@@ -8,9 +8,6 @@ repair attempt / repeated task failure).
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
-
 import pytest
 
 from seharness.domain.enums import (
@@ -19,15 +16,19 @@ from seharness.domain.enums import (
     RoutingRole,
 )
 from seharness.models import (
-    FakeModelAdapter,
+    ModelError,
     ModelRequest,
     ModelResponse,
     ModelRouter,
+    ModelUsage,
 )
 
 
 class _StubAdapter:
     """Minimal adapter stand-in used to verify routing only."""
+
+    provider: ProviderName = ProviderName.MINIMAX
+    kind: ProviderKind = ProviderKind.FAKE
 
     def __init__(
         self,
@@ -39,8 +40,6 @@ class _StubAdapter:
         self.calls: list[ModelRequest] = []
 
     def invoke(self, request: ModelRequest) -> ModelResponse:
-        from seharness.models import ModelError, ModelUsage
-
         self.calls.append(request)
         return ModelResponse(
             provider=self.provider,
@@ -123,8 +122,7 @@ class TestRouterFallback:
 
         class _BoomAdapter(_StubAdapter):
             def invoke(self, request: ModelRequest) -> ModelResponse:
-                from seharness.models import ModelError, ModelResponse
-
+                self.calls.append(request)
                 return ModelResponse(
                     provider=self.provider,
                     model=f"{self.provider}-test",
@@ -147,8 +145,10 @@ class TestRouterFallback:
                 RoutingRole.REVIEW: ProviderName.MINIMAX,
                 RoutingRole.DELIVERY: ProviderName.MINIMAX,
             },
-            fallback_table={ProviderName.MINIMAX: ProviderName.CODEX,
-                            ProviderName.CODEX: ProviderName.MINIMAX},
+            fallback_table={
+                ProviderName.MINIMAX: ProviderName.CODEX,
+                ProviderName.CODEX: ProviderName.MINIMAX,
+            },
         )
         resp = router.invoke(_req(role=RoutingRole.PLANNING))
         assert resp.error is None
@@ -168,8 +168,7 @@ class TestRouterFallback:
 
         class _EmptyAdapter(_StubAdapter):
             def invoke(self, request: ModelRequest) -> ModelResponse:
-                from seharness.models import ModelResponse
-
+                self.calls.append(request)
                 return ModelResponse(
                     provider=self.provider,
                     model=f"{self.provider}-test",
@@ -192,8 +191,10 @@ class TestRouterFallback:
                 RoutingRole.REVIEW: ProviderName.MINIMAX,
                 RoutingRole.DELIVERY: ProviderName.MINIMAX,
             },
-            fallback_table={ProviderName.MINIMAX: ProviderName.CODEX,
-                            ProviderName.CODEX: ProviderName.MINIMAX},
+            fallback_table={
+                ProviderName.MINIMAX: ProviderName.CODEX,
+                ProviderName.CODEX: ProviderName.MINIMAX,
+            },
         )
         resp = router.invoke(_req(role=RoutingRole.PLANNING))
         # Primary stays in charge.

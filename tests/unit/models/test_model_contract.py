@@ -8,13 +8,13 @@ shape and returns the same ModelResponse shape.
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable
 from typing import Any, ClassVar
 
 import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from seharness.domain.enums import ProviderKind, ProviderName, RepairOutcome, RoutingRole
+from seharness.models import ModelRequest, get_adapter
 from seharness.models.base import ModelAdapter
 
 
@@ -131,8 +131,6 @@ class TestAdapterMetadataAttributes:
 
 def _build_minimal_request() -> Any:
     """Helper to build a minimal model request via the package public API."""
-    from seharness.models import ModelRequest
-
     return ModelRequest(
         role=RoutingRole.PLANNING,
         prompt="hello",
@@ -146,22 +144,16 @@ class TestModelRequestRoundTrip:
         assert req.prompt == "hello"
 
     def test_request_rejects_unknown_role(self) -> None:
-        from seharness.models import ModelRequest
-
         with pytest.raises(ValidationError):
             ModelRequest(role="not-a-role", prompt="x")  # type: ignore[arg-type]
 
     def test_request_rejects_missing_prompt(self) -> None:
-        from seharness.models import ModelRequest
-
         with pytest.raises(ValidationError):
             ModelRequest(role=RoutingRole.PLANNING)  # type: ignore[call-arg]
 
 
 class TestAdapterAcceptsModelRequest:
     def test_probe_adapter_invoked_with_request(self) -> None:
-        from seharness.models import ModelRequest
-
         a = _ProbeAdapter()
         req = ModelRequest(role=RoutingRole.PLANNING, prompt="hi")
         _ProbeAdapter.last_request = None
@@ -174,8 +166,6 @@ class TestModelAdapterRegistryProtocol:
     """The package must expose a way to look up an adapter by provider name."""
 
     def test_get_adapter_returns_subclass(self) -> None:
-        from seharness.models import get_adapter
-
         cls = get_adapter("minimax")
         # Must be a class that is a subclass of ModelAdapter
         assert isinstance(cls, type)

@@ -1,0 +1,12 @@
+{
+  "behavior": "01-model-contract",
+  "test_file": "tests/unit/models/test_model_contract.py",
+  "summary": "Identical provider-neutral request reaches all adapters",
+  "phase": "green",
+  "passed": 20,
+  "failed": 0,
+  "duration_s": 0.09,
+  "command": "pytest tests/unit/models/test_model_contract.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T18:58:29.670736+00:00"
+}

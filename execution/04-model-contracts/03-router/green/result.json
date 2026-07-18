@@ -1,0 +1,12 @@
+{
+  "behavior": "03-router",
+  "test_file": "tests/unit/models/test_router.py",
+  "summary": "Router routes by role with fallback on provider failure",
+  "phase": "green",
+  "passed": 7,
+  "failed": 0,
+  "duration_s": 0.08,
+  "command": "pytest tests/unit/models/test_router.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T18:58:30.510971+00:00"
+}

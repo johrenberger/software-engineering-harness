@@ -6,6 +6,8 @@ Per SPEC §6: ModelResponse must preserve `error information`.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -59,8 +61,6 @@ class TestTimeoutNormalization:
     def test_timeout_is_retryable(self, tmp_path: Any) -> None:
         fixture_dir = tmp_path / "fixtures"
         fixture_dir.mkdir()
-        from pathlib import Path
-        import json
 
         Path(fixture_dir / "fixtures.json").write_text(
             json.dumps({"prompts": {"slow": {"timeout": True}}}),
@@ -74,8 +74,6 @@ class TestTimeoutNormalization:
 
     def test_timeout_records_duration(self, tmp_path: Any) -> None:
         """The response must still record duration even when the call failed."""
-        from pathlib import Path
-        import json
 
         fixture_dir = tmp_path / "fixtures"
         fixture_dir.mkdir()
@@ -89,21 +87,15 @@ class TestTimeoutNormalization:
 
 
 class TestProviderFailureNormalization:
-    def test_provider_failure_is_not_retryable_via_repair(
-        self, tmp_path: Any
-    ) -> None:
+    def test_provider_failure_is_not_retryable_via_repair(self, tmp_path: Any) -> None:
         """Provider-level failures should not be silently retried by the
         structured-output repair step. They surface as a non-repairable
         error so the router decides whether to fall back."""
-        from pathlib import Path
-        import json
 
         fixture_dir = tmp_path / "fixtures"
         fixture_dir.mkdir()
         Path(fixture_dir / "fixtures.json").write_text(
-            json.dumps(
-                {"prompts": {"boom": {"provider_error": "internal"}}}
-            ),
+            json.dumps({"prompts": {"boom": {"provider_error": "internal"}}}),
             encoding="utf-8",
         )
         adapter = FakeModelAdapter(fixtures_dir=fixture_dir)
@@ -116,11 +108,7 @@ class TestProviderFailureNormalization:
 
 
 class TestMalformedOutputNormalization:
-    def test_malformed_output_triggers_repair_flag(
-        self, tmp_path: Any
-    ) -> None:
-        from pathlib import Path
-        import json
+    def test_malformed_output_triggers_repair_flag(self, tmp_path: Any) -> None:
 
         fixture_dir = tmp_path / "fixtures"
         fixture_dir.mkdir()

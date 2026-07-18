@@ -14,18 +14,18 @@ from typing import Any
 
 import pytest
 
-from seharness.domain.enums import RepairOutcome, RoutingRole
+from seharness.domain.enums import RepairOutcome
 from seharness.models import (
     ModelError,
     ModelRepair,
     ModelRequest,
     ModelResponse,
+    ModelUsage,
     StructuredOutputRepair,
 )
 
 
 def _ok(parsed: dict[str, Any]) -> ModelResponse:
-    from seharness.models import ModelUsage
 
     return ModelResponse(
         provider="minimax",
@@ -104,9 +104,7 @@ class TestRepairAttempts:
             return _repair_succeeded()
 
         repair = StructuredOutputRepair()
-        result = repair.maybe_repair(
-            _malformed(), reattempt=reattempt
-        )
+        result = repair.maybe_repair(_malformed(), reattempt=reattempt)
         assert result.outcome == RepairOutcome.REPAIRED
         assert result.response.parsed == {"repaired": True}
         assert result.attempts == 1
@@ -122,9 +120,7 @@ class TestRepairAttempts:
             return _repair_failed()
 
         repair = StructuredOutputRepair()
-        result = repair.maybe_repair(
-            _malformed(), reattempt=reattempt
-        )
+        result = repair.maybe_repair(_malformed(), reattempt=reattempt)
         assert result.outcome == RepairOutcome.REJECTED
         assert result.response.error is not None
         assert result.response.error.kind == "malformed_output"
@@ -142,7 +138,6 @@ class TestRepairAttempts:
 
 class TestRepairContext:
     def test_repair_record_records_outcome(self) -> None:
-        from seharness.models import ModelRepair
 
         record = ModelRepair(
             outcome=RepairOutcome.REPAIRED,
@@ -154,7 +149,6 @@ class TestRepairContext:
         assert record.original_error == "malformed"
 
     def test_repair_record_rejects_negative_attempts(self) -> None:
-        from seharness.models import ModelRepair
 
         with pytest.raises(ValueError):
             ModelRepair(

@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 20 items
+
+tests/unit/models/test_model_contract.py::TestModelAdapterIsAbstract::test_cannot_instantiate_abc_directly PASSED [  5%]
+tests/unit/models/test_model_contract.py::TestModelAdapterIsAbstract::test_subclass_must_implement_invoke PASSED [ 10%]
+tests/unit/models/test_model_contract.py::TestModelAdapterIsAbstract::test_subclass_with_invoke_is_instantiable PASSED [ 15%]
+tests/unit/models/test_model_contract.py::TestModelAdapterSignature::test_invoke_signature PASSED [ 20%]
+tests/unit/models/test_model_contract.py::TestModelAdapterSignature::test_invoke_is_abstract PASSED [ 25%]
+tests/unit/models/test_model_contract.py::TestModelAdapterSignature::test_invoke_return_annotation_is_model_response PASSED [ 30%]
+tests/unit/models/test_model_contract.py::TestProviderNameStrEnum::test_provider_name_values PASSED [ 35%]
+tests/unit/models/test_model_contract.py::TestProviderNameStrEnum::test_provider_name_is_strenum PASSED [ 40%]
+tests/unit/models/test_model_contract.py::TestProviderNameStrEnum::test_provider_name_members PASSED [ 45%]
+tests/unit/models/test_model_contract.py::TestProviderKindStrEnum::test_provider_kind_values PASSED [ 50%]
+tests/unit/models/test_model_contract.py::TestProviderKindStrEnum::test_provider_kind_is_strenum PASSED [ 55%]
+tests/unit/models/test_model_contract.py::TestRoutingRoleStrEnum::test_routing_role_values PASSED [ 60%]
+tests/unit/models/test_model_contract.py::TestRepairOutcomeStrEnum::test_repair_outcome_values PASSED [ 65%]
+tests/unit/models/test_model_contract.py::TestAdapterMetadataAttributes::test_probe_adapter_has_provider PASSED [ 70%]
+tests/unit/models/test_model_contract.py::TestAdapterMetadataAttributes::test_probe_adapter_has_kind PASSED [ 75%]
+tests/unit/models/test_model_contract.py::TestModelRequestRoundTrip::test_minimal_request_round_trip PASSED [ 80%]
+tests/unit/models/test_model_contract.py::TestModelRequestRoundTrip::test_request_rejects_unknown_role PASSED [ 85%]
+tests/unit/models/test_model_contract.py::TestModelRequestRoundTrip::test_request_rejects_missing_prompt PASSED [ 90%]
+tests/unit/models/test_model_contract.py::TestAdapterAcceptsModelRequest::test_probe_adapter_invoked_with_request PASSED [ 95%]
+tests/unit/models/test_model_contract.py::TestModelAdapterRegistryProtocol::test_get_adapter_returns_subclass PASSED [100%]
+
+============================== 20 passed in 0.09s ==============================

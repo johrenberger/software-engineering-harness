@@ -58,3 +58,6 @@ examples/harness.local.*.yaml
 .env
 .env.*
 !.env.example
+.mutmut-cache
+
+# Ignore .mutmut-cache file (mutmut 2.0+ creates as file, not dir)

@@ -57,9 +57,7 @@ class TestFakeAdapterFixtureLoading:
     def test_missing_fixture_raises_lookup_error(self, tmp_path: Path) -> None:
         fixture_dir = tmp_path / "fixtures"
         fixture_dir.mkdir()
-        (fixture_dir / "fixtures.json").write_text(
-            json.dumps({"prompts": {}}), encoding="utf-8"
-        )
+        (fixture_dir / "fixtures.json").write_text(json.dumps({"prompts": {}}), encoding="utf-8")
         adapter = FakeModelAdapter(fixtures_dir=fixture_dir)
         with pytest.raises(LookupError):
             adapter.invoke(_req(prompt="absent"))
@@ -107,9 +105,7 @@ class TestFakeAdapterSimulatedFailures:
         assert resp.error is not None
         assert resp.error.kind == "provider_failure"
 
-    def test_simulate_malformed_triggers_repair_recommendation(
-        self, tmp_path: Path
-    ) -> None:
+    def test_simulate_malformed_triggers_repair_recommendation(self, tmp_path: Path) -> None:
         """When the fake produces malformed output, the response must recommend
         a one-shot repair so downstream callers can route to output_repair."""
         fixture_dir = tmp_path / "fixtures"
@@ -204,9 +200,7 @@ class TestFakeAdapterResponseShape:
             json.dumps({"prompts": {"hi": {"text": "yo"}}}),
             encoding="utf-8",
         )
-        adapter = FakeModelAdapter(
-            fixtures_dir=fixture_dir, model_name="fake/minimax-M3"
-        )
+        adapter = FakeModelAdapter(fixtures_dir=fixture_dir, model_name="fake/minimax-M3")
         resp = adapter.invoke(_req(prompt="hi"))
         assert resp.provider == adapter.provider
         assert resp.model == "fake/minimax-M3"

@@ -16,23 +16,22 @@ Configuration precedence (highest wins):
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-# Known provider identifiers. Extend as new adapters are introduced.
-ProviderName = Literal["minimax", "codex"]
+# Re-exported for backward compatibility with slice 1 callers.
+# Slice 4 promotes ProviderName to a StrEnum in domain/enums.py.
+from seharness.domain.enums import ProviderName
 
 # Provider IDs we know about today. New providers must be added here AND in
 # ``ModelsConfig`` routing defaults before they can be used in routing.
-_KNOWN_PROVIDERS: tuple[ProviderName, ...] = ("minimax", "codex")
+_KNOWN_PROVIDERS: tuple[ProviderName, ...] = (ProviderName.MINIMAX, ProviderName.CODEX)
 
 # Default routing fallback table. The constant is module-level so mypy can
-# infer the precise literal element type without a runtime cast (which would
+# infer the precise enum element type without a runtime cast (which would
 # produce a mutmut-false-positive equivalent mutant).
 _DEFAULT_FALLBACK: dict[ProviderName, ProviderName] = {
-    "minimax": "codex",
-    "codex": "minimax",
+    ProviderName.MINIMAX: ProviderName.CODEX,
+    ProviderName.CODEX: ProviderName.MINIMAX,
 }
 
 
@@ -65,10 +64,10 @@ class ModelsConfig(_StrictModel):
     the configuration is rejected before a run starts.
     """
 
-    planning: ProviderName = "minimax"
-    implementation: ProviderName = "codex"
-    remediation: ProviderName = "codex"
-    review: ProviderName = "minimax"
+    planning: ProviderName = ProviderName.MINIMAX
+    implementation: ProviderName = ProviderName.CODEX
+    remediation: ProviderName = ProviderName.CODEX
+    review: ProviderName = ProviderName.MINIMAX
     fallback: dict[ProviderName, ProviderName] = Field(
         default_factory=lambda: dict(_DEFAULT_FALLBACK)
     )

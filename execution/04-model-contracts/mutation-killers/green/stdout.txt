@@ -1,0 +1,43 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 33 items
+
+tests/unit/models/test_models_mutation_killers.py::TestModelRequestConfigKillers::test_rejects_extra_field PASSED [  3%]
+tests/unit/models/test_models_mutation_killers.py::TestModelRequestConfigKillers::test_min_tokens_enforced PASSED [  6%]
+tests/unit/models/test_models_mutation_killers.py::TestModelRequestConfigKillers::test_max_tokens_enforced PASSED [  9%]
+tests/unit/models/test_models_mutation_killers.py::TestModelRequestConfigKillers::test_temperature_lower_bound PASSED [ 12%]
+tests/unit/models/test_models_mutation_killers.py::TestModelRequestConfigKillers::test_temperature_upper_bound PASSED [ 15%]
+tests/unit/models/test_models_mutation_killers.py::TestModelRequestConfigKillers::test_is_frozen PASSED [ 18%]
+tests/unit/models/test_models_mutation_killers.py::TestModelRequestConfigKillers::test_validates_on_assignment PASSED [ 21%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_rejects_extra_field PASSED [ 24%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_is_frozen PASSED [ 27%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_validates_on_assignment PASSED [ 30%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_default_requires_repair_is_false PASSED [ 33%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_default_files_changed_is_empty_tuple PASSED [ 36%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_default_parsed_is_none PASSED [ 39%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_default_raw_output_is_none PASSED [ 42%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_default_usage_is_none PASSED [ 45%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_default_error_is_none PASSED [ 48%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_duration_s_default_is_zero PASSED [ 51%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_duration_s_rejects_negative PASSED [ 54%]
+tests/unit/models/test_models_mutation_killers.py::TestModelResponseConfigKillers::test_rejects_unknown_provider_value PASSED [ 57%]
+tests/unit/models/test_models_mutation_killers.py::TestModelUsageConfigKillers::test_rejects_extra_field PASSED [ 60%]
+tests/unit/models/test_models_mutation_killers.py::TestModelUsageConfigKillers::test_rejects_negative_input_tokens PASSED [ 63%]
+tests/unit/models/test_models_mutation_killers.py::TestModelUsageConfigKillers::test_rejects_negative_output_tokens PASSED [ 66%]
+tests/unit/models/test_models_mutation_killers.py::TestModelUsageConfigKillers::test_accepts_zero_input_tokens PASSED [ 69%]
+tests/unit/models/test_models_mutation_killers.py::TestModelUsageConfigKillers::test_accepts_zero_output_tokens PASSED [ 72%]
+tests/unit/models/test_models_mutation_killers.py::TestModelUsageConfigKillers::test_is_frozen PASSED [ 75%]
+tests/unit/models/test_models_mutation_killers.py::TestModelErrorConfigKillers::test_rejects_extra_field PASSED [ 78%]
+tests/unit/models/test_models_mutation_killers.py::TestModelErrorConfigKillers::test_rejects_unknown_kind PASSED [ 81%]
+tests/unit/models/test_models_mutation_killers.py::TestModelErrorConfigKillers::test_default_retryable_is_false PASSED [ 84%]
+tests/unit/models/test_models_mutation_killers.py::TestModelErrorConfigKillers::test_default_original_error_is_none PASSED [ 87%]
+tests/unit/models/test_models_mutation_killers.py::TestModelRepairConfigKillers::test_rejects_extra_field PASSED [ 90%]
+tests/unit/models/test_models_mutation_killers.py::TestModelRepairConfigKillers::test_attempts_ge_zero PASSED [ 93%]
+tests/unit/models/test_models_mutation_killers.py::TestModelRepairConfigKillers::test_attempts_le_one PASSED [ 96%]
+tests/unit/models/test_models_mutation_killers.py::TestModelRepairConfigKillers::test_accepts_attempts_zero PASSED [100%]
+
+============================== 33 passed in 0.09s ==============================
