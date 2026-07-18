@@ -1,0 +1,12 @@
+{
+  "behavior": "03-green-marks-ready",
+  "test_file": "tests/unit/ci/test_green_marks_ready.py",
+  "summary": "green required checks mark the draft PR ready",
+  "phase": "green",
+  "passed": 8,
+  "failed": 0,
+  "duration_s": 0.09,
+  "command": "pytest tests/unit/ci/test_green_marks_ready.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T21:33:33.687468+00:00"
+}
