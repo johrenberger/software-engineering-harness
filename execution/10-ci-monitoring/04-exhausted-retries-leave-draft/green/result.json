@@ -1,0 +1,12 @@
+{
+  "behavior": "04-exhausted-retries-leave-draft",
+  "test_file": "tests/unit/ci/test_exhausted_retries_leave_draft.py",
+  "summary": "exhausted CI retries leave the PR draft",
+  "phase": "green",
+  "passed": 13,
+  "failed": 0,
+  "duration_s": 0.1,
+  "command": "pytest tests/unit/ci/test_exhausted_retries_leave_draft.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T21:33:34.140549+00:00"
+}

@@ -1,0 +1,12 @@
+{
+  "behavior": "01-pending-does-not-mark-ready",
+  "test_file": "tests/unit/ci/test_pending_does_not_mark_ready.py",
+  "summary": "pending checks do not mark ready",
+  "phase": "green",
+  "passed": 8,
+  "failed": 0,
+  "duration_s": 0.09,
+  "command": "pytest tests/unit/ci/test_pending_does_not_mark_ready.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T21:33:32.765969+00:00"
+}

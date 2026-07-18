@@ -14,13 +14,11 @@ import pytest
 from seharness.ci.checks import (
     CheckConclusion,
     CheckRunState,
-    CheckStatus,
     PullRequestCheck,
     RequiredChecksView,
 )
 from seharness.ci.monitor import CiMonitor, PollResult, StubCiMonitor
 from seharness.ci.polling import PollOutcome, PollPolicy, PollState
-from seharness.ci.readiness import ReadyEvaluator
 
 
 def _failing_view() -> RequiredChecksView:
@@ -174,6 +172,4 @@ def test_ci_monitor_protocol_has_no_merge() -> None:
     members = set(dir(CiMonitor))
     forbidden = ("merge", "auto_merge", "merge_pull_request")
     for m in forbidden:
-        assert m not in members, (
-            f"CiMonitor exposes forbidden merge method: {m}"
-        )
+        assert m not in members, f"CiMonitor exposes forbidden merge method: {m}"

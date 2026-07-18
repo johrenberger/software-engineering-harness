@@ -12,17 +12,15 @@ from pydantic import ValidationError
 from seharness.ci.checks import (
     CheckConclusion,
     CheckRunState,
-    CheckStatus,
     PullRequestCheck,
     RequiredChecksView,
 )
 from seharness.ci.polling import PollPolicy, PollState
-from seharness.ci.readiness import ReadinessDecision, ReadyEvaluator
+from seharness.ci.readiness import ReadinessDecision
 from seharness.ci.remediation import (
     RemediationPacket,
     RemediationReason,
 )
-
 
 # --- CheckRunState StrEnum ---
 
@@ -146,8 +144,11 @@ def test_poll_state_rejects_extra_kwargs() -> None:
 
 
 def test_remediation_packet_is_frozen() -> None:
-    from seharness.execution.evidence import BoundedEvidence
-    bs = BoundedEvidence(files=tuple(), logs=tuple(), total_bytes=0)
+    from seharness.validation.remediation import BoundedEvidence
+
+    bs = BoundedEvidence(
+        failure=None, relevant_files=tuple(), previous_green=None, allowed_paths=tuple()
+    )
     pkt = RemediationPacket(
         check_name="ci/build",
         reason=RemediationReason.CHECK_FAILED,

@@ -19,7 +19,7 @@ from seharness.ci.checks import (
     PullRequestCheck,
     RequiredChecksView,
 )
-from seharness.ci.readiness import ReadyEvaluator, ReadinessDecision
+from seharness.ci.readiness import ReadyEvaluator
 
 
 def test_empty_required_set_yields_not_ready() -> None:

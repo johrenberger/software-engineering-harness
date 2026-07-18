@@ -11,18 +11,14 @@
 
 from __future__ import annotations
 
-import pytest
-
 from seharness.ci.checks import (
     CheckConclusion,
     CheckRunState,
     PullRequestCheck,
     RequiredChecksView,
 )
-from seharness.ci.readiness import ReadyEvaluator
 from seharness.ci.remediation import (
     CiRemediationLoop,
-    RemediationPacket,
     RemediationReason,
     StubCiRemediationLoop,
 )
@@ -138,9 +134,11 @@ def test_packet_has_bounded_evidence() -> None:
     view = _view_with("ci/build", CheckConclusion.FAILURE)
     packets = StubCiRemediationLoop().build_packets(view)
     assert packets[0].bounded_evidence is not None
-    # BoundedEvidence is a dataclass with max sizes
+    # BoundedEvidence is a frozen Pydantic model (slice 7).
     bs = packets[0].bounded_evidence
-    assert hasattr(bs, "files") or hasattr(bs, "logs") or hasattr(bs, "total_bytes")
+    # Required surface: relevant_files, allowed_paths (per slice 7 spec)
+    assert hasattr(bs, "relevant_files")
+    assert hasattr(bs, "allowed_paths")
 
 
 def test_packet_carries_remediation_reason_value() -> None:
@@ -159,6 +157,4 @@ def test_loop_protocol_has_build_packets_only() -> None:
     members = set(dir(CiRemediationLoop))
     forbidden = ("merge", "auto_merge", "merge_pull_request")
     for m in forbidden:
-        assert m not in members, (
-            f"CiRemediationLoop exposes forbidden merge method: {m}"
-        )
+        assert m not in members, f"CiRemediationLoop exposes forbidden merge method: {m}"

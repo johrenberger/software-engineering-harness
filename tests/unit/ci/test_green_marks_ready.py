@@ -143,9 +143,7 @@ def test_ready_transition_protocol_has_no_merge() -> None:
     members = set(dir(ReadyTransition))
     forbidden = ("merge", "auto_merge", "merge_pull_request")
     for m in forbidden:
-        assert m not in members, (
-            f"ReadyTransition exposes forbidden merge method: {m}"
-        )
+        assert m not in members, f"ReadyTransition exposes forbidden merge method: {m}"
 
 
 def test_stub_ready_tracks_multiple_prs_independently() -> None:

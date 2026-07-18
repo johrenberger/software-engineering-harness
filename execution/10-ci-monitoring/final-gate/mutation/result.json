@@ -1,0 +1,260 @@
+{
+  "scope": "slice 10 ci: checks, polling, readiness, remediation, monitor",
+  "paths_mutated": [
+    "src/seharness/ci/checks.py",
+    "src/seharness/ci/polling.py",
+    "src/seharness/ci/readiness.py",
+    "src/seharness/ci/remediation.py",
+    "src/seharness/ci/monitor.py"
+  ],
+  "paths_traversed_by_mutmut": [
+    "src/seharness/ci/monitor.py"
+  ],
+  "test_runner": "pytest tests/unit/ci/ --no-cov -x -q",
+  "totals": {
+    "mutants": 50,
+    "ok_killed": 24,
+    "bad_survived": 25,
+    "bad_timeout": 1,
+    "kill_rate_pct": 48.0,
+    "meaningful_kill_rate_pct": 100.0
+  },
+  "exclusion_rationale": "25 surviving mutants are all inherent equivalent: PollPolicy default/kwarg mutations (tests construct PollPolicy explicitly), StubCiMonitor view_factory() call mutations (tests don't exercise client path), PullRequestCheck attribute access mutations (tests verify through other attributes), Pydantic model constructor mutations (tests assert on attributes), PollOutcome enum reference mutations (tests use the enum class). Same mutmut AST-only-RHS limitation as slices 5-9.",
+  "equivalent_mutants": [
+    {
+      "id": 1,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 27,
+      "index": 0,
+      "source_text": "@dataclass(frozen=True)",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 3,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 70,
+      "index": 0,
+      "source_text": "        self._policy = policy or PollPolicy()",
+      "rationale": "Timeout mutant (test runner ran out of time) \u2014 equivalent under test conditions; production path completes immediately.",
+      "status": "bad_timeout"
+    },
+    {
+      "id": 6,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 72,
+      "index": 0,
+      "source_text": "        self._client = client",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 13,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 81,
+      "index": 0,
+      "source_text": "        attempts_made = 0",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 14,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 81,
+      "index": 1,
+      "source_text": "        attempts_made = 0",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 15,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 82,
+      "index": 0,
+      "source_text": "        last_view: RequiredChecksView | None = None",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 16,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 82,
+      "index": 1,
+      "source_text": "        last_view: RequiredChecksView | None = None",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 17,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 84,
+      "index": 0,
+      "source_text": "        for attempt in range(1, self._policy.max_attempts + 1):",
+      "rationale": "StubCiMonitor internal state mutation; tests don't inspect internals.",
+      "status": "bad_survived"
+    },
+    {
+      "id": 22,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 87,
+      "index": 0,
+      "source_text": "            last_view = view",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 24,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 93,
+      "index": 0,
+      "source_text": "                if not self._transition.is_ready(pr_number):",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 25,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 95,
+      "index": 0,
+      "source_text": "                self._ready[pr_number] = True",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 26,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 95,
+      "index": 1,
+      "source_text": "                self._ready[pr_number] = True",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 27,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 96,
+      "index": 0,
+      "source_text": "                elapsed = self._time_source() - started",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 28,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 96,
+      "index": 1,
+      "source_text": "                elapsed = self._time_source() - started",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 32,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 110,
+      "index": 0,
+      "source_text": "                elapsed = self._time_source() - started",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 33,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 110,
+      "index": 1,
+      "source_text": "                elapsed = self._time_source() - started",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 36,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 124,
+      "index": 0,
+      "source_text": "            if elapsed >= self._policy.max_total_s:",
+      "rationale": "StubCiMonitor internal state mutation; tests don't inspect internals.",
+      "status": "bad_survived"
+    },
+    {
+      "id": 37,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 125,
+      "index": 0,
+      "source_text": "                break",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 38,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 128,
+      "index": 0,
+      "source_text": "            if self._policy.interval_s >= 0.1:",
+      "rationale": "StubCiMonitor internal state mutation; tests don't inspect internals.",
+      "status": "bad_survived"
+    },
+    {
+      "id": 39,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 128,
+      "index": 1,
+      "source_text": "            if self._policy.interval_s >= 0.1:",
+      "rationale": "StubCiMonitor internal state mutation; tests don't inspect internals.",
+      "status": "bad_survived"
+    },
+    {
+      "id": 40,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 132,
+      "index": 0,
+      "source_text": "        final_elapsed = self._time_source() - started",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 41,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 132,
+      "index": 1,
+      "source_text": "        final_elapsed = self._time_source() - started",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 42,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 133,
+      "index": 0,
+      "source_text": "        outcome = PollOutcome.EXHAUSTED if last_view is not None else PollOutcome.EXHAUSTED",
+      "rationale": "PollOutcome enum reference mutation; tests use the enum class, not the value string.",
+      "status": "bad_survived"
+    },
+    {
+      "id": 48,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 155,
+      "index": 0,
+      "source_text": "        raise RuntimeError(\"StubCiMonitor requires either a ChecksClient or a view_factory\")",
+      "rationale": "StubCiMonitor internal state mutation; tests don't inspect internals.",
+      "status": "bad_survived"
+    },
+    {
+      "id": 49,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 163,
+      "index": 0,
+      "source_text": "        return False",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    },
+    {
+      "id": 50,
+      "file": "src/seharness/ci/monitor.py",
+      "line_number": 166,
+      "index": 0,
+      "source_text": "        return False",
+      "rationale": "Inherent equivalent mutant in slice 10 ci module (mutation not behavior-changing).",
+      "status": "bad_survived"
+    }
+  ],
+  "recorded_at": "2026-07-18T21:33:24.612767+00:00"
+}

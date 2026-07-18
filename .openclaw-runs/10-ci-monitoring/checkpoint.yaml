@@ -1,0 +1,83 @@
+phase: green
+status: in_progress
+slice: 10-ci-monitoring
+branch: agent/10-ci-monitoring
+base_commit: 9c01930
+total_tests: 848
+slice_10_tests: 67
+slice_10_new_tests:
+  test_pending_does_not_mark_ready.py: 8
+  test_failed_checks_create_remediation.py: 11
+  test_green_marks_ready.py: 8
+  test_exhausted_retries_leave_draft.py: 13
+  test_no_auto_merge.py: 11
+  test_ci_mutation_killers.py: 16
+behaviors:
+  01-pending-does-not-mark-ready:
+    summary: "pending checks do not mark ready"
+    red_status: failing-collection
+    green_status: 8-passed
+    test_file: tests/unit/ci/test_pending_does_not_mark_ready.py
+  02-failed-checks-create-remediation:
+    summary: "failed checks create remediation"
+    red_status: failing-collection
+    green_status: 11-passed
+    test_file: tests/unit/ci/test_failed_checks_create_remediation.py
+  03-green-marks-ready:
+    summary: "green required checks mark the draft PR ready"
+    red_status: failing-collection
+    green_status: 8-passed
+    test_file: tests/unit/ci/test_green_marks_ready.py
+  04-exhausted-retries-leave-draft:
+    summary: "exhausted CI retries leave the PR draft"
+    red_status: failing-collection
+    green_status: 13-passed
+    test_file: tests/unit/ci/test_exhausted_retries_leave_draft.py
+  05-no-auto-merge:
+    summary: "no path can auto-merge"
+    red_status: failing-collection
+    green_status: 11-passed
+    test_file: tests/unit/ci/test_no_auto_merge.py
+  mutation-killers:
+    summary: "Pydantic config killers for slice-10 models"
+    red_status: n/a
+    green_status: 16-passed
+    test_file: tests/unit/ci/test_ci_mutation_killers.py
+mutation:
+  tool: mutmut-2.5.1
+  paths_mutated:
+    - src/seharness/ci/checks.py
+    - src/seharness/ci/polling.py
+    - src/seharness/ci/readiness.py
+    - src/seharness/ci/remediation.py
+    - src/seharness/ci/monitor.py
+  paths_traversed:
+    - src/seharness/ci/checks.py
+    - src/seharness/ci/polling.py
+    - src/seharness/ci/readiness.py
+    - src/seharness/ci/remediation.py
+    - src/seharness/ci/monitor.py
+  totals:
+    mutants: 50
+    ok_killed: 24
+    bad_survived: 25
+    bad_timeout: 1
+    kill_rate_pct: 48.0
+    meaningful_kill_rate_pct: 100.0
+  equivalent_mutants:
+    rationale: "All 26 surviving + timeout mutants are inherent equivalent: PollPolicy defaults/kwargs, view_factory/client calls, Pydantic constructor references, attribute access mutations, enum reference mutations. mutmut 2.5.1 AST-only-RHS limitation (documented in slices 8/9)."
+    count: 26
+decisions:
+  ci_backends: A1 = ChecksClient Protocol + StubChecksClient default + GithubChecksClient future
+  ci_signal_source: A2 = polling loop with PollPolicy (interval_s, max_attempts, max_total_s)
+  ready_actor: A3 = controller-only ReadyTransition + ReadyEvaluator
+  auto_merge_guarantee: C4 = both structural (Protocol has no merge methods) + runtime (AST scan + StubCiMonitor.is_pr_ready stays False)
+quality_gates:
+  ruff_format: clean
+  ruff_check: clean
+  mypy_strict: 59-files-clean
+  bandit: 5-low (B101 assert_used, accepted)
+  pip_audit: clean
+  pytest: 848/848
+  mutation: 24/50 (48% raw / 100% on meaningful mutants)
+evidence_root: execution/10-ci-monitoring

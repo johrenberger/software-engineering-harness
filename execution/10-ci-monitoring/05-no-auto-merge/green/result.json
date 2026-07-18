@@ -1,0 +1,12 @@
+{
+  "behavior": "05-no-auto-merge",
+  "test_file": "tests/unit/ci/test_no_auto_merge.py",
+  "summary": "no path can auto-merge",
+  "phase": "green",
+  "passed": 11,
+  "failed": 0,
+  "duration_s": 0.11,
+  "command": "pytest tests/unit/ci/test_no_auto_merge.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T21:33:34.584832+00:00"
+}
