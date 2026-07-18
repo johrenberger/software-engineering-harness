@@ -1,0 +1,11 @@
+{
+  "phase": "red",
+  "behavior": "precedence resolution (CLI > env > local > repo > defaults)",
+  "test_file": "tests/unit/config/test_precedence.py",
+  "command": ".venv/bin/python -m pytest tests/unit/config/test_precedence.py -x --no-cov",
+  "exit_code": 2,
+  "outcome": "failed for intended reason",
+  "intended_failure": true,
+  "expected_error": "ModuleNotFoundError: No module named 'seharness.config_loader'",
+  "timestamp": "2026-07-18T15:53:02Z"
+}

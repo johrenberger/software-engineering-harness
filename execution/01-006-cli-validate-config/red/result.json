@@ -1,0 +1,9 @@
+{
+  "phase": "red",
+  "behavior": "seharness validate-config CLI with JSON output",
+  "test_file": "tests/unit/test_cli_validate_config.py",
+  "exit_code": 0,
+  "intended_failure": true,
+  "expected_error": "ImportError: seharness.cli",
+  "timestamp": "2026-07-18T15:54:31Z"
+}

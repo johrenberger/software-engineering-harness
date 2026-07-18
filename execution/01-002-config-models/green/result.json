@@ -1,0 +1,14 @@
+{
+  "phase": "green",
+  "behavior": "typed configuration models with strict unknown-key rejection",
+  "test_file": "tests/unit/config/test_config_models.py",
+  "command": ".venv/bin/python -m pytest tests/unit/config/test_config_models.py -x --no-cov",
+  "exit_code": 0,
+  "outcome": "passed",
+  "tests_passed": 12,
+  "tests_failed": 0,
+  "mypy_strict": "clean",
+  "ruff_check": "clean",
+  "ruff_format": "clean",
+  "timestamp": "2026-07-18T15:52:37Z"
+}

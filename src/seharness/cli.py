@@ -1,0 +1,118 @@
+"""Typer-based CLI for the software engineering harness.
+
+Slice 1 implements ``validate-config`` as a subcommand. Typer 0.27 only
+creates a Group when an app has more than one registered command, so
+we also register a stub ``run`` callback that prints "not implemented
+yet" — this forces Group mode without changing the user-facing API and
+makes it trivial to swap in the real ``run`` implementation in a
+later slice.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import typer
+
+from seharness.config_loader import ConfigurationError, load_config
+
+app = typer.Typer(
+    name="seharness",
+    help="Software Engineering Harness — framework-neutral Python harness for OpenClaw.",
+    no_args_is_help=True,
+    add_completion=False,
+)
+
+
+def _emit(data: dict[str, Any], fmt: str) -> None:
+    """Emit a result dict either as a single-line summary or as JSON."""
+    if fmt == "json":
+        typer.echo(json.dumps(data, indent=2, sort_keys=True))
+        return
+    status = data.get("status", "unknown")
+    if status == "valid":
+        config = data.get("config", {})
+        harness = config.get("harness", {}) if isinstance(config, dict) else {}
+        artifact_root = harness.get("artifact_root", "?")
+        typer.echo(f"configuration valid (artifact_root={artifact_root})")
+    else:
+        typer.echo(f"configuration INVALID: {data.get('error', '<no message>')}")
+
+
+@app.command("validate-config")
+def validate_config(
+    repo_yaml: Path | None = typer.Option(
+        None,
+        "--repo-yaml",
+        help="Path to repository harness.yaml. Defaults to ./harness.yaml.",
+    ),
+    local_yaml: Path | None = typer.Option(
+        None,
+        "--local-yaml",
+        help="Path to local override file. Defaults to ./seharness.local.yaml.",
+    ),
+    no_env: bool = typer.Option(
+        False,
+        "--no-env",
+        help="Ignore environment variables (useful for deterministic checks).",
+    ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        help="Output format: text or json.",
+    ),
+) -> None:
+    """Validate the merged harness configuration.
+
+    Loads configuration from defaults, repository harness.yaml, local
+    override, environment, and CLI-provided overrides. Exits 0 on
+    success, non-zero on validation failure.
+    """
+    if output_format not in {"text", "json"}:
+        typer.echo(f"unknown --format value: {output_format}", err=True)
+        raise typer.Exit(code=2)
+    if repo_yaml is None and Path("harness.yaml").exists():
+        repo_yaml = Path("harness.yaml")
+    if local_yaml is None and Path("seharness.local.yaml").exists():
+        local_yaml = Path("seharness.local.yaml")
+    try:
+        config = load_config(
+            repo_yaml=repo_yaml,
+            local_yaml=local_yaml,
+            include_env=not no_env,
+        )
+    except ConfigurationError as e:
+        _emit({"status": "invalid", "error": str(e)}, output_format)
+        raise typer.Exit(code=1) from e
+    _emit({"status": "valid", "config": config.model_dump()}, output_format)
+
+
+@app.command("run")
+def run_command(
+    repository: str = typer.Option(..., "--repository", help="Local path or git URL."),
+    feature: str = typer.Option(..., "--feature", help="Feature description."),
+    model: str = typer.Option(
+        "fake", "--model", help="Implementation model: fake, minimax, codex."
+    ),
+) -> None:
+    """Run a harness workflow for a feature (not implemented in Slice 1)."""
+    typer.echo(
+        "seharness run is not implemented yet. Slice 2+ will deliver the workflow controller.",
+        err=True,
+    )
+    raise typer.Exit(code=1)
+
+
+def main() -> None:
+    """Console entry point for ``seharness``."""
+    try:
+        app(standalone_mode=True)
+    except SystemExit as e:
+        sys.exit(e.code)
+
+
+if __name__ == "__main__":
+    main()

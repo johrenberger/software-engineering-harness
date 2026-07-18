@@ -1,0 +1,48 @@
+# Repository-level harness configuration for software-engineering-harness.
+#
+# This file is committed and shared across the team. Anything local,
+# machine-specific, or containing secrets belongs in seharness.local.yaml
+# (which is git-ignored).
+#
+# Configuration precedence (highest wins):
+#   1. CLI overrides (e.g. `seharness validate-config --repo-yaml ...`)
+#   2. Environment variables (SEHARNESS_HARNESS__ARTIFACT_ROOT, ...)
+#   3. seharness.local.yaml (git-ignored)
+#   4. this file (harness.yaml, committed)
+#   5. built-in defaults (in src/seharness/config.py)
+
+harness:
+  artifact_root: .harness-runs
+  resume_enabled: true
+  fail_closed: true
+
+repository:
+  clone_root: .workspaces
+  base_branch: main
+  branch_prefix: ai/feature
+
+models:
+  planning: minimax
+  implementation: codex
+  remediation: codex
+  review: minimax
+  fallback:
+    minimax: codex
+    codex: minimax
+
+execution:
+  max_parallel_tasks: 1
+  task_retry_limit: 2
+  validation_repair_limit: 3
+  review_repair_limit: 2
+  ci_repair_limit: 2
+
+github:
+  create_pull_request: true
+  draft_pull_request: true
+  mark_ready_when_green: true
+  auto_merge: false  # intentionally false for the scaffold
+
+telegram:
+  enabled: false
+  allowed_chat_ids: []

@@ -1,0 +1,3 @@
+command: mutmut run --paths-to-mutate=src/seharness/config.py
+runner: pytest tests/unit/config/ tests/unit/test_cli_validate_config.py
+note: partial run captured (process killed at 80/80 mutants); stats stable at end

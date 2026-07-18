@@ -1,0 +1,29 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-8.4.2, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 19 items
+
+tests/unit/config/test_config_models.py::TestHarnessConfigStrictUnknownKeyRejection::test_unknown_top_level_key_rejected PASSED [  5%]
+tests/unit/config/test_config_models.py::TestHarnessConfigStrictUnknownKeyRejection::test_unknown_nested_key_rejected PASSED [ 10%]
+tests/unit/config/test_config_models.py::TestHarnessConfigStrictUnknownKeyRejection::test_known_keys_accepted PASSED [ 15%]
+tests/unit/config/test_config_models.py::TestModelsConfig::test_models_config_has_required_routing_slots PASSED [ 21%]
+tests/unit/config/test_config_models.py::TestModelsConfig::test_unknown_model_id_rejected_at_models_layer PASSED [ 26%]
+tests/unit/config/test_config_models.py::TestRepositoryConfig::test_repository_defaults PASSED [ 31%]
+tests/unit/config/test_config_models.py::TestExecutionConfig::test_execution_defaults PASSED [ 36%]
+tests/unit/config/test_config_models.py::TestGitHubConfig::test_github_defaults_safe PASSED [ 42%]
+tests/unit/config/test_config_models.py::TestTelegramConfig::test_telegram_disabled_by_default PASSED [ 47%]
+tests/unit/config/test_config_models.py::TestModelRouting::test_routing_registry_minimal PASSED [ 52%]
+tests/unit/config/test_config_models.py::TestModelRouting::test_validate_accepts_known_provider PASSED [ 57%]
+tests/unit/config/test_config_models.py::TestModelRouting::test_validate_rejects_unknown_provider PASSED [ 63%]
+tests/unit/config/test_precedence.py::TestPrecedenceOrder::test_repo_yaml_overrides_defaults PASSED [ 68%]
+tests/unit/config/test_precedence.py::TestPrecedenceOrder::test_local_yaml_overrides_repo_yaml PASSED [ 73%]
+tests/unit/config/test_precedence.py::TestPrecedenceOrder::test_env_overrides_local_yaml PASSED [ 78%]
+tests/unit/config/test_precedence.py::TestPrecedenceOrder::test_cli_overrides_env PASSED [ 84%]
+tests/unit/config/test_precedence.py::TestDefaultsAreUsedWhenNothingProvided::test_no_sources_returns_defaults PASSED [ 89%]
+tests/unit/config/test_precedence.py::TestUnknownKeyStillRejectedAfterLoading::test_unknown_key_in_yaml_rejected PASSED [ 94%]
+tests/unit/config/test_precedence.py::TestUnknownKeyStillRejectedAfterLoading::test_unknown_key_in_env_rejected PASSED [100%]
+
+============================== 19 passed in 0.13s ==============================

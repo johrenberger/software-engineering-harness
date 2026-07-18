@@ -1,0 +1,33 @@
+B008 Do not perform function call `typer.Option` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+  --> src/seharness/cli.py:47:30
+   |
+45 |   @app.command("validate-config")
+46 |   def validate_config(
+47 |       repo_yaml: Path | None = typer.Option(
+   |  ______________________________^
+48 | |         None,
+49 | |         "--repo-yaml",
+50 | |         help="Path to repository harness.yaml. Defaults to ./harness.yaml.",
+51 | |     ),
+   | |_____^
+52 |       local_yaml: Path | None = typer.Option(
+53 |           None,
+   |
+
+B008 Do not perform function call `typer.Option` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+  --> src/seharness/cli.py:52:31
+   |
+50 |           help="Path to repository harness.yaml. Defaults to ./harness.yaml.",
+51 |       ),
+52 |       local_yaml: Path | None = typer.Option(
+   |  _______________________________^
+53 | |         None,
+54 | |         "--local-yaml",
+55 | |         help="Path to local override file. Defaults to ./seharness.local.yaml.",
+56 | |     ),
+   | |_____^
+57 |       no_env: bool = typer.Option(
+58 |           False,
+   |
+
+Found 2 errors.

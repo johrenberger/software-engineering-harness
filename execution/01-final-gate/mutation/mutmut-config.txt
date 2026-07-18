@@ -1,0 +1,30 @@
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    simple_output, no_progress, ci, rerun_all))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/.openclaw/workspace/software-engineering-harness/.venv/lib/python3.13/site-packages/mutmut/__main__.py", line 396, in do_run
+    baseline_time_elapsed = time_test_suite(
+        swallow_output=not swallow_output,
+    ...<3 lines>...
+        no_progress=no_progress,
+    )
+  File "/data/.openclaw/workspace/software-engineering-harness/.venv/lib/python3.13/site-packages/mutmut/__main__.py", line 527, in time_test_suite
+    returncode = popen_streaming_output(test_command, feedback)
+  File "/data/.openclaw/workspace/software-engineering-harness/.venv/lib/python3.13/site-packages/mutmut/__init__.py", line 1025, in popen_streaming_output
+    process = subprocess.Popen(
+        shlex.split(cmd, posix=True),
+        stdout=slave,
+        stderr=slave
+    )
+  File "/usr/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1972, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'python'

@@ -1,0 +1,11 @@
+{
+  "phase": "green",
+  "behavior": "seharness validate-config CLI + JSON output",
+  "test_file": "tests/unit/test_cli_validate_config.py",
+  "exit_code": 0,
+  "outcome": "passed",
+  "tests_passed": 7,
+  "tests_failed": 0,
+  "mypy_strict": "clean",
+  "timestamp": "2026-07-18T16:02:43Z"
+}

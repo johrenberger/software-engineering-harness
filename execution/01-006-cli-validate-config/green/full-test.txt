@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-8.4.2, pluggy-1.6.0
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collected 31 items
+
+tests/unit/config/test_config_models.py ............                     [ 38%]
+tests/unit/config/test_precedence.py .......                             [ 61%]
+tests/unit/config/test_routing_validation.py .....                       [ 77%]
+tests/unit/test_cli_validate_config.py .......                           [100%]
+
+============================== 31 passed in 0.26s ==============================

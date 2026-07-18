@@ -1,0 +1,3 @@
+command: .venv/bin/python -m pytest tests/unit/config/test_precedence.py -x --no-cov
+cwd: /PWD
+expected_outcome: FAIL (ModuleNotFoundError: seharness.config_loader)

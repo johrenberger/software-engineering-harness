@@ -1,0 +1,5 @@
+command: .venv/bin/python -m pytest tests/unit/config/test_routing_validation.py --no-cov
+cwd: /PWD
+NOTE: This behavior was implemented as part of behavior 1 via Literal type
+constraints in ModelsConfig. The dedicated test suite is added post-hoc to pin
+the behavior. The test passes immediately (5/5).

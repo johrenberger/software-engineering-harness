@@ -1,0 +1,15 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-8.4.2, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 5 items
+
+tests/unit/config/test_routing_validation.py::TestRoutingSlotValidation::test_unknown_planning_provider_rejected PASSED [ 20%]
+tests/unit/config/test_routing_validation.py::TestRoutingSlotValidation::test_unknown_implementation_provider_rejected PASSED [ 40%]
+tests/unit/config/test_routing_validation.py::TestRoutingSlotValidation::test_known_providers_accepted PASSED [ 60%]
+tests/unit/config/test_routing_validation.py::TestRoutingSlotValidation::test_fallback_must_reference_known_provider PASSED [ 80%]
+tests/unit/config/test_routing_validation.py::TestRoutingRegression::test_default_routing_is_self_consistent PASSED [100%]
+
+============================== 5 passed in 0.10s ===============================

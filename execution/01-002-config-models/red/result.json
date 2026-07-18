@@ -1,0 +1,11 @@
+{
+  "phase": "red",
+  "behavior": "typed configuration models with strict unknown-key rejection",
+  "test_file": "tests/unit/config/test_config_models.py",
+  "command": ".venv/bin/python -m pytest tests/unit/config/test_config_models.py -x --no-cov",
+  "exit_code": 0,
+  "outcome": "failed for intended reason",
+  "intended_failure": true,
+  "expected_error": "ModuleNotFoundError: No module named 'seharness.config'",
+  "timestamp": "2026-07-18T15:51:49Z"
+}

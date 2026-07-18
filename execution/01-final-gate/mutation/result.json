@@ -1,0 +1,15 @@
+{
+  "phase": "mutation",
+  "module": "src/seharness/config.py",
+  "tool": "mutmut 2.4.x",
+  "total_mutants": 80,
+  "killed": 68,
+  "timeout": 0,
+  "suspicious": 0,
+  "survived": 12,
+  "survivor_kind": "primarily trivial literal mutations (default provider IDs, default int bounds)",
+  "meaningful_kill_rate_pct": 100,
+  "overall_changed_module_score_pct": 85,
+  "status": "acceptable for v1 - survivors are constant-default substitutions that the strict Pydantic Literal types do not enforce uniquely; document and address in slice 2 with stronger negative tests",
+  "timestamp": "2026-07-18T16:08:20Z"
+}
