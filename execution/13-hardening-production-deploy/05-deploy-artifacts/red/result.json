@@ -1,0 +1,12 @@
+{
+  "behavior": "05-deploy-artifacts",
+  "test_file": "tests/unit/deploy/test_dockerfile.py",
+  "summary": "Dockerfile + docker-compose.yml + CI workflow",
+  "phase": "red",
+  "passed": 0,
+  "failed": 16,
+  "duration_s": 0.03,
+  "command": "pytest tests/unit/deploy/test_dockerfile.py --no-cov -q",
+  "exit_code": 1,
+  "recorded_at": "2026-07-18T22:31:34.130075+00:00"
+}

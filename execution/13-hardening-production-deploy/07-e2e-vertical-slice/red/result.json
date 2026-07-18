@@ -1,0 +1,12 @@
+{
+  "behavior": "07-e2e-vertical-slice",
+  "test_file": "tests/e2e/test_vertical_slice.py",
+  "summary": "Full Phase-8 E2E pipeline runs to completed in <90s on synthetic repo",
+  "phase": "red",
+  "passed": 0,
+  "failed": 4,
+  "duration_s": 0.02,
+  "command": "pytest tests/e2e/test_vertical_slice.py --no-cov -q",
+  "exit_code": 1,
+  "recorded_at": "2026-07-18T22:31:34.804971+00:00"
+}

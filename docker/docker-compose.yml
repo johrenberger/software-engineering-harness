@@ -1,0 +1,43 @@
+services:
+  harness-bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: seharness:0.1.0
+    container_name: harness-bot
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      - TELEGRAM_MODE=polling
+    volumes:
+      - harness-runs:/home/harness/.openclaw/runs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  harness-dashboard:
+    image: seharness:0.1.0
+    container_name: harness-dashboard
+    restart: unless-stopped
+    depends_on:
+      harness-bot:
+        condition: service_healthy
+    command: ["harness-dashboard"]
+    env_file:
+      - ../.env
+    ports:
+      # Loopback only — never expose publicly.
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - harness-runs:/home/harness/.openclaw/runs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  harness-runs:

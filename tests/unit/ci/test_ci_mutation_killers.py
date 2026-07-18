@@ -146,9 +146,7 @@ def test_poll_state_rejects_extra_kwargs() -> None:
 def test_remediation_packet_is_frozen() -> None:
     from seharness.validation.remediation import BoundedEvidence
 
-    bs = BoundedEvidence(
-        failure=None, relevant_files=tuple(), previous_green=None, allowed_paths=tuple()
-    )
+    bs = BoundedEvidence(failure=None, relevant_files=(), previous_green=None, allowed_paths=())
     pkt = RemediationPacket(
         check_name="ci/build",
         reason=RemediationReason.CHECK_FAILED,

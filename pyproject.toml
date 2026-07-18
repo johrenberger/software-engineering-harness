@@ -22,6 +22,8 @@ dependencies = [
     "typer>=0.12,<1",
     "pyyaml>=6.0,<7",
     "structlog>=24.1,<25",
+    "aiohttp>=3.9,<4",
+    "python-telegram-bot>=21.0,<22",
 ]
 
 [project.optional-dependencies]
@@ -35,10 +37,13 @@ dev = [
     "pip-audit>=2.7,<3",
     "mutmut>=2.4,<3",
     "types-PyYAML",
+    "types-aiofiles",
 ]
 
 [project.scripts]
 seharness = "seharness.cli:main"
+harness-telegram-bot = "seharness.telegram_runtime.bot_runtime:cli"
+harness-dashboard = "seharness.dashboard.server:cli"
 
 [build-system]
 requires = ["hatchling"]
@@ -46,6 +51,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/seharness"]
+include = [
+    "src/seharness/skills/*/SKILL.md",
+    "src/seharness/skills/*/*.md",
+]
 
 [tool.ruff]
 line-length = 100
@@ -73,7 +82,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["PLR2004", "S101", "ARG", "FBT"]
+"tests/**/*.py" = ["PLR2004", "S101", "ARG", "FBT", "PLC0415", "RUF100"]
 "src/seharness/cli.py" = ["B008"]
 
 [tool.mypy]

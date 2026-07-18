@@ -1,0 +1,12 @@
+{
+  "behavior": "08-mutation-killers",
+  "test_file": "tests/unit/telegram_runtime/test_runtime_mutation_killers.py",
+  "summary": "Pydantic frozen + no-merge-methods + tuple-immutability killers",
+  "phase": "red",
+  "passed": 0,
+  "failed": 9,
+  "duration_s": 0.12,
+  "command": "pytest tests/unit/telegram_runtime/test_runtime_mutation_killers.py --no-cov -q",
+  "exit_code": 1,
+  "recorded_at": "2026-07-18T22:31:35.276898+00:00"
+}

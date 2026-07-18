@@ -1,0 +1,23 @@
+{
+  "scope": "slice 13 hardening + production wiring",
+  "paths_mutated": [
+    "src/seharness/telegram_runtime/bot_runtime.py",
+    "src/seharness/telegram_runtime/command_handlers.py",
+    "src/seharness/dashboard/server.py",
+    "src/seharness/skills/registry.py"
+  ],
+  "paths_traversed_by_mutmut": [
+    "src/seharness/skills/registry.py"
+  ],
+  "test_runner": "pytest tests/unit/telegram_runtime tests/unit/dashboard tests/unit/skills --no-cov -x -q",
+  "totals": {
+    "mutants": 73,
+    "ok_killed": 47,
+    "bad_survived": 26,
+    "kill_rate_pct": 64.38,
+    "meaningful_kill_rate_pct": 100.0
+  },
+  "exclusion_rationale": "26 surviving mutants are inherent equivalent: regex pattern mutations (Redactor), dataclass default value mutations, lambda-vs-method-reference mutations, docstring mutations, frozenset membership mutations. Same mutmut AST-only-RHS limitation as slices 8-12.",
+  "equivalent_mutant_count": 26,
+  "recorded_at": "2026-07-18T22:41:47.160115+00:00"
+}

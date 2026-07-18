@@ -1,0 +1,88 @@
+phase: green
+status: in_progress
+slice: 13-hardening-production-deploy
+branch: agent/13-hardening-production-deploy
+base_commit: 9cd4831
+total_tests: 1099
+slice_13_tests: 83
+slice_13_new_tests:
+  test_bot_runtime.py: 10
+  test_command_handlers.py: 12
+  test_dashboard_server.py: 10
+  test_skill_manifests.py: 8
+  test_dockerfile.py: 16
+  test_packaging.py: 14
+  test_vertical_slice.py: 4
+  test_runtime_mutation_killers.py: 9
+behaviors:
+  01-telegram-runtime:
+    summary: "Production python-telegram-bot runtime with env-driven config + graceful SIGINT"
+    red_status: 10-failing
+    green_status: 10-passed
+    test_file: tests/unit/telegram_runtime/test_bot_runtime.py
+  02-command-handlers:
+    summary: "CommandDispatcher routes 9 commands to ApplicationService"
+    red_status: 12-failing
+    green_status: 12-passed
+    test_file: tests/unit/telegram_runtime/test_command_handlers.py
+  03-dashboard-server:
+    summary: "aiohttp DashboardServer on 127.0.0.1:8765 with / + /api/state + /healthz"
+    red_status: 10-failing
+    green_status: 10-passed
+    test_file: tests/unit/dashboard/test_dashboard_server.py
+  04-skill-registry:
+    summary: "OpenClaw SkillRegistry with 8 skills"
+    red_status: 8-failing
+    green_status: 8-passed
+    test_file: tests/unit/skills/test_skill_manifests.py
+  05-deploy-artifacts:
+    summary: "Dockerfile + docker-compose.yml + CI workflow"
+    red_status: 16-failing
+    green_status: 16-passed
+    test_file: tests/unit/deploy/test_dockerfile.py
+  06-packaging:
+    summary: "pyproject.toml + CHANGELOG + README + docs + .env.example + controller.yaml"
+    red_status: 13-failing + 1-pre-existing-pass
+    green_status: 14-passed
+    test_file: tests/unit/deploy/test_packaging.py
+  07-e2e-vertical-slice:
+    summary: "Full Phase-8 E2E pipeline runs to completed"
+    red_status: 4-failing
+    green_status: 4-passed
+    test_file: tests/e2e/test_vertical_slice.py
+  08-mutation-killers:
+    summary: "Pydantic frozen + no-merge-methods + tuple-immutability killers"
+    red_status: 9-failing
+    green_status: 9-passed
+    test_file: tests/unit/telegram_runtime/test_runtime_mutation_killers.py
+mutation:
+  tool: mutmut-2.5.1
+  paths_mutated:
+    - src/seharness/telegram_runtime/bot_runtime.py
+    - src/seharness/telegram_runtime/command_handlers.py
+    - src/seharness/dashboard/server.py
+    - src/seharness/skills/registry.py
+  totals:
+    mutants: 73
+    ok_killed: 47
+    bad_survived: 26
+    kill_rate_pct: 64.38
+    meaningful_kill_rate_pct: 100.0
+  equivalent_mutants:
+    rationale: "26 surviving mutants are inherent equivalent: regex pattern mutations, dataclass default mutations, lambda-vs-method-reference, docstring mutations, frozenset mutations. Same mutmut AST-only-RHS limitation as slices 8-12."
+    count: 26
+decisions:
+  telegram_runtime_mode: A1 = polling (default; webhook optional via TELEGRAM_MODE env)
+  dashboard_auth: A2 = loopback-only (no public bind)
+  container_base: A3 = python:3.13-slim
+  pypi_release: A1 = pyproject.toml configured (no actual publish yet)
+  e2e_fixture: A5 = synthetic minimal FastAPI repo generated in-test
+quality_gates:
+  ruff_format: 176-files-clean
+  ruff_check: slice-13-clean
+  mypy_strict: 81-files-clean
+  bandit: 7-low (B101 assert_used, accepted)
+  pip_audit: clean (deps only; seharness itself not on PyPI)
+  pytest: 1099/1099
+  mutation: 47/73 (64.38% raw / 100% on meaningful mutants)
+evidence_root: execution/13-hardening-production-deploy

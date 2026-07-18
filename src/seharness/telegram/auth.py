@@ -12,11 +12,11 @@ import re
 
 _BOT_TOKEN_PATTERN = re.compile(
     # Telegram bot tokens look like '<digits>:<base64-ish>'.
-    # Format: 6+ digits, colon, 25+ chars of [A-Za-z0-9_-].
+    # Format: 6+ digits, colon, 20+ chars of [A-Za-z0-9_-].
     # Accept an optional 'bot' prefix (e.g. /bot<token>) and a
     # trailing '/<path>' suffix for webhook URLs. The token body
     # itself is the digits:base64 part.
-    r"(?:\b|/)?\d{6,}:[A-Za-z0-9_\-]{25,}\b"
+    r"\d{6,}:[A-Za-z0-9_\-]{20,}"
 )
 
 
@@ -51,7 +51,7 @@ class TelegramAuthorizer:
             raise UnauthorizedChatError(chat_id=chat_id)
 
 
-_REDACTION_TOKEN = "***REDACTED***"
+_REDACTION_TOKEN = "***REDACTED***"  # nosec B105 — sentinel redaction marker, not a credential
 
 
 class Redactor:
