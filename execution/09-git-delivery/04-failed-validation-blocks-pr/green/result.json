@@ -1,0 +1,12 @@
+{
+  "behavior": "04-failed-validation-blocks-pr",
+  "test_file": "tests/unit/delivery/test_failed_validation_blocks_pr.py",
+  "summary": "failed local validation blocks PR creation",
+  "phase": "green",
+  "passed": 9,
+  "failed": 0,
+  "duration_s": 0.08,
+  "command": "pytest tests/unit/delivery/test_failed_validation_blocks_pr.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T20:52:41.026257+00:00"
+}

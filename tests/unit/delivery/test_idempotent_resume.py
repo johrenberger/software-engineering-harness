@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -66,9 +65,7 @@ def test_store_persists_across_reopen(tmp_path: Path) -> None:
     """Records MUST survive process restart (file-based JSON)."""
     store1 = _store(tmp_path)
     key = IdempotencyKey(run_id="R-1", task_id="T-1")
-    record = IdempotencyRecord(
-        commit_sha="abc123", branch="agent/x", pr_url=None
-    )
+    record = IdempotencyRecord(commit_sha="abc123", branch="agent/x", pr_url=None)
     store1.put(key, record)
 
     # Reopen
@@ -80,12 +77,8 @@ def test_duplicate_put_is_idempotent(tmp_path: Path) -> None:
     """Putting the same key twice MUST NOT create two records."""
     store = _store(tmp_path)
     key = IdempotencyKey(run_id="R-1", task_id="T-1")
-    r1 = IdempotencyRecord(
-        commit_sha="abc123", branch="x", pr_url=None
-    )
-    r2 = IdempotencyRecord(
-        commit_sha="abc123", branch="x", pr_url="https://github.com/x/y/pull/1"
-    )
+    r1 = IdempotencyRecord(commit_sha="abc123", branch="x", pr_url=None)
+    r2 = IdempotencyRecord(commit_sha="abc123", branch="x", pr_url="https://github.com/x/y/pull/1")
     store.put(key, r1)
     store.put(key, r2)
     # Second put wins (record is the latest known state).
@@ -100,9 +93,7 @@ def test_store_root_is_created_if_missing(tmp_path: Path) -> None:
 
 
 def test_record_pr_url_is_optional() -> None:
-    record = IdempotencyRecord(
-        commit_sha="abc", branch="agent/x", pr_url=None
-    )
+    record = IdempotencyRecord(commit_sha="abc", branch="agent/x", pr_url=None)
     assert record.pr_url is None
 
 
@@ -117,9 +108,7 @@ def test_record_rejects_unknown_field() -> None:
 
 
 def test_record_is_frozen() -> None:
-    record = IdempotencyRecord(
-        commit_sha="abc", branch="x", pr_url=None
-    )
+    record = IdempotencyRecord(commit_sha="abc", branch="x", pr_url=None)
     with pytest.raises(Exception):  # noqa: B017
         record.commit_sha = "def"  # type: ignore[misc]
 

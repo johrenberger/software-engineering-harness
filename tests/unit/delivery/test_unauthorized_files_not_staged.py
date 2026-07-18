@@ -12,14 +12,14 @@ from pathlib import Path
 
 import pytest
 
+from seharness.delivery.backend import (
+    GitBackend,
+    SubprocessGitBackend,
+)
 from seharness.delivery.commit import (
     AuthorizedFileSet,
     CommitService,
     UnauthorizedFileError,
-)
-from seharness.delivery.backend import (
-    GitBackend,
-    SubprocessGitBackend,
 )
 
 
@@ -58,7 +58,7 @@ def test_unauthorized_file_rejected_at_stage() -> None:
     backend = _FakeBackend()
     service = CommitService(backend=backend)
     files = _file_set(allowed=("src/seharness/x.py",))
-    with pytest.raises(UnauthorizedFileError, match="src/seharness/y.py"):
+    with pytest.raises(UnauthorizedFileError, match=r"src/seharness/y\.py"):
         service.stage(
             repo_root=Path("/tmp"),
             files=("src/seharness/y.py",),
@@ -66,18 +66,20 @@ def test_unauthorized_file_rejected_at_stage() -> None:
         )
 
 
-def test_prohibited_file_rejected_even_if_allowed() -> None:
-    """prohibited_paths wins over allowed_paths (deny list)."""
+def test_prohibited_paths_are_excluded_at_runtime() -> None:
+    """A file in prohibited_paths MUST be rejected at stage time even
+    when its directory prefix is allowed (e.g. secret.py in src/)."""
     backend = _FakeBackend()
     service = CommitService(backend=backend)
+    # Allow a directory, prohibit a specific file within it.
     files = _file_set(
-        allowed=("src/seharness/x.py",),
-        prohibited=("src/seharness/x.py",),
+        allowed=("src/seharness/",),
+        prohibited=("src/seharness/secret.py",),
     )
     with pytest.raises(UnauthorizedFileError, match="prohibited"):
         service.stage(
             repo_root=Path("/tmp"),
-            files=("src/seharness/x.py",),
+            files=("src/seharness/secret.py",),
             authorized=files,
         )
 

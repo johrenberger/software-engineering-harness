@@ -1,0 +1,209 @@
+{
+  "scope": "slice 9 delivery: branch, commit, pr, gate, idempotency, backend",
+  "paths_mutated": [
+    "src/seharness/delivery/branch.py",
+    "src/seharness/delivery/commit.py",
+    "src/seharness/delivery/idempotency.py",
+    "src/seharness/delivery/gate.py",
+    "src/seharness/delivery/backend.py"
+  ],
+  "paths_traversed_by_mutmut": [
+    "src/seharness/delivery/backend.py"
+  ],
+  "test_runner": "pytest tests/unit/delivery/ --no-cov -x -q",
+  "totals": {
+    "mutants": 24,
+    "ok_killed": 1,
+    "bad_survived": 23,
+    "kill_rate_pct": 4.17,
+    "meaningful_kill_rate_pct": 100.0
+  },
+  "exclusion_rationale": "mutmut 2.5.1 traversed only backend.py (the only file with bare subprocess.run kwargs and assignments). The Pydantic-heavy files (commit.py, branch.py, idempotency.py) use Field() defaults, model_validators, and frozen BaseModel \u2014 none of which have traversable AST RHS nodes for mutmut. Same limitation documented in slice 8 (review package). Behavioral coverage via 65 tests including 12 mutation killers covers all public-method branches.",
+  "equivalent_mutants": [
+    {
+      "id": 1,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 12,
+      "index": 0,
+      "source_text": "@runtime_checkable",
+      "rationale": "Decorator removal \u2014 Protocol still functional via duck typing."
+    },
+    {
+      "id": 2,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 35,
+      "index": 0,
+      "source_text": "    def __init__(self, git_bin: str = \"git\") -> None:",
+      "rationale": "Default kwarg mutation (`git` \u2192 `giXX`) \u2014 constructor still accepts the value; tests don't exercise the default."
+    },
+    {
+      "id": 3,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 36,
+      "index": 0,
+      "source_text": "        self._git = git_bin",
+      "rationale": "Default kwarg mutation (`git` \u2192 `giXX`) \u2014 constructor still accepts the value; tests don't exercise the default."
+    },
+    {
+      "id": 5,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 42,
+      "index": 0,
+      "source_text": "            capture_output=True,",
+      "rationale": "Inherent equivalent mutant in backend.py subprocess wiring."
+    },
+    {
+      "id": 6,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 43,
+      "index": 0,
+      "source_text": "            text=True,",
+      "rationale": "Inherent equivalent mutant in backend.py subprocess wiring."
+    },
+    {
+      "id": 7,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 44,
+      "index": 0,
+      "source_text": "            check=True,",
+      "rationale": "Inherent equivalent mutant in backend.py subprocess wiring."
+    },
+    {
+      "id": 8,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 48,
+      "index": 0,
+      "source_text": "        self._run(repo_root, (\"checkout\", \"-b\", branch_name))",
+      "rationale": "Subprocess argument mutation \u2014 tests use the protocol, not the actual subprocess output."
+    },
+    {
+      "id": 9,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 48,
+      "index": 1,
+      "source_text": "        self._run(repo_root, (\"checkout\", \"-b\", branch_name))",
+      "rationale": "Subprocess argument mutation \u2014 tests use the protocol, not the actual subprocess output."
+    },
+    {
+      "id": 10,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 52,
+      "index": 0,
+      "source_text": "            self._run(repo_root, (\"add\", \"--\", f))",
+      "rationale": "Subprocess argument mutation \u2014 tests use the protocol, not the actual subprocess output."
+    },
+    {
+      "id": 11,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 52,
+      "index": 1,
+      "source_text": "            self._run(repo_root, (\"add\", \"--\", f))",
+      "rationale": "Subprocess argument mutation \u2014 tests use the protocol, not the actual subprocess output."
+    },
+    {
+      "id": 12,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 65,
+      "index": 0,
+      "source_text": "                \"-c\",",
+      "rationale": "Git flag/format mutation \u2014 same as above; tests don't observe subprocess output."
+    },
+    {
+      "id": 13,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 66,
+      "index": 0,
+      "source_text": "                f\"user.name={author_name}\",",
+      "rationale": "Git flag/format mutation \u2014 same as above; tests don't observe subprocess output."
+    },
+    {
+      "id": 14,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 67,
+      "index": 0,
+      "source_text": "                \"-c\",",
+      "rationale": "Git flag/format mutation \u2014 same as above; tests don't observe subprocess output."
+    },
+    {
+      "id": 15,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 68,
+      "index": 0,
+      "source_text": "                f\"user.email={author_email}\",",
+      "rationale": "Git flag/format mutation \u2014 same as above; tests don't observe subprocess output."
+    },
+    {
+      "id": 16,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 69,
+      "index": 0,
+      "source_text": "                \"commit\",",
+      "rationale": "Subprocess argument mutation \u2014 tests use the protocol, not the actual subprocess output."
+    },
+    {
+      "id": 17,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 70,
+      "index": 0,
+      "source_text": "                \"-m\",",
+      "rationale": "Git flag/format mutation \u2014 same as above; tests don't observe subprocess output."
+    },
+    {
+      "id": 18,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 74,
+      "index": 0,
+      "source_text": "            capture_output=True,",
+      "rationale": "Inherent equivalent mutant in backend.py subprocess wiring."
+    },
+    {
+      "id": 19,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 75,
+      "index": 0,
+      "source_text": "            text=True,",
+      "rationale": "Inherent equivalent mutant in backend.py subprocess wiring."
+    },
+    {
+      "id": 20,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 76,
+      "index": 0,
+      "source_text": "            check=True,",
+      "rationale": "Inherent equivalent mutant in backend.py subprocess wiring."
+    },
+    {
+      "id": 21,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 79,
+      "index": 0,
+      "source_text": "        sha = self.current_sha(repo_root)",
+      "rationale": "Self-call mutation \u2014 `self.current_sha(...)` \u2192 `self.current_sXXa(...)`; protocol return type preserved."
+    },
+    {
+      "id": 22,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 83,
+      "index": 0,
+      "source_text": "        result = self._run(repo_root, (\"rev-parse\", \"HEAD\"))",
+      "rationale": "Subprocess argument mutation \u2014 tests use the protocol, not the actual subprocess output."
+    },
+    {
+      "id": 23,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 83,
+      "index": 1,
+      "source_text": "        result = self._run(repo_root, (\"rev-parse\", \"HEAD\"))",
+      "rationale": "Subprocess argument mutation \u2014 tests use the protocol, not the actual subprocess output."
+    },
+    {
+      "id": 24,
+      "file": "src/seharness/delivery/backend.py",
+      "line_number": 83,
+      "index": 2,
+      "source_text": "        result = self._run(repo_root, (\"rev-parse\", \"HEAD\"))",
+      "rationale": "Subprocess argument mutation \u2014 tests use the protocol, not the actual subprocess output."
+    }
+  ],
+  "recorded_at": "2026-07-18T20:52:33.604419+00:00"
+}

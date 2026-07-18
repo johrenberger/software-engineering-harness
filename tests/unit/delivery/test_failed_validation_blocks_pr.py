@@ -9,15 +9,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import pytest
 
 from seharness.delivery.gate import (
     GateFailureError,
     GateResult,
-    LocalValidationGate,
     GateRunner,
+    LocalValidationGate,
 )
 from seharness.delivery.pr import PullRequestClient
 
@@ -29,9 +28,7 @@ class _AlwaysPassing(GateRunner):
 
 class _AlwaysFailing(GateRunner):
     def run(self, repo_root: Path) -> GateResult:
-        return GateResult(
-            gate_id="test", passed=False, output="something broke"
-        )
+        return GateResult(gate_id="test", passed=False, output="something broke")
 
 
 def test_gate_result_dataclass_passes() -> None:
@@ -75,18 +72,14 @@ def test_local_validation_gate_short_circuits_on_first_failure() -> None:
             second_called = True
             return GateResult(gate_id="x", passed=True, output="")
 
-    gate = LocalValidationGate(
-        runners=(_AlwaysFailing(), _ShortCircuitCheck())
-    )
+    gate = LocalValidationGate(runners=(_AlwaysFailing(), _ShortCircuitCheck()))
     gate.run(Path("/tmp"))
     assert second_called is False
 
 
 def test_local_validation_gate_raises_on_failure() -> None:
     """A failing gate raises GateFailureError when raise_on_failure=True."""
-    gate = LocalValidationGate(
-        runners=(_AlwaysFailing(),), raise_on_failure=True
-    )
+    gate = LocalValidationGate(runners=(_AlwaysFailing(),), raise_on_failure=True)
     with pytest.raises(GateFailureError):
         gate.run(Path("/tmp"))
 
@@ -105,7 +98,7 @@ def test_pull_request_client_is_protocol() -> None:
 
 
 def test_gate_failure_error_includes_failed_gate_id() -> None:
-    gate = LocalValidationGate(runners=(_AlwaysFailing(),))
+    gate = LocalValidationGate(runners=(_AlwaysFailing(),), raise_on_failure=True)
     try:
         gate.run(Path("/tmp"))
     except GateFailureError as exc:

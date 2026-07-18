@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from seharness.delivery.branch import BranchFormat, BranchService
 from seharness.delivery.backend import GitBackend
+from seharness.delivery.branch import BranchFormat, BranchService
 
 
 class _FakeBackend(GitBackend):
@@ -86,9 +86,7 @@ def test_branch_service_creates_branch_via_backend(tmp_path: Path) -> None:
     backend = _FakeBackend()
     fmt = BranchFormat(template="agent/{slice_number}-{slug}")
     service = BranchService(backend=backend, branch_format=fmt)
-    service.create(
-        repo_root=tmp_path, slice_number="01", slug="config-validation"
-    )
+    service.create(repo_root=tmp_path, slice_number="01", slug="config-validation")
     assert "agent/01-config-validation" in backend.created
 
 
@@ -96,7 +94,5 @@ def test_branch_service_returns_branch_name(tmp_path: Path) -> None:
     backend = _FakeBackend()
     fmt = BranchFormat(template="agent/{slice_number}-{slug}")
     service = BranchService(backend=backend, branch_format=fmt)
-    name = service.create(
-        repo_root=tmp_path, slice_number="01", slug="config"
-    )
+    name = service.create(repo_root=tmp_path, slice_number="01", slug="config")
     assert name == "agent/01-config"

@@ -15,7 +15,6 @@ from seharness.delivery.commit import (
     CommitMessage,
 )
 from seharness.delivery.idempotency import (
-    IdempotencyKey,
     IdempotencyRecord,
 )
 
@@ -84,16 +83,12 @@ def test_idempotency_record_is_frozen() -> None:
 
 
 def test_commit_message_requirement_ids_default_empty() -> None:
-    msg = CommitMessage(
-        scope="x", description="y", feature_id="F-1", task_id="T-1"
-    )
+    msg = CommitMessage(scope="x", description="y", feature_id="F-1", task_id="T-1")
     assert msg.requirement_ids == ()
 
 
 def test_commit_message_scenario_ids_default_empty() -> None:
-    msg = CommitMessage(
-        scope="x", description="y", feature_id="F-1", task_id="T-1"
-    )
+    msg = CommitMessage(scope="x", description="y", feature_id="F-1", task_id="T-1")
     assert msg.scenario_ids == ()
 
 
@@ -105,9 +100,7 @@ def test_authorized_file_set_default_prohibited_empty() -> None:
 def test_authorized_file_set_overlap_rejected() -> None:
     """Per slice 5/6/7: allowed_paths and prohibited_paths MUST NOT overlap."""
     with pytest.raises(Exception):  # noqa: B017
-        AuthorizedFileSet(
-            allowed_paths=("a",), prohibited_paths=("a",)
-        )
+        AuthorizedFileSet(allowed_paths=("a",), prohibited_paths=("a",))
 
 
 def test_idempotency_record_rejects_empty_commit_sha() -> None:
