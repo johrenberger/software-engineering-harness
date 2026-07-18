@@ -8,9 +8,7 @@ at construction time. It exists to:
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Sequence
-
-import pytest
+from typing import Any
 
 from seharness.review.finding import (
     Finding,

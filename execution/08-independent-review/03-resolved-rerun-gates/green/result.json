@@ -1,0 +1,12 @@
+{
+  "behavior": "03-resolved-rerun-gates",
+  "test_file": "tests/unit/review/test_resolved_rerun_gates.py",
+  "summary": "resolved findings rerun impacted gates",
+  "phase": "green",
+  "passed": 7,
+  "failed": 0,
+  "duration_s": 0.08,
+  "command": "pytest tests/unit/review/test_resolved_rerun_gates.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T20:39:02.490825+00:00"
+}

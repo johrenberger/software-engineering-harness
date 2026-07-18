@@ -10,8 +10,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from seharness.review.finding import (
@@ -22,8 +20,8 @@ from seharness.review.finding import (
 )
 from seharness.review.policy import (
     RemediationMapping,
-    resolve_finding_to_gates,
     rerun_impacted_gates,
+    resolve_finding_to_gates,
 )
 
 
@@ -98,15 +96,13 @@ def test_resolve_finding_to_gates_uses_files() -> None:
 
 def test_rerun_impacted_gates_returns_sorted_tuple() -> None:
     """Result MUST be deterministic (sorted tuple)."""
-    finding = _fixed_finding(
-        "F-1", impacted_gates=("pytest", "ruff-format", "mypy-strict")
-    )
+    finding = _fixed_finding("F-1", impacted_gates=("pytest", "ruff-format", "mypy-strict"))
     gates = rerun_impacted_gates([finding])
     assert gates == tuple(sorted(gates))
 
 
 def test_remediation_mapping_is_immutable() -> None:
     """RemediationMapping MUST be a frozen mapping."""
-    mapping = RemediationMapping({"src/x.py": ("pytest",)})
+    mapping = RemediationMapping(file_to_gates={"src/x.py": ("pytest",)})
     with pytest.raises(Exception):  # noqa: B017
-        mapping["src/y.py"] = ("pytest",)  # type: ignore[index]
+        mapping.file_to_gates = {"src/y.py": ("pytest",)}  # type: ignore[misc]

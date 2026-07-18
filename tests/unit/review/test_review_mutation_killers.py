@@ -10,13 +10,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from seharness.review.coverage import CoverageReport
 from seharness.review.finding import (
     Finding,
     FindingCategory,
     FindingSeverity,
     FindingStatus,
 )
-from seharness.review.coverage import CoverageReport
 
 
 def _finding(**overrides: object) -> Finding:

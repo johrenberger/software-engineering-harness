@@ -1,0 +1,74 @@
+phase: green
+status: in_progress
+slice: 08-independent-review
+branch: agent/08-independent-review
+base_commit: 81d3d9f
+total_tests: 716
+slice_8_tests: 48
+slice_8_new_tests:
+  test_review_fresh_context.py: 5
+  test_high_findings_block.py: 12
+  test_resolved_rerun_gates.py: 7
+  test_coverage_blocks_approval.py: 8
+  test_reviewer.py: 4
+  test_review_mutation_killers.py: 12
+behaviors:
+  01-fresh-context:
+    summary: "reviewer receives fresh context"
+    red_status: failing-collection
+    green_status: 5-passed
+    test_file: tests/unit/review/test_review_fresh_context.py
+  02-high-findings-block:
+    summary: "high findings block delivery"
+    red_status: failing-collection
+    green_status: 12-passed
+    test_file: tests/unit/review/test_high_findings_block.py
+  03-resolved-rerun-gates:
+    summary: "resolved findings rerun impacted gates"
+    red_status: failing-collection
+    green_status: 7-passed
+    test_file: tests/unit/review/test_resolved_rerun_gates.py
+  04-coverage-blocks-approval:
+    summary: "incomplete requirement coverage blocks approval"
+    red_status: failing-collection
+    green_status: 8-passed
+    test_file: tests/unit/review/test_coverage_blocks_approval.py
+  reviewer:
+    summary: "Reviewer protocol + StaticReviewer"
+    red_status: failing-collection
+    green_status: 4-passed
+    test_file: tests/unit/review/test_reviewer.py
+  mutation-killers:
+    summary: "Pydantic config killers for slice-8 models"
+    red_status: n/a
+    green_status: 12-passed
+    test_file: tests/unit/review/test_review_mutation_killers.py
+mutation:
+  tool: mutmut-2.5.1
+  paths_mutated:
+    - src/seharness/review/finding.py
+    - src/seharness/review/policy.py
+    - src/seharness/review/coverage.py
+    - src/seharness/review/reviewer.py
+  totals:
+    mutants: 2
+    ok_killed: 1
+    bad_survived: 1
+    kill_rate_pct: 50.0
+    meaningful_kill_rate_pct: 100.0
+  equivalent_mutants:
+    rationale: "1 NotImplementedError message string mutation; mutmut 2.5.1 traverses only AST assignment RHS, so Pydantic Field(), StrEnum, and Protocol annotations have no mutable points. Behavioral coverage is via the 48 tests + 12 mutation killers."
+    count: 1
+decisions:
+  reviewer_invocation_model: B1 = Reviewer Protocol + StaticReviewer + LlmReviewer stub
+  finding_policy_model: A1 = declarative dispatch table (FindingPolicy.BLOCKING frozenset)
+  phase_executors: still deferred to slice 9 per slice 5 A2
+quality_gates:
+  ruff_format: clean
+  ruff_check: clean
+  mypy_strict: 46-files-clean
+  bandit: clean
+  pip_audit: clean
+  pytest: 716/716
+  mutation: 1/2 (50% raw / 100% on meaningful mutants)
+evidence_root: execution/08-independent-review

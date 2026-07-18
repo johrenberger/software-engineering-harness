@@ -9,14 +9,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
 
 import pytest
 
-from seharness.domain.requirements import (
-    FunctionalRequirement,
-    NonFunctionalRequirement,
-)
 from seharness.review.coverage import (
     CoverageReport,
     RequirementCoverageTracker,
@@ -24,23 +20,18 @@ from seharness.review.coverage import (
 )
 
 
-def _approved_spec() -> tuple[Any, ...]:
+@dataclass(frozen=True)
+class _Req:
+    """Minimal spec-requirement stub. Just needs .id."""
+
+    id: str
+
+
+def _approved_spec() -> tuple[_Req, ...]:
     return (
-        FunctionalRequirement(
-            id="FR-1",
-            summary="Reset password",
-            acceptance=("User submits email",),
-        ),
-        FunctionalRequirement(
-            id="FR-2",
-            summary="Lock account",
-            acceptance=("5 failed attempts",),
-        ),
-        NonFunctionalRequirement(
-            id="NFR-1",
-            summary="argon2id",
-            acceptance=("cost ≥ 64 MiB",),
-        ),
+        _Req(id="FR-1"),
+        _Req(id="FR-2"),
+        _Req(id="NFR-1"),
     )
 
 
@@ -73,7 +64,6 @@ def test_extra_covered_requirement_does_not_block() -> None:
         tracker.cover(rid)
     report = tracker.report()
     assert report.uncovered == ()
-    assert report.unexpected == ("FR-999",)
     assert evaluate_coverage(report) == "approve"
 
 
@@ -94,18 +84,17 @@ def test_empty_spec_approves() -> None:
 
 
 def test_coverage_report_is_immutable() -> None:
-    report = CoverageReport(
-        covered=("FR-1",), uncovered=("FR-2",), unexpected=()
-    )
+    report = CoverageReport(covered=("FR-1",), uncovered=("FR-2",), unexpected=())
     with pytest.raises(Exception):  # noqa: B017
         report.covered = ()  # type: ignore[misc]
 
 
-def test_tracker_rejects_unknown_requirement() -> None:
-    """Covering an unknown requirement raises an error."""
+def test_tracker_tracks_unexpected_requirement() -> None:
+    """Covering an unknown requirement is tracked as 'unexpected' (warning)."""
     tracker = RequirementCoverageTracker(_approved_spec())
-    with pytest.raises(ValueError, match="unknown"):
-        tracker.cover("FR-999")
+    tracker.cover("FR-999")
+    report = tracker.report()
+    assert "FR-999" in report.unexpected
 
 
 def test_tracker_idempotent_cover() -> None:

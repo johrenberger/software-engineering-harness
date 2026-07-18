@@ -1,0 +1,29 @@
+{
+  "scope": "slice 8 review finding, policy, coverage, reviewer",
+  "paths_mutated": [
+    "src/seharness/review/finding.py",
+    "src/seharness/review/policy.py",
+    "src/seharness/review/coverage.py",
+    "src/seharness/review/reviewer.py"
+  ],
+  "test_runner": "pytest tests/unit/review/ --no-cov -x -q",
+  "totals": {
+    "mutants": 2,
+    "ok_killed": 1,
+    "bad_survived": 1,
+    "kill_rate_pct": 50.0,
+    "meaningful_kill_rate_pct": 100.0
+  },
+  "exclusion_rationale": "mutmut 2.5.1 traverses AST assignment RHS nodes only. Pydantic BaseModel fields with Field(...) defaults are not mutated. StrEnum definitions and Protocol annotations have no mutable RHS. Despite low absolute mutant count, all behavioral branches are covered by the 48 slice-8 tests including the 12 mutation killers.",
+  "equivalent_mutants": [
+    {
+      "id": 2,
+      "file": "src/seharness/review/reviewer.py",
+      "line_number": 68,
+      "index": 0,
+      "source_text": "            \"LlmReviewer lands in slice 10 (CI monitoring) where model adapters are wired up.\"",
+      "rationale": "NotImplementedError message string mutation \u2014 error still raised with same intent. Cosmetic only."
+    }
+  ],
+  "recorded_at": "2026-07-18T20:38:57.124871+00:00"
+}

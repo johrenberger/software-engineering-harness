@@ -9,11 +9,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-import pytest
-
-from seharness.domain.requirements import FunctionalRequirement, Scenario
 from seharness.review.finding import (
     Finding,
     FindingCategory,
@@ -54,9 +49,7 @@ def test_high_finding_blocks() -> None:
 
 
 def test_policy_blocking_medium_blocks() -> None:
-    decision = apply_finding_policy(
-        [_finding(FindingSeverity.POLICY_BLOCKING_MEDIUM)]
-    )
+    decision = apply_finding_policy([_finding(FindingSeverity.POLICY_BLOCKING_MEDIUM)])
     assert decision == PolicyDecision.BLOCK
 
 
@@ -101,16 +94,13 @@ def test_policy_is_dispatch_table_not_branching() -> None:
 def test_policy_table_is_frozen() -> None:
     """The dispatch table MUST be immutable (no runtime mutation)."""
     assert isinstance(FindingPolicy.BLOCKING, frozenset) or (
-        isinstance(FindingPolicy.BLOCKING, dict)
-        and not isinstance(FindingPolicy.BLOCKING, dict)
+        isinstance(FindingPolicy.BLOCKING, dict) and not isinstance(FindingPolicy.BLOCKING, dict)
     )
 
 
 def test_blocking_finding_returns_to_remediation() -> None:
     """A BLOCK decision MUST include a reason indicating remediation route."""
-    decision, reason = apply_finding_policy(
-        [_finding(FindingSeverity.HIGH)], include_reason=True
-    )
+    decision, reason = apply_finding_policy([_finding(FindingSeverity.HIGH)], include_reason=True)
     assert decision == PolicyDecision.BLOCK
     assert "remediation" in reason.lower() or "fix" in reason.lower()
 
