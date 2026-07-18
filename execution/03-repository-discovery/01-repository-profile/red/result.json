@@ -1,0 +1,20 @@
+{
+  "behavior": "01-repository-profile",
+  "slice": "03-repository-discovery",
+  "phase": "red",
+  "tests_total": 19,
+  "status": "red",
+  "files_added": [
+    "tests/unit/repository/test_repository_profile.py",
+    "src/seharness/repository/__init__.py",
+    "execution/03-repository-discovery/checkpoint.yaml",
+    ".openclaw-runs/03-repository-discovery/checkpoint.yaml"
+  ],
+  "code_changes": [],
+  "expected_failure": "ModuleNotFoundError: No module named 'seharness.repository.discovery'",
+  "test_groups": [
+    "TestRepositoryProfileRequiredFields (13 tests) — every field in the spec's 'Repository profile' section must be present",
+    "TestRepositoryProfileStrict (2 tests) — extra='forbid' + frozen=True",
+    "TestRepositoryProfileBaselineStatus (4 tests) — status vocabulary: pass/fail/unknown/partial"
+  ]
+}

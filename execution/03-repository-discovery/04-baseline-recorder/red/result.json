@@ -1,0 +1,18 @@
+{
+  "behavior": "04-baseline-recorder",
+  "slice": "03-repository-discovery",
+  "phase": "red",
+  "tests_total": 10,
+  "status": "red",
+  "files_added": [
+    "tests/unit/repository/test_baseline_recorder.py"
+  ],
+  "code_changes": [],
+  "expected_failure": "ModuleNotFoundError: No module named 'seharness.repository.conventions'",
+  "test_groups": [
+    "TestBaselineRecorderWrite (2 tests) — file created, valid JSON",
+    "TestBaselineRecorderRead (3 tests) — round-trip, missing returns None, load_all",
+    "TestBaselineRecorderAggregates (4 tests) — pass/fail/partial/unknown aggregation",
+    "TestBaselineRecorderAtomic (1 test) — delegates to slice 2 atomic_write_json"
+  ]
+}

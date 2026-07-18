@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 10 items
+
+tests/unit/repository/test_baseline_recorder.py::TestBaselineRecorderWrite::test_writes_snapshot_file PASSED [ 10%]
+tests/unit/repository/test_baseline_recorder.py::TestBaselineRecorderWrite::test_writes_valid_json PASSED [ 20%]
+tests/unit/repository/test_baseline_recorder.py::TestBaselineRecorderRead::test_round_trip PASSED [ 30%]
+tests/unit/repository/test_baseline_recorder.py::TestBaselineRecorderRead::test_missing_baseline_returns_none PASSED [ 40%]
+tests/unit/repository/test_baseline_recorder.py::TestBaselineRecorderRead::test_load_all_returns_all_snapshots PASSED [ 50%]
+tests/unit/repository/test_baseline_recorder.py::TestBaselineRecorderAggregates::test_aggregate_pass_when_all_pass PASSED [ 60%]
+tests/unit/repository/test_baseline_recorder.py::TestBaselineRecorderAggregates::test_aggregate_fail_if_any_fail PASSED [ 70%]
+tests/unit/repository/test_baseline_recorder.py::TestBaselineRecorderAggregates::test_aggregate_partial_if_any_partial_and_none_fail PASSED [ 80%]
+tests/unit/repository/test_baseline_recorder.py::TestBaselineRecorderAggregates::test_aggregate_unknown_when_no_snapshots PASSED [ 90%]
+tests/unit/repository/test_baseline_recorder.py::TestBaselineRecorderAtomic::test_uses_atomic_write PASSED [100%]
+
+============================== 10 passed in 0.14s ==============================

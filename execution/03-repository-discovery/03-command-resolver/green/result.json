@@ -1,0 +1,18 @@
+{
+  "phase": "green",
+  "behavior_id": "03-command-resolver",
+  "tests": {
+    "total": 13,
+    "passed": 13,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "verdict": "GREEN — all 13 tests pass",
+  "evidence_file": "stdout.txt",
+  "source_files": [
+    "src/seharness/repository/__init__.py",
+    "src/seharness/repository/discovery.py",
+    "src/seharness/repository/conventions.py"
+  ]
+}

@@ -1,0 +1,23 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 13 items
+
+tests/unit/repository/test_command_resolver.py::TestTestCommandResolution::test_uv_uses_uv_run PASSED [  7%]
+tests/unit/repository/test_command_resolver.py::TestTestCommandResolution::test_poetry_uses_poetry_run PASSED [ 15%]
+tests/unit/repository/test_command_resolver.py::TestTestCommandResolution::test_setuptools_uses_python_m_pytest PASSED [ 23%]
+tests/unit/repository/test_command_resolver.py::TestTestCommandResolution::test_unknown_package_manager_falls_back PASSED [ 30%]
+tests/unit/repository/test_command_resolver.py::TestLintCommandResolution::test_ruff_when_configured PASSED [ 38%]
+tests/unit/repository/test_command_resolver.py::TestLintCommandResolution::test_ruff_respects_package_manager PASSED [ 46%]
+tests/unit/repository/test_command_resolver.py::TestLintCommandResolution::test_no_lint_when_not_configured PASSED [ 53%]
+tests/unit/repository/test_command_resolver.py::TestTypeCheckCommandResolution::test_mypy_when_configured PASSED [ 61%]
+tests/unit/repository/test_command_resolver.py::TestTypeCheckCommandResolution::test_no_mypy_when_not_configured PASSED [ 69%]
+tests/unit/repository/test_command_resolver.py::TestFormatCommandResolution::test_format_when_ruff_configured PASSED [ 76%]
+tests/unit/repository/test_command_resolver.py::TestResolverDeterminism::test_same_profile_same_commands PASSED [ 84%]
+tests/unit/repository/test_command_resolver.py::TestPluginFriendlyRegistry::test_register_custom_command PASSED [ 92%]
+tests/unit/repository/test_command_resolver.py::TestPluginFriendlyRegistry::test_default_gates_available PASSED [100%]
+
+============================== 13 passed in 0.09s ==============================

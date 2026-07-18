@@ -1,0 +1,18 @@
+{
+  "phase": "green",
+  "behavior_id": "01-repository-profile",
+  "tests": {
+    "total": 19,
+    "passed": 19,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "verdict": "GREEN — all 19 tests pass",
+  "evidence_file": "stdout.txt",
+  "source_files": [
+    "src/seharness/repository/__init__.py",
+    "src/seharness/repository/discovery.py",
+    "src/seharness/repository/conventions.py"
+  ]
+}

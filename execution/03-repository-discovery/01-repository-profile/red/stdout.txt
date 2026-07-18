@@ -1,0 +1,49 @@
+
+==================================== ERRORS ====================================
+_______ ERROR collecting tests/unit/repository/test_baseline_recorder.py _______
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/repository/test_baseline_recorder.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/repository/test_baseline_recorder.py:25: in <module>
+    from seharness.repository.discovery import BaselineStatus
+E   ModuleNotFoundError: No module named 'seharness.repository.discovery'
+_______ ERROR collecting tests/unit/repository/test_command_resolver.py ________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/repository/test_command_resolver.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/repository/test_command_resolver.py:21: in <module>
+    from seharness.repository.discovery import (
+E   ModuleNotFoundError: No module named 'seharness.repository.discovery'
+__ ERROR collecting tests/unit/repository/test_framework_neutral_discovery.py __
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/repository/test_framework_neutral_discovery.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/repository/test_framework_neutral_discovery.py:26: in <module>
+    from seharness.repository.discovery import (
+E   ModuleNotFoundError: No module named 'seharness.repository.discovery'
+______ ERROR collecting tests/unit/repository/test_repository_profile.py _______
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/repository/test_repository_profile.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/repository/test_repository_profile.py:18: in <module>
+    from seharness.repository.discovery import RepositoryProfile
+E   ModuleNotFoundError: No module named 'seharness.repository.discovery'
+=========================== short test summary info ============================
+ERROR tests/unit/repository/test_baseline_recorder.py
+ERROR tests/unit/repository/test_command_resolver.py
+ERROR tests/unit/repository/test_framework_neutral_discovery.py
+ERROR tests/unit/repository/test_repository_profile.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 4 errors during collection !!!!!!!!!!!!!!!!!!!!
+4 errors in 0.13s

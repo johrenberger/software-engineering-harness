@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 20 items
+
+tests/unit/repository/test_framework_neutral_discovery.py::TestInspectsRepositoryNameAndPath::test_name_defaults_to_directory_basename PASSED [  5%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestInspectsRepositoryNameAndPath::test_path_is_absolute PASSED [ 10%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestPackageManagerDetection::test_uv_when_uv_lock_present PASSED [ 15%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestPackageManagerDetection::test_poetry_when_poetry_lock_present PASSED [ 20%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestPackageManagerDetection::test_setuptools_when_only_setup_py PASSED [ 25%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestPackageManagerDetection::test_none_when_no_lockfile_and_no_setup_py PASSED [ 30%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestSourceRootDetection::test_finds_src_layout PASSED [ 35%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestSourceRootDetection::test_finds_flat_layout PASSED [ 40%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestSourceRootDetection::test_multiple_source_roots PASSED [ 45%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestTestRootDetection::test_finds_tests_directory PASSED [ 50%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestTestRootDetection::test_finds_test_singular PASSED [ 55%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestTestRootDetection::test_no_test_root PASSED [ 60%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestFrameworkNeutrality::test_no_framework_assumed_for_minimal_project PASSED [ 65%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestFrameworkNeutrality::test_framework_indicators_are_recorded_for_app PASSED [ 70%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestFrameworkNeutrality::test_profile_does_not_branch_on_framework PASSED [ 75%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestPyprojectToolDetection::test_detects_ruff_config PASSED [ 80%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestPyprojectToolDetection::test_detects_mypy_config PASSED [ 85%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestPyprojectToolDetection::test_detects_pytest_config PASSED [ 90%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestInspectsHandlesBadPath::test_nonexistent_path_raises PASSED [ 95%]
+tests/unit/repository/test_framework_neutral_discovery.py::TestInspectsHandlesBadPath::test_file_instead_of_directory_raises PASSED [100%]
+
+============================== 20 passed in 0.15s ==============================

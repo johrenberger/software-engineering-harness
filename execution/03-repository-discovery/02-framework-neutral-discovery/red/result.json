@@ -1,0 +1,21 @@
+{
+  "behavior": "02-framework-neutral-discovery",
+  "slice": "03-repository-discovery",
+  "phase": "red",
+  "tests_total": 20,
+  "status": "red",
+  "files_added": [
+    "tests/unit/repository/test_framework_neutral_discovery.py"
+  ],
+  "code_changes": [],
+  "expected_failure": "ModuleNotFoundError: No module named 'seharness.repository.discovery'",
+  "test_groups": [
+    "TestInspectsRepositoryNameAndPath (2 tests) — derive name/path from disk",
+    "TestPackageManagerDetection (4 tests) — uv, poetry, setuptools, unknown",
+    "TestSourceRootDetection (3 tests) — src layout, flat layout, multiple roots",
+    "TestTestRootDetection (3 tests) — tests/, test/, none",
+    "TestFrameworkNeutrality (3 tests) — indicators recorded, never branched",
+    "TestPyprojectToolDetection (3 tests) — tool.ruff, tool.mypy, tool.pytest",
+    "TestInspectsHandlesBadPath (2 tests) — nonexistent, file-instead-of-dir"
+  ]
+}

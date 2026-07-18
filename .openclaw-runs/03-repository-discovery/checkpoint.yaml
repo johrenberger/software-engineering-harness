@@ -1,0 +1,39 @@
+slice: 03-repository-discovery
+branch: agent/03-repository-discovery
+pr_number: 3
+pr_url: https://github.com/johrenberger/software-engineering-harness/pull/3
+pr_state: open (draft)
+base: main
+status: in_progress
+phase: green
+behaviors:
+  - id: 01-repository-profile
+    status: green
+    tests: 19
+  - id: 02-framework-neutral-discovery
+    status: green
+    tests: 20
+  - id: 03-command-resolver
+    status: green
+    tests: 13
+  - id: 04-baseline-recorder
+    status: green
+    tests: 10
+  - id: 05-repository-mutation-killers
+    status: green
+    tests: 51
+total_tests: 113
+final_gate:
+  ruff_format: pass
+  ruff_check: pass
+  mypy_strict: pass
+  bandit: pass
+  pip_audit: pass
+  pytest: pass
+  mutation: "62/66 (93.94%) — 4 inherent equivalent mutants"
+notes:
+  - "Slice 3 implements Framework-neutral repository discovery per SPEC.md §5 (repository/ modules)."
+  - "Out of scope: subprocess execution. Slice 7 owns the validation runner. Inspector records commands + last-known baseline metadata only."
+  - "CommandResolver exposes a plugin-friendly register() contract on top of the built-in Gate factories."
+  - "4 surviving mutants are equivalent: 1 type-alias, 2 f-string `{gate!r}`<->`{gate}` for ASCII gate names, 1 continue-removal in a fall-through loop."
+  - "Test file naming: tests/unit/repository/test_*_mutation_killers.py renamed to test_repository_mutation_killers.py to avoid collision with tests/unit/artifacts/test_mutation_killers.py (import-file-mismatch under pytest collection)."
