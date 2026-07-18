@@ -22,13 +22,14 @@ from pathlib import Path
 
 import pytest
 
-from seharness.repository.discovery import BaselineStatus
+from seharness.repository import conventions
 from seharness.repository.conventions import BaselineRecorder, BaselineSnapshot
+from seharness.repository.discovery import BaselineStatus
 
 
 def _baseline_dir(tmp_path: Path) -> Path:
-    d = tmp_path / "run-dir" / ".baseline"
-    d.mkdir(parents=True)
+    d = tmp_path / ".baseline"
+    d.mkdir(parents=True, exist_ok=True)
     return d
 
 
@@ -179,8 +180,6 @@ class TestBaselineRecorderAggregates:
 class TestBaselineRecorderAtomic:
     def test_uses_atomic_write(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The recorder must delegate to slice 2's atomic_write_json."""
-        from seharness.repository import conventions
-
         called = []
 
         def spy(path: Path, payload: object, **kw: object) -> None:

@@ -1,4 +1,4 @@
 [mutmut]
 backup = false
-runner = "/data/.openclaw/workspace/software-engineering-harness/.venv/bin/python -m pytest tests/unit/state/ tests/unit/artifacts/ --no-cov -x -q"
+runner = "/data/.openclaw/workspace/software-engineering-harness/.venv/bin/python -m pytest tests/unit/state/ tests/unit/artifacts/ tests/unit/repository/ --no-cov -x -q"
 tests_dir = "tests/"

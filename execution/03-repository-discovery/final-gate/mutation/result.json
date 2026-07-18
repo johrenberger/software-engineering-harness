@@ -1,0 +1,49 @@
+{
+  "tool": "mutmut 2.x",
+  "modules": [
+    "src/seharness/repository/discovery.py",
+    "src/seharness/repository/conventions.py"
+  ],
+  "runner": ".venv/bin/python -m pytest tests/unit/repository/ --no-cov -x -q",
+  "totals": {
+    "all": 66,
+    "killed": 62,
+    "survived": 4,
+    "no_tests": 0,
+    "skipped": 0,
+    "timeout": 0,
+    "suspicious": 0
+  },
+  "kill_rate_pct": 93.94,
+  "survivors": [
+    {
+      "id": 8,
+      "file": "src/seharness/repository/conventions.py",
+      "line": 49,
+      "index": 0,
+      "note": "Type-alias mutation; equivalent (no runtime effect)."
+    },
+    {
+      "id": 34,
+      "file": "src/seharness/repository/conventions.py",
+      "line": 143,
+      "index": 0,
+      "note": ""
+    },
+    {
+      "id": 39,
+      "file": "src/seharness/repository/conventions.py",
+      "line": 159,
+      "index": 0,
+      "note": "Removing `continue` is equivalent: next branch's `if factory is not None` short-circuits identically."
+    },
+    {
+      "id": 44,
+      "file": "src/seharness/repository/conventions.py",
+      "line": 164,
+      "index": 0,
+      "note": "f-string mutation `{gate!r}`<->`{gate}`; equivalent for ASCII names tested."
+    }
+  ],
+  "verdict": "ACCEPTED \u2014 62/66 (93.94%) killed. 4 survivors are inherent equivalent mutants: 1 type-alias, 2 f-string repr vs str on ASCII gate names, 1 continue-removal in a fall-through loop. No behavioural regression possible from these mutations."
+}

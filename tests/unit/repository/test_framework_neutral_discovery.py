@@ -26,9 +26,9 @@ import pytest
 from seharness.repository.discovery import (
     FrameworkIndicator,
     PackageManager,
+    RepositoryError,
     inspect_repository,
 )
-
 
 # --- fixtures ---------------------------------------------------------------
 
@@ -135,9 +135,11 @@ class TestSourceRootDetection:
 
     def test_multiple_source_roots(self, tmp_path: Path) -> None:
         _write_pyproject(tmp_path, '[project]\nname = "x"\n')
-        (tmp_path / "src" / "a").mkdir(parents=True)
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "a").mkdir()
         (tmp_path / "src" / "a" / "__init__.py").write_text("")
-        (tmp_path / "lib" / "b").mkdir(parents=True)
+        (tmp_path / "lib").mkdir()
+        (tmp_path / "lib" / "b").mkdir()
         (tmp_path / "lib" / "b" / "__init__.py").write_text("")
         p = inspect_repository(tmp_path)
         assert "src" in p.source_roots
@@ -181,9 +183,7 @@ class TestFrameworkNeutrality:
         assert FrameworkIndicator.FLASK in indicators
         assert FrameworkIndicator.DJANGO in indicators
 
-    def test_profile_does_not_branch_on_framework(
-        self, framework_indicators_project: Path
-    ) -> None:
+    def test_profile_does_not_branch_on_framework(self, framework_indicators_project: Path) -> None:
         """Validation commands must not change based on framework."""
         p = inspect_repository(framework_indicators_project)
         assert "uv run pytest" not in " ".join(p.validation_commands)
@@ -197,6 +197,7 @@ class TestFrameworkNeutrality:
 class TestPyprojectToolDetection:
     def test_detects_ruff_config(self, tmp_path: Path) -> None:
         _write_pyproject(tmp_path, '[project]\nname = "x"\n\n[tool.ruff]\nline-length = 88\n')
+        (tmp_path / "src").mkdir()
         (tmp_path / "src" / "x.py").write_text("")
         p = inspect_repository(tmp_path)
         # ruff should appear in conventions, never in framework_indicators.
@@ -204,6 +205,7 @@ class TestPyprojectToolDetection:
 
     def test_detects_mypy_config(self, tmp_path: Path) -> None:
         _write_pyproject(tmp_path, '[project]\nname = "x"\n\n[tool.mypy]\nstrict = true\n')
+        (tmp_path / "src").mkdir()
         (tmp_path / "src" / "x.py").write_text("")
         p = inspect_repository(tmp_path)
         assert any("mypy" in c.lower() for c in p.conventions)
@@ -212,6 +214,7 @@ class TestPyprojectToolDetection:
         _write_pyproject(
             tmp_path, '[project]\nname = "x"\n\n[tool.pytest.ini_options]\ntestpaths = ["t"]\n'
         )
+        (tmp_path / "src").mkdir()
         (tmp_path / "src" / "x.py").write_text("")
         p = inspect_repository(tmp_path)
         assert any("pytest" in c.lower() for c in p.conventions)
@@ -222,11 +225,11 @@ class TestPyprojectToolDetection:
 
 class TestInspectsHandlesBadPath:
     def test_nonexistent_path_raises(self, tmp_path: Path) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(RepositoryError):
             inspect_repository(tmp_path / "nope")
 
     def test_file_instead_of_directory_raises(self, tmp_path: Path) -> None:
         f = tmp_path / "thing"
         f.write_text("not a dir")
-        with pytest.raises(Exception):
+        with pytest.raises(RepositoryError):
             inspect_repository(f)

@@ -14,6 +14,7 @@ inspector discovers about the target repository. It must:
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from seharness.repository.discovery import RepositoryProfile
 
@@ -86,12 +87,12 @@ class TestRepositoryProfileStrict:
     """The profile must reject unknown keys and refuse mutation."""
 
     def test_unknown_field_raises(self) -> None:
-        with pytest.raises(Exception):  # ValidationError
+        with pytest.raises(ValidationError):
             RepositoryProfile(unknown_field="x")  # type: ignore[call-arg]
 
     def test_profile_is_frozen(self) -> None:
         p = _new_profile()
-        with pytest.raises(Exception):  # ValidationError (frozen)
+        with pytest.raises(ValidationError):
             p.name = "other"  # type: ignore[misc]
 
 
@@ -105,7 +106,13 @@ class TestRepositoryProfileBaselineStatus:
         assert _new_profile(baseline_validation_status="fail").baseline_validation_status == "fail"
 
     def test_baseline_can_be_unknown(self) -> None:
-        assert _new_profile(baseline_validation_status="unknown").baseline_validation_status == "unknown"
+        assert (
+            _new_profile(baseline_validation_status="unknown").baseline_validation_status
+            == "unknown"
+        )
 
     def test_baseline_can_be_partial(self) -> None:
-        assert _new_profile(baseline_validation_status="partial").baseline_validation_status == "partial"
+        assert (
+            _new_profile(baseline_validation_status="partial").baseline_validation_status
+            == "partial"
+        )

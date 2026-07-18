@@ -1,0 +1,29 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 19 items
+
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_name PASSED [  5%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_path PASSED [ 10%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_base_commit PASSED [ 15%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_python_version_constraint PASSED [ 21%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_package_manager PASSED [ 26%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_source_roots PASSED [ 31%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_test_roots PASSED [ 36%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_framework_indicators PASSED [ 42%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_validation_commands PASSED [ 47%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_ci_workflows PASSED [ 52%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_architecture_summary PASSED [ 57%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_conventions PASSED [ 63%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileRequiredFields::test_has_baseline_validation_status PASSED [ 68%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileStrict::test_unknown_field_raises PASSED [ 73%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileStrict::test_profile_is_frozen PASSED [ 78%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileBaselineStatus::test_baseline_can_be_pass PASSED [ 84%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileBaselineStatus::test_baseline_can_be_fail PASSED [ 89%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileBaselineStatus::test_baseline_can_be_unknown PASSED [ 94%]
+tests/unit/repository/test_repository_profile.py::TestRepositoryProfileBaselineStatus::test_baseline_can_be_partial PASSED [100%]
+
+============================== 19 passed in 0.10s ==============================

@@ -10,9 +10,6 @@ Slice 3 deliverables (per SPEC.md §5 / §17):
 * :class:`CommandResolver` — turns the profile into concrete shell
   command strings (test, lint, type-check, format). Prefers repository-
   native tools (uv, poetry, pdm, hatch) over arbitrary ones.
-* :class:`ConventionDetector` protocol + :class:`ConventionRegistry`
-  for the plugin-friendly extension point asked for in the REFACTOR
-  bullet.
 * :class:`BaselineRecorder` — reads ``<run-dir>/.baseline/`` JSON
   snapshots written by slice 7. Slice 3 itself does not run subprocesses;
   it only persists and re-reads the snapshots.
@@ -23,4 +20,28 @@ Running validation commands belongs to slice 7 (``validation/runner.py``).
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from .conventions import BaselineRecorder, CommandResolver, Gate
+from .discovery import (
+    BaselineSnapshot,
+    BaselineStatus,
+    FrameworkIndicator,
+    PackageManager,
+    RepositoryError,
+    RepositoryProfile,
+    ValidationCommand,
+    inspect_repository,
+)
+
+__all__ = [
+    "BaselineRecorder",
+    "BaselineSnapshot",
+    "BaselineStatus",
+    "CommandResolver",
+    "FrameworkIndicator",
+    "Gate",
+    "PackageManager",
+    "RepositoryError",
+    "RepositoryProfile",
+    "ValidationCommand",
+    "inspect_repository",
+]

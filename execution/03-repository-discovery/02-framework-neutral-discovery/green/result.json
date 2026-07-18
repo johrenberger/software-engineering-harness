@@ -1,0 +1,18 @@
+{
+  "phase": "green",
+  "behavior_id": "02-framework-neutral-discovery",
+  "tests": {
+    "total": 20,
+    "passed": 20,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "verdict": "GREEN — all 20 tests pass",
+  "evidence_file": "stdout.txt",
+  "source_files": [
+    "src/seharness/repository/__init__.py",
+    "src/seharness/repository/discovery.py",
+    "src/seharness/repository/conventions.py"
+  ]
+}

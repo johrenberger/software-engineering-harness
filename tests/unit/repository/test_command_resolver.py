@@ -14,16 +14,12 @@ command strings. It must:
 
 from __future__ import annotations
 
-from typing import Sequence
-
-import pytest
-
+from seharness.repository.conventions import CommandResolver, Gate
 from seharness.repository.discovery import (
     PackageManager,
     RepositoryProfile,
     ValidationCommand,
 )
-from seharness.repository.conventions import CommandResolver, Gate
 
 
 def _profile(**kw: object) -> RepositoryProfile:
