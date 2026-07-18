@@ -1,0 +1,12 @@
+{
+  "behavior": "mutation-killers",
+  "test_file": "tests/unit/review/test_review_mutation_killers.py",
+  "summary": "Pydantic config killers",
+  "phase": "green",
+  "passed": 12,
+  "failed": 0,
+  "duration_s": 0.11,
+  "command": "pytest tests/unit/review/test_review_mutation_killers.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T20:39:03.866049+00:00"
+}

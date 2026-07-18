@@ -1,0 +1,77 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collected 0 items / 6 errors
+
+==================================== ERRORS ====================================
+_____ ERROR collecting tests/unit/review/test_coverage_blocks_approval.py ______
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/review/test_coverage_blocks_approval.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/review/test_coverage_blocks_approval.py:16: in <module>
+    from seharness.domain.requirements import (
+E   ImportError: cannot import name 'FunctionalRequirement' from 'seharness.domain.requirements' (/data/.openclaw/workspace/software-engineering-harness/src/seharness/domain/requirements.py)
+________ ERROR collecting tests/unit/review/test_high_findings_block.py ________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/review/test_high_findings_block.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/review/test_high_findings_block.py:16: in <module>
+    from seharness.domain.requirements import FunctionalRequirement, Scenario
+E   ImportError: cannot import name 'FunctionalRequirement' from 'seharness.domain.requirements' (/data/.openclaw/workspace/software-engineering-harness/src/seharness/domain/requirements.py)
+_______ ERROR collecting tests/unit/review/test_resolved_rerun_gates.py ________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/review/test_resolved_rerun_gates.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/review/test_resolved_rerun_gates.py:17: in <module>
+    from seharness.review.finding import (
+E   ModuleNotFoundError: No module named 'seharness.review.finding'
+_______ ERROR collecting tests/unit/review/test_review_fresh_context.py ________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/review/test_review_fresh_context.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/review/test_review_fresh_context.py:18: in <module>
+    from seharness.domain.requirements import (
+E   ImportError: cannot import name 'FunctionalRequirement' from 'seharness.domain.requirements' (/data/.openclaw/workspace/software-engineering-harness/src/seharness/domain/requirements.py)
+______ ERROR collecting tests/unit/review/test_review_mutation_killers.py ______
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/review/test_review_mutation_killers.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/review/test_review_mutation_killers.py:13: in <module>
+    from seharness.review.finding import (
+E   ModuleNotFoundError: No module named 'seharness.review.finding'
+_____________ ERROR collecting tests/unit/review/test_reviewer.py ______________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/review/test_reviewer.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/review/test_reviewer.py:15: in <module>
+    from seharness.review.finding import (
+E   ModuleNotFoundError: No module named 'seharness.review.finding'
+=========================== short test summary info ============================
+ERROR tests/unit/review/test_coverage_blocks_approval.py
+ERROR tests/unit/review/test_high_findings_block.py
+ERROR tests/unit/review/test_resolved_rerun_gates.py
+ERROR tests/unit/review/test_review_fresh_context.py
+ERROR tests/unit/review/test_review_mutation_killers.py
+ERROR tests/unit/review/test_reviewer.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 6 errors during collection !!!!!!!!!!!!!!!!!!!!
+==================== no tests collected, 6 errors in 0.15s =====================

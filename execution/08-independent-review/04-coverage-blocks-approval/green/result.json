@@ -1,0 +1,12 @@
+{
+  "behavior": "04-coverage-blocks-approval",
+  "test_file": "tests/unit/review/test_coverage_blocks_approval.py",
+  "summary": "incomplete requirement coverage blocks approval",
+  "phase": "green",
+  "passed": 8,
+  "failed": 0,
+  "duration_s": 0.09,
+  "command": "pytest tests/unit/review/test_coverage_blocks_approval.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T20:39:02.933760+00:00"
+}
