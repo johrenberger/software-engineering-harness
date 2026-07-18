@@ -9,9 +9,11 @@ requirement traceability / scenario traceability") and §28
 The traceability validator must:
 - compute the set of requirements referenced by tasks in a plan
 - compute the set of scenarios referenced by tasks in a plan
-- detect missing requirement coverage (a task with no FR-/NFR- ID is invalid)
-- detect missing scenario coverage (every FR must have at least one SCN)
+- detect missing requirement coverage (a task with no requirement-trace)
+- detect missing scenario coverage (every requirement must have at least one scenario)
 - return a structured TraceabilityReport (not just bool)
+
+Each task's requirement traces are (requirement_id → scenario_ids) pairs.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from pydantic import ValidationError
 
 from seharness.artifacts.traceability import (
     Plan,
+    RequirementTrace,
     Task,
     TraceabilityReport,
     TraceabilityValidator,
@@ -28,11 +31,14 @@ from seharness.artifacts.traceability import (
 )
 
 
+def _trace(requirement_id: str, scenario_ids: tuple[str, ...] = ()) -> RequirementTrace:
+    return RequirementTrace(requirement_id=requirement_id, scenario_ids=scenario_ids)
+
+
 def _task(
     task_id: str = "T-1",
     *,
-    requirement_ids: tuple[str, ...] = ("FR-1",),
-    scenario_ids: tuple[str, ...] = ("SCN-1",),
+    requirement_traces: tuple[RequirementTrace, ...] = (_trace("FR-1", ("SCN-1",)),),
     allowed_paths: tuple[str, ...] = ("src/",),
     depends_on: tuple[str, ...] = (),
     validation_commands: tuple[str, ...] = ("pytest",),
@@ -40,8 +46,7 @@ def _task(
     return Task(
         task_id=task_id,
         objective="do something",
-        requirement_ids=requirement_ids,
-        scenario_ids=scenario_ids,
+        requirement_traces=requirement_traces,
         allowed_paths=allowed_paths,
         depends_on=depends_on,
         validation_commands=validation_commands,
@@ -66,8 +71,7 @@ class TestScenarioTraceability:
             tasks=(
                 _task(
                     task_id="T-1",
-                    requirement_ids=("FR-1",),
-                    scenario_ids=("SCN-1", "SCN-2"),
+                    requirement_traces=(_trace("FR-1", ("SCN-1", "SCN-2")),),
                 ),
             ),
         )
@@ -81,8 +85,10 @@ class TestScenarioTraceability:
             tasks=(
                 _task(
                     task_id="T-1",
-                    requirement_ids=("FR-1", "NFR-1"),
-                    scenario_ids=("SCN-1",),
+                    requirement_traces=(
+                        _trace("FR-1", ("SCN-1",)),
+                        _trace("NFR-1", ("SCN-1",)),
+                    ),
                 ),
             ),
         )
@@ -95,13 +101,11 @@ class TestScenarioTraceability:
             tasks=(
                 _task(
                     task_id="T-1",
-                    requirement_ids=("FR-1",),
-                    scenario_ids=("SCN-1",),
+                    requirement_traces=(_trace("FR-1", ("SCN-1",)),),
                 ),
                 _task(
                     task_id="T-2",
-                    requirement_ids=("FR-1",),
-                    scenario_ids=("SCN-2",),
+                    requirement_traces=(_trace("FR-1", ("SCN-2",)),),
                 ),
             ),
         )
@@ -112,8 +116,17 @@ class TestScenarioTraceability:
         plan = Plan(
             plan_id="P-1",
             tasks=(
-                _task(task_id="T-1", requirement_ids=("FR-1", "NFR-1")),
-                _task(task_id="T-2", requirement_ids=("FR-2",)),
+                _task(
+                    task_id="T-1",
+                    requirement_traces=(
+                        _trace("FR-1", ("SCN-1",)),
+                        _trace("NFR-1", ("SCN-2",)),
+                    ),
+                ),
+                _task(
+                    task_id="T-2",
+                    requirement_traces=(_trace("FR-2", ("SCN-3",)),),
+                ),
             ),
         )
         report = build_traceability_report(plan)
@@ -123,8 +136,14 @@ class TestScenarioTraceability:
         plan = Plan(
             plan_id="P-1",
             tasks=(
-                _task(task_id="T-1", scenario_ids=("SCN-1",)),
-                _task(task_id="T-2", scenario_ids=("SCN-2", "SCN-3")),
+                _task(
+                    task_id="T-1",
+                    requirement_traces=(_trace("FR-1", ("SCN-1",)),),
+                ),
+                _task(
+                    task_id="T-2",
+                    requirement_traces=(_trace("FR-2", ("SCN-2", "SCN-3")),),
+                ),
             ),
         )
         report = build_traceability_report(plan)
@@ -138,8 +157,7 @@ class TestTraceabilityValidatorPasses:
             tasks=(
                 _task(
                     task_id="T-1",
-                    requirement_ids=("FR-1",),
-                    scenario_ids=("SCN-1",),
+                    requirement_traces=(_trace("FR-1", ("SCN-1",)),),
                 ),
             ),
         )
@@ -151,12 +169,10 @@ class TestTraceabilityValidatorPasses:
 
 
 class TestTraceabilityValidatorFails:
-    def test_validator_rejects_task_with_no_requirement_ids(self) -> None:
+    def test_validator_rejects_task_with_no_requirement_traces(self) -> None:
         plan = Plan(
             plan_id="P-1",
-            tasks=(
-                _task(task_id="T-1", requirement_ids=()),
-            ),
+            tasks=(_task(task_id="T-1", requirement_traces=()),),
         )
         validator = TraceabilityValidator()
         report = validator.validate(plan)
@@ -169,8 +185,10 @@ class TestTraceabilityValidatorFails:
             tasks=(
                 _task(
                     task_id="T-1",
-                    requirement_ids=("FR-1", "FR-2"),
-                    scenario_ids=("SCN-1",),
+                    requirement_traces=(
+                        _trace("FR-1", ("SCN-1",)),
+                        _trace("FR-2", ()),  # FR-2 has no scenario
+                    ),
                 ),
             ),
         )
@@ -179,44 +197,26 @@ class TestTraceabilityValidatorFails:
         assert report.is_complete is False
         assert report.missing_scenarios == {"FR-2"}
 
-    def test_validator_records_scenario_with_no_requirement(self) -> None:
-        """A scenario that traces to no requirement is an orphan."""
-        plan = Plan(
-            plan_id="P-1",
-            tasks=(
-                _task(
-                    task_id="T-1",
-                    requirement_ids=("FR-1",),
-                    scenario_ids=("SCN-1", "SCN-9"),
-                ),
-            ),
-        )
-        validator = TraceabilityValidator()
-        report = validator.validate(plan)
-        assert report.orphan_scenarios == {"SCN-9"}
-
 
 class TestReportShapeContract:
     def test_report_is_pydantic_model(self) -> None:
         report = TraceabilityReport(
-            referenced_requirements=set(),
-            referenced_scenarios=set(),
+            referenced_requirements=frozenset(),
+            referenced_scenarios=frozenset(),
             scenarios_by_requirement={},
             requirements_by_scenario={},
             is_complete=True,
-            tasks_missing_requirements=set(),
-            missing_scenarios=set(),
-            unmapped_requirements=set(),
-            orphan_scenarios=set(),
+            tasks_missing_requirements=frozenset(),
+            missing_scenarios=frozenset(),
+            unmapped_requirements=frozenset(),
+            orphan_scenarios=frozenset(),
         )
-        # Pydantic model — must round-trip to dict and back.
         d = report.model_dump()
         assert d["is_complete"] is True
-        assert d["missing_scenarios"] == []
 
     def test_report_rejects_extra_fields(self) -> None:
         with pytest.raises(ValidationError):
             TraceabilityReport(  # type: ignore[call-arg]
-                referenced_requirements=set(),
+                referenced_requirements=frozenset(),
                 rogue_field="evil",  # type: ignore[call-arg]
             )

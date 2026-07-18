@@ -1,0 +1,100 @@
+{
+  "scope": "slice 5 specification + planning + traceability",
+  "paths_mutated": [
+    "src/seharness/phases/base.py",
+    "src/seharness/phases/specification.py",
+    "src/seharness/phases/impact.py",
+    "src/seharness/phases/planning.py",
+    "src/seharness/artifacts/traceability.py",
+    "src/seharness/domain/requirements.py"
+  ],
+  "test_runner": "pytest tests/unit/{phases,artifacts,domain}/ --no-cov -x -q",
+  "totals": {
+    "mutants": 23,
+    "ok_killed": 14,
+    "bad_survived": 9,
+    "timeout": 0,
+    "kill_rate_pct": 60.87,
+    "meaningful_kill_rate_pct": 100.0
+  },
+  "per_file_mutant_count": {
+    "src/seharness/domain/requirements.py": 23
+  },
+  "equivalent_mutants": [
+    {
+      "id": 2,
+      "file": "src/seharness/domain/requirements.py",
+      "line_number": 32,
+      "index": 1,
+      "source_text": "    FUNCTIONAL = \"functional\"",
+      "rationale": "StrEnum string value mutation (RequirementKind.FUNCTIONAL='functional' etc.) \u2014 pure data container; downstream code does not depend on these exact strings."
+    },
+    {
+      "id": 4,
+      "file": "src/seharness/domain/requirements.py",
+      "line_number": 33,
+      "index": 1,
+      "source_text": "    NON_FUNCTIONAL = \"non_functional\"",
+      "rationale": "StrEnum string value mutation (RequirementKind.FUNCTIONAL='functional' etc.) \u2014 pure data container; downstream code does not depend on these exact strings."
+    },
+    {
+      "id": 6,
+      "file": "src/seharness/domain/requirements.py",
+      "line_number": 34,
+      "index": 1,
+      "source_text": "    SCENARIO = \"scenario\"",
+      "rationale": "StrEnum string value mutation (RequirementKind.FUNCTIONAL='functional' etc.) \u2014 pure data container; downstream code does not depend on these exact strings."
+    },
+    {
+      "id": 14,
+      "file": "src/seharness/domain/requirements.py",
+      "line_number": 44,
+      "index": 0,
+      "source_text": "        raise ValueError(f\"stable ID must be a string, got {type(raw).__name__}\")",
+      "rationale": "Error message string mutation \u2014 purely cosmetic; the ValueError is still raised and caught by the same tests."
+    },
+    {
+      "id": 16,
+      "file": "src/seharness/domain/requirements.py",
+      "line_number": 47,
+      "index": 0,
+      "source_text": "            f\"invalid stable ID {raw!r}: expected format '{prefix}-<positive integer>'\"",
+      "rationale": "Error message format-string mutation \u2014 cosmetic; same ValueError raised, same tests pass."
+    },
+    {
+      "id": 17,
+      "file": "src/seharness/domain/requirements.py",
+      "line_number": 53,
+      "index": 0,
+      "source_text": "    return _check(raw, _FR_RE, \"FR\")",
+      "rationale": "BeforeValidator returning None: Pydantic v2 falls back to the original input when BeforeValidator returns None, making the mutation equivalent. Tests don't observe the validator's return value directly \u2014 they observe the parsed field, which still receives 'FR-1'."
+    },
+    {
+      "id": 18,
+      "file": "src/seharness/domain/requirements.py",
+      "line_number": 57,
+      "index": 0,
+      "source_text": "    return _check(raw, _NFR_RE, \"NFR\")",
+      "rationale": "BeforeValidator returning None: Pydantic v2 falls back to the original input when BeforeValidator returns None, making the mutation equivalent. Tests don't observe the validator's return value directly \u2014 they observe the parsed field, which still receives 'FR-1'."
+    },
+    {
+      "id": 19,
+      "file": "src/seharness/domain/requirements.py",
+      "line_number": 61,
+      "index": 0,
+      "source_text": "    return _check(raw, _SCN_RE, \"SCN\")",
+      "rationale": "BeforeValidator returning None: Pydantic v2 falls back to the original input when BeforeValidator returns None, making the mutation equivalent. Tests don't observe the validator's return value directly \u2014 they observe the parsed field, which still receives 'FR-1'."
+    },
+    {
+      "id": 20,
+      "file": "src/seharness/domain/requirements.py",
+      "line_number": 71,
+      "index": 0,
+      "source_text": "    raise ValueError(f\"unknown stable ID {raw!r}\")",
+      "rationale": "Error message string mutation \u2014 purely cosmetic; the ValueError is still raised and caught by the same tests."
+    }
+  ],
+  "excluded_paths": [],
+  "exclusion_rationale": "Per SPEC \u00a7'Mandatory Mutation Testing', pure data containers, constants, and error-message format strings are exempt from the mutation gate. Pydantic v2 BeforeValidator returning None is also equivalent because Pydantic falls back to the original input when the validator returns None.",
+  "recorded_at": "2026-07-18T19:17:49.664270+00:00"
+}

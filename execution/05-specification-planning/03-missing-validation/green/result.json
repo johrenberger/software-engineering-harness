@@ -1,0 +1,12 @@
+{
+  "behavior": "03-missing-validation",
+  "test_file": "tests/unit/artifacts/test_plan_validation.py",
+  "summary": "plans with missing validation fail",
+  "phase": "green",
+  "passed": 9,
+  "failed": 0,
+  "duration_s": 0.11,
+  "command": "pytest tests/unit/artifacts/test_plan_validation.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T19:18:01.541194+00:00"
+}

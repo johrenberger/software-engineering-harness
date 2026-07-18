@@ -7,27 +7,30 @@ Per SPEC §15 ("Reject a plan when: ... a task has no validation") and
 
 The plan validator must reject any plan that contains a task with no
 ``validation_commands``. The validator must also reject plans whose
-tasks lack requirement IDs (per SPEC §15 reject list).
+tasks lack requirement traces (per SPEC §15 reject list).
 """
 
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
 
 from seharness.artifacts.traceability import (
     Plan,
     PlanValidationError,
     PlanValidator,
+    RequirementTrace,
     Task,
 )
+
+
+def _trace(requirement_id: str, scenario_ids: tuple[str, ...] = ()) -> RequirementTrace:
+    return RequirementTrace(requirement_id=requirement_id, scenario_ids=scenario_ids)
 
 
 def _task(
     task_id: str = "T-1",
     *,
-    requirement_ids: tuple[str, ...] = ("FR-1",),
-    scenario_ids: tuple[str, ...] = ("SCN-1",),
+    requirement_traces: tuple[RequirementTrace, ...] = (_trace("FR-1", ("SCN-1",)),),
     allowed_paths: tuple[str, ...] = ("src/",),
     depends_on: tuple[str, ...] = (),
     validation_commands: tuple[str, ...] = ("pytest",),
@@ -35,8 +38,7 @@ def _task(
     return Task(
         task_id=task_id,
         objective="do something",
-        requirement_ids=requirement_ids,
-        scenario_ids=scenario_ids,
+        requirement_traces=requirement_traces,
         allowed_paths=allowed_paths,
         depends_on=depends_on,
         validation_commands=validation_commands,
@@ -95,7 +97,6 @@ class TestPlanRejectsMissingValidation:
         assert "T-1" not in msg
 
     def test_validator_rejects_task_with_empty_validation_command(self) -> None:
-        """Empty-string command is not the same as a real command."""
         plan = Plan(
             plan_id="P-1",
             tasks=(_task(validation_commands=("",)),),
@@ -113,10 +114,10 @@ class TestPlanRejectsMissingValidation:
 
 
 class TestPlanRejectsMissingRequirements:
-    def test_validator_rejects_task_with_no_requirement_ids(self) -> None:
+    def test_validator_rejects_task_with_no_requirement_traces(self) -> None:
         plan = Plan(
             plan_id="P-1",
-            tasks=(_task(requirement_ids=()),),
+            tasks=(_task(requirement_traces=()),),
         )
         with pytest.raises(PlanValidationError) as excinfo:
             PlanValidator().validate(plan)
@@ -134,7 +135,6 @@ class TestPlanValidationErrorShape:
         assert "P-fail" in str(excinfo.value)
 
     def test_error_includes_rejection_reason_code(self) -> None:
-        """The exception must expose a stable reason code for callers."""
         plan = Plan(
             plan_id="P-1",
             tasks=(_task(validation_commands=()),),

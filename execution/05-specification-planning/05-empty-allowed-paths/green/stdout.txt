@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 10 items
+
+tests/unit/artifacts/test_allowed_paths.py::TestAcceptsNonEmptyAllowedPaths::test_single_path PASSED [ 10%]
+tests/unit/artifacts/test_allowed_paths.py::TestAcceptsNonEmptyAllowedPaths::test_multiple_paths PASSED [ 20%]
+tests/unit/artifacts/test_allowed_paths.py::TestAcceptsNonEmptyAllowedPaths::test_absolute_path PASSED [ 30%]
+tests/unit/artifacts/test_allowed_paths.py::TestRejectsEmptyAllowedPaths::test_empty_tuple_rejected PASSED [ 40%]
+tests/unit/artifacts/test_allowed_paths.py::TestRejectsEmptyAllowedPaths::test_only_empty_string_rejected PASSED [ 50%]
+tests/unit/artifacts/test_allowed_paths.py::TestRejectsEmptyAllowedPaths::test_only_whitespace_rejected PASSED [ 60%]
+tests/unit/artifacts/test_allowed_paths.py::TestErrorMessageContent::test_error_message_names_offending_task PASSED [ 70%]
+tests/unit/artifacts/test_allowed_paths.py::TestErrorMessageContent::test_error_message_includes_plan_id PASSED [ 80%]
+tests/unit/artifacts/test_allowed_paths.py::TestErrorMessageContent::test_multiple_offenders_all_named PASSED [ 90%]
+tests/unit/artifacts/test_allowed_paths.py::TestReasonCodesCoverage::test_reason_codes_are_stable_strings PASSED [100%]
+
+============================== 10 passed in 0.10s ==============================

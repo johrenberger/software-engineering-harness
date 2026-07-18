@@ -17,11 +17,12 @@ from __future__ import annotations
 
 import pytest
 
+import seharness.phases
 from seharness.domain.enums import PhaseName
 from seharness.phases.base import Phase, PhaseNotImplementedError
-from seharness.phases.specification import SpecificationPhase
 from seharness.phases.impact import ImpactPhase
 from seharness.phases.planning import PlanningPhase
+from seharness.phases.specification import SpecificationPhase
 
 
 class TestPhaseIsAbstract:
@@ -54,9 +55,7 @@ class TestPhaseNotImplementedError:
             phase = cls()
             with pytest.raises(PhaseNotImplementedError) as excinfo:
                 phase.run(None)  # type: ignore[arg-type]
-            assert cls.__name__ in str(excinfo.value) or phase.name.value in str(
-                excinfo.value
-            )
+            assert cls.__name__ in str(excinfo.value) or phase.name.value in str(excinfo.value)
 
     def test_phase_not_implemented_error_is_an_exception(self) -> None:
         assert issubclass(PhaseNotImplementedError, Exception)
@@ -77,26 +76,21 @@ class TestPhaseRegistry:
     """The ``phases/__init__.py`` package must export the three concrete classes."""
 
     def test_package_exports_specification_phase(self) -> None:
-        import seharness.phases
 
         assert hasattr(seharness.phases, "SpecificationPhase")
 
     def test_package_exports_impact_phase(self) -> None:
-        import seharness.phases
 
         assert hasattr(seharness.phases, "ImpactPhase")
 
     def test_package_exports_planning_phase(self) -> None:
-        import seharness.phases
 
         assert hasattr(seharness.phases, "PlanningPhase")
 
     def test_package_exports_phase_abc(self) -> None:
-        import seharness.phases
 
         assert hasattr(seharness.phases, "Phase")
 
     def test_package_exports_phase_not_implemented_error(self) -> None:
-        import seharness.phases
 
         assert hasattr(seharness.phases, "PhaseNotImplementedError")

@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 10 items
+
+tests/unit/artifacts/test_dependency_graph.py::TestAcyclicGraph::test_no_cycles_in_dag PASSED [ 10%]
+tests/unit/artifacts/test_dependency_graph.py::TestAcyclicGraph::test_no_cycles_with_diamond_dependency PASSED [ 20%]
+tests/unit/artifacts/test_dependency_graph.py::TestAcyclicGraph::test_no_cycles_in_disconnected_components PASSED [ 30%]
+tests/unit/artifacts/test_dependency_graph.py::TestSelfLoop::test_self_loop_detected PASSED [ 40%]
+tests/unit/artifacts/test_dependency_graph.py::TestTwoCycle::test_two_cycle_detected PASSED [ 50%]
+tests/unit/artifacts/test_dependency_graph.py::TestLongerCycle::test_three_cycle_detected PASSED [ 60%]
+tests/unit/artifacts/test_dependency_graph.py::TestValidatorRejectsCycles::test_validator_rejects_self_loop PASSED [ 70%]
+tests/unit/artifacts/test_dependency_graph.py::TestValidatorRejectsCycles::test_validator_rejects_two_cycle PASSED [ 80%]
+tests/unit/artifacts/test_dependency_graph.py::TestValidatorRejectsCycles::test_validator_rejects_long_cycle PASSED [ 90%]
+tests/unit/artifacts/test_dependency_graph.py::TestMissingDependency::test_missing_dependency_raises PASSED [100%]
+
+============================== 10 passed in 0.09s ==============================

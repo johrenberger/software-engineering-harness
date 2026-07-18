@@ -21,29 +21,32 @@ from seharness.artifacts.traceability import (
     Plan,
     PlanValidationError,
     PlanValidator,
+    RequirementTrace,
     Task,
     find_dependency_cycles,
 )
+
+
+def _trace(requirement_id: str, scenario_ids: tuple[str, ...] = ()) -> RequirementTrace:
+    return RequirementTrace(requirement_id=requirement_id, scenario_ids=scenario_ids)
 
 
 def _task(
     task_id: str,
     *,
     depends_on: tuple[str, ...] = (),
-    requirement_ids: tuple[str, ...] = ("FR-1",),
-    scenario_ids: tuple[str, ...] = ("SCN-1",),
+    requirement_traces: tuple[RequirementTrace, ...] = (_trace("FR-1", ("SCN-1",)),),
     allowed_paths: tuple[str, ...] = ("src/",),
     validation_commands: tuple[str, ...] = ("pytest",),
 ) -> Task:
     return Task(
         task_id=task_id,
         objective="do something",
-        requirement_ids=requirement_ids,
-        scenario_ids=scenario_ids,
+        requirement_traces=requirement_traces,
         allowed_paths=allowed_paths,
         depends_on=depends_on,
         validation_commands=validation_commands,
-)
+    )
 
 
 class TestAcyclicGraph:
@@ -59,7 +62,6 @@ class TestAcyclicGraph:
         assert find_dependency_cycles(plan) == []
 
     def test_no_cycles_with_diamond_dependency(self) -> None:
-        """Diamond: T-1 → T-2, T-1 → T-3, T-2 → T-4, T-3 → T-4. No cycle."""
         plan = Plan(
             plan_id="P-1",
             tasks=(
@@ -162,7 +164,6 @@ class TestValidatorRejectsCycles:
 
 class TestMissingDependency:
     def test_missing_dependency_raises(self) -> None:
-        """A task that depends on a non-existent task_id is invalid."""
         plan = Plan(
             plan_id="P-1",
             tasks=(_task("T-1", depends_on=("T-missing",)),),

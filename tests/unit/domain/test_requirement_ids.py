@@ -17,74 +17,83 @@ plans / traceability).
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from seharness.domain.requirements import (
     FunctionalRequirementId,
     NonFunctionalRequirementId,
-    ScenarioId,
     RequirementKind,
+    ScenarioId,
+    requirement_kind,
 )
+
+
+class _FrHolder(BaseModel):
+    model_config = {"extra": "forbid"}
+    rid: FunctionalRequirementId
+
+
+class _NfrHolder(BaseModel):
+    model_config = {"extra": "forbid"}
+    rid: NonFunctionalRequirementId
+
+
+class _ScnHolder(BaseModel):
+    model_config = {"extra": "forbid"}
+    sid: ScenarioId
 
 
 class TestFunctionalRequirementIdFormat:
     def test_accepts_fr_prefix(self) -> None:
-        rid = FunctionalRequirementId("FR-1")
-        assert str(rid) == "FR-1"
+        assert _FrHolder(rid="FR-1").rid == "FR-1"
 
     def test_accepts_fr_multi_digit(self) -> None:
-        rid = FunctionalRequirementId("FR-42")
-        assert str(rid) == "FR-42"
+        assert _FrHolder(rid="FR-42").rid == "FR-42"
 
     def test_accepts_fr_three_digit(self) -> None:
-        rid = FunctionalRequirementId("FR-123")
-        assert str(rid) == "FR-123"
+        assert _FrHolder(rid="FR-123").rid == "FR-123"
 
     def test_rejects_nfr_prefix(self) -> None:
-        """Functional IDs must not accept NFR prefix."""
         with pytest.raises(ValidationError):
-            FunctionalRequirementId("NFR-1")
+            _FrHolder(rid="NFR-1")
 
     def test_rejects_scn_prefix(self) -> None:
         with pytest.raises(ValidationError):
-            FunctionalRequirementId("SCN-1")
+            _FrHolder(rid="SCN-1")
 
     def test_rejects_lowercase(self) -> None:
         with pytest.raises(ValidationError):
-            FunctionalRequirementId("fr-1")
+            _FrHolder(rid="fr-1")
 
     def test_rejects_missing_number(self) -> None:
         with pytest.raises(ValidationError):
-            FunctionalRequirementId("FR-")
+            _FrHolder(rid="FR-")
 
     def test_rejects_zero(self) -> None:
-        """Stable IDs are 1-based — zero is reserved for sentinel use."""
         with pytest.raises(ValidationError):
-            FunctionalRequirementId("FR-0")
+            _FrHolder(rid="FR-0")
 
     def test_rejects_negative(self) -> None:
         with pytest.raises(ValidationError):
-            FunctionalRequirementId("FR--1")
+            _FrHolder(rid="FR--1")
 
 
 class TestNonFunctionalRequirementIdFormat:
     def test_accepts_nfr_prefix(self) -> None:
-        rid = NonFunctionalRequirementId("NFR-1")
-        assert str(rid) == "NFR-1"
+        assert _NfrHolder(rid="NFR-1").rid == "NFR-1"
 
     def test_rejects_fr_prefix(self) -> None:
         with pytest.raises(ValidationError):
-            NonFunctionalRequirementId("FR-1")
+            _NfrHolder(rid="FR-1")
 
 
 class TestScenarioIdFormat:
     def test_accepts_scn_prefix(self) -> None:
-        sid = ScenarioId("SCN-1")
-        assert str(sid) == "SCN-1"
+        assert _ScnHolder(sid="SCN-1").sid == "SCN-1"
 
     def test_rejects_fr_prefix(self) -> None:
         with pytest.raises(ValidationError):
-            ScenarioId("FR-1")
+            _ScnHolder(sid="FR-1")
 
 
 class TestRequirementKind:
@@ -96,3 +105,16 @@ class TestRequirementKind:
 
     def test_scenario_kind_value(self) -> None:
         assert RequirementKind.SCENARIO.value == "scenario"
+
+    def test_requirement_kind_helper_for_fr(self) -> None:
+        assert requirement_kind("FR-1") == RequirementKind.FUNCTIONAL
+
+    def test_requirement_kind_helper_for_nfr(self) -> None:
+        assert requirement_kind("NFR-1") == RequirementKind.NON_FUNCTIONAL
+
+    def test_requirement_kind_helper_for_scn(self) -> None:
+        assert requirement_kind("SCN-1") == RequirementKind.SCENARIO
+
+    def test_requirement_kind_helper_rejects_unknown(self) -> None:
+        with pytest.raises(ValueError):
+            requirement_kind("XX-1")

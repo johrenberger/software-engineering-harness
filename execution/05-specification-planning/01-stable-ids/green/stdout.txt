@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 20 items
+
+tests/unit/domain/test_requirement_ids.py::TestFunctionalRequirementIdFormat::test_accepts_fr_prefix PASSED [  5%]
+tests/unit/domain/test_requirement_ids.py::TestFunctionalRequirementIdFormat::test_accepts_fr_multi_digit PASSED [ 10%]
+tests/unit/domain/test_requirement_ids.py::TestFunctionalRequirementIdFormat::test_accepts_fr_three_digit PASSED [ 15%]
+tests/unit/domain/test_requirement_ids.py::TestFunctionalRequirementIdFormat::test_rejects_nfr_prefix PASSED [ 20%]
+tests/unit/domain/test_requirement_ids.py::TestFunctionalRequirementIdFormat::test_rejects_scn_prefix PASSED [ 25%]
+tests/unit/domain/test_requirement_ids.py::TestFunctionalRequirementIdFormat::test_rejects_lowercase PASSED [ 30%]
+tests/unit/domain/test_requirement_ids.py::TestFunctionalRequirementIdFormat::test_rejects_missing_number PASSED [ 35%]
+tests/unit/domain/test_requirement_ids.py::TestFunctionalRequirementIdFormat::test_rejects_zero PASSED [ 40%]
+tests/unit/domain/test_requirement_ids.py::TestFunctionalRequirementIdFormat::test_rejects_negative PASSED [ 45%]
+tests/unit/domain/test_requirement_ids.py::TestNonFunctionalRequirementIdFormat::test_accepts_nfr_prefix PASSED [ 50%]
+tests/unit/domain/test_requirement_ids.py::TestNonFunctionalRequirementIdFormat::test_rejects_fr_prefix PASSED [ 55%]
+tests/unit/domain/test_requirement_ids.py::TestScenarioIdFormat::test_accepts_scn_prefix PASSED [ 60%]
+tests/unit/domain/test_requirement_ids.py::TestScenarioIdFormat::test_rejects_fr_prefix PASSED [ 65%]
+tests/unit/domain/test_requirement_ids.py::TestRequirementKind::test_fr_kind_value PASSED [ 70%]
+tests/unit/domain/test_requirement_ids.py::TestRequirementKind::test_nfr_kind_value PASSED [ 75%]
+tests/unit/domain/test_requirement_ids.py::TestRequirementKind::test_scenario_kind_value PASSED [ 80%]
+tests/unit/domain/test_requirement_ids.py::TestRequirementKind::test_requirement_kind_helper_for_fr PASSED [ 85%]
+tests/unit/domain/test_requirement_ids.py::TestRequirementKind::test_requirement_kind_helper_for_nfr PASSED [ 90%]
+tests/unit/domain/test_requirement_ids.py::TestRequirementKind::test_requirement_kind_helper_for_scn PASSED [ 95%]
+tests/unit/domain/test_requirement_ids.py::TestRequirementKind::test_requirement_kind_helper_rejects_unknown PASSED [100%]
+
+============================== 20 passed in 0.09s ==============================

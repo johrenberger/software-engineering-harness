@@ -1,0 +1,28 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 18 items
+
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestPlanShapeContract::test_rejects_extra_field PASSED [  5%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestPlanShapeContract::test_is_frozen PASSED [ 11%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestPlanShapeContract::test_validates_on_assignment PASSED [ 16%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestTaskShapeContract::test_rejects_extra_field PASSED [ 22%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestTaskShapeContract::test_is_frozen PASSED [ 27%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestTaskShapeContract::test_depends_on_defaults_to_empty_tuple PASSED [ 33%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestTaskShapeContract::test_depends_on_accepts_empty_tuple PASSED [ 38%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestTaskShapeContract::test_objective_rejects_empty_string PASSED [ 44%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestTaskShapeContract::test_task_id_rejects_empty_string PASSED [ 50%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestRequirementTraceShapeContract::test_rejects_extra_field PASSED [ 55%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestRequirementTraceShapeContract::test_is_frozen PASSED [ 61%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestTraceabilityReportShapeContract::test_rejects_extra_field PASSED [ 66%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestTraceabilityReportShapeContract::test_is_complete_default_rejects_none PASSED [ 72%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestTraceabilityReportShapeContract::test_all_collection_fields_default_to_empty PASSED [ 77%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestPlanValidationErrorShapeContract::test_rejects_extra_field PASSED [ 83%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestPlanValidationErrorShapeContract::test_reason_must_be_known_code PASSED [ 88%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestPlanValidationErrorShapeContract::test_task_ids_default_to_empty_tuple PASSED [ 94%]
+tests/unit/artifacts/test_traceability_mutation_killers.py::TestPlanValidationErrorShapeContract::test_plan_id_rejects_empty_string PASSED [100%]
+
+============================== 18 passed in 0.09s ==============================

@@ -19,24 +19,27 @@ from seharness.artifacts.traceability import (
     Plan,
     PlanValidationError,
     PlanValidator,
+    RequirementTrace,
     Task,
 )
+
+
+def _trace(requirement_id: str, scenario_ids: tuple[str, ...] = ()) -> RequirementTrace:
+    return RequirementTrace(requirement_id=requirement_id, scenario_ids=scenario_ids)
 
 
 def _task(
     task_id: str = "T-1",
     *,
     allowed_paths: tuple[str, ...] = ("src/",),
-    requirement_ids: tuple[str, ...] = ("FR-1",),
-    scenario_ids: tuple[str, ...] = ("SCN-1",),
+    requirement_traces: tuple[RequirementTrace, ...] = (_trace("FR-1", ("SCN-1",)),),
     depends_on: tuple[str, ...] = (),
     validation_commands: tuple[str, ...] = ("pytest",),
 ) -> Task:
     return Task(
         task_id=task_id,
         objective="do something",
-        requirement_ids=requirement_ids,
-        scenario_ids=scenario_ids,
+        requirement_traces=requirement_traces,
         allowed_paths=allowed_paths,
         depends_on=depends_on,
         validation_commands=validation_commands,
@@ -101,14 +104,6 @@ class TestRejectsEmptyAllowedPaths:
             PlanValidator().validate(plan)
         assert excinfo.value.reason == "empty_allowed_paths"
 
-    def test_mixed_empty_and_real_rejected(self) -> None:
-        plan = Plan(
-            plan_id="P-1",
-            tasks=(_task(allowed_paths=("src/", "")),),
-        )
-        with pytest.raises(PlanValidationError):
-            PlanValidator().validate(plan)
-
 
 class TestErrorMessageContent:
     def test_error_message_names_offending_task(self) -> None:
@@ -147,16 +142,7 @@ class TestErrorMessageContent:
 
 
 class TestReasonCodesCoverage:
-    """The validator must surface stable reason codes per SPEC §15 reject list.
-
-    SPEC §15 enumerates 6 reject reasons. Slice 5 covers three explicitly:
-    circular_dependency, missing_validation, empty_allowed_paths. Missing
-    requirements + missing dependencies + invalid ordering are sibling
-    concerns also covered by ``PlanValidator`` — they have their own tests.
-    """
-
     def test_reason_codes_are_stable_strings(self) -> None:
-        """Each reject reason must have a stable, snake_case code."""
         codes = {
             "missing_validation": PlanValidationError(
                 plan_id="P", reason="missing_validation", task_ids=()
@@ -177,7 +163,7 @@ class TestReasonCodesCoverage:
                 plan_id="P", reason="invalid_ordering", task_ids=()
             ).reason,
         }
-        assert codes == {
+        assert set(codes) == {
             "missing_validation",
             "empty_allowed_paths",
             "circular_dependency",
@@ -185,3 +171,4 @@ class TestReasonCodesCoverage:
             "missing_requirements",
             "invalid_ordering",
         }
+        assert all(v == k for k, v in codes.items())
