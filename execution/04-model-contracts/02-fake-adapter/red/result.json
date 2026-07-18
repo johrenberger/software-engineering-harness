@@ -1,0 +1,16 @@
+{
+  "phase": "red",
+  "behavior_id": "02-fake-adapter",
+  "test_file": "tests/unit/models/test_fake_adapter.py",
+  "tests": {
+    "total": 14,
+    "collected": 0,
+    "passed": 0,
+    "failed": 0,
+    "errors": 1,
+    "skipped": 0
+  },
+  "expected_failure_reason": "Collection error — missing public API (ProviderKind, ProviderName, RoutingRole, RepairOutcome, ModelAdapter, ModelRequest, ModelResponse, FakeModelAdapter, ModelRouter, StructuredOutputRepair, ModelError, ModelRepair, ModelUsage, get_adapter).",
+  "actual_failure_kind": "ImportError / ModuleNotFoundError",
+  "verdict": "RED — collection fails because no production module yet exposes the model layer public API."
+}

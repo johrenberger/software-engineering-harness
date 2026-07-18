@@ -1,0 +1,38 @@
+slice: 04-model-contracts
+branch: agent/04-model-contracts
+pr_number: null
+pr_url: null
+pr_state: null
+base: main
+status: in_progress
+phase: red
+behaviors:
+  - id: 01-model-contract
+    status: red
+    tests: 0
+  - id: 02-fake-adapter
+    status: red
+    tests: 0
+  - id: 03-router
+    status: red
+    tests: 0
+  - id: 04-output-repair
+    status: red
+    tests: 0
+  - id: 05-normalized-failures
+    status: red
+    tests: 0
+total_tests: 0
+final_gate:
+  ruff_format: pending
+  ruff_check: pending
+  mypy_strict: pending
+  bandit: pending
+  pip_audit: pending
+  pytest: pending
+  mutation: pending
+notes:
+  - "Slice 4 implements the provider-neutral ModelAdapter contract + FakeModelAdapter + ModelRouter + StructuredOutputRepair per SPEC.md §10."
+  - "User decisions for this slice: (B) real adapter boundaries ship with HTTP-shape stubs that fail closed; ProviderName/ProviderKind promoted to domain/enums.py StrEnums."
+  - "Out of scope: live MiniMax/Codex HTTP calls; production transport (slice 6/8). Slice 4 ships request builders + a no-network 'live' adapter that fails closed."
+  - "RED bullets per SPEC: identical provider-neutral request reaches all adapters, malformed output triggers one repair, timeout/provider failure normalized, fake adapter makes controlled source change."
