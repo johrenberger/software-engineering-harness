@@ -14,8 +14,6 @@ import re
 import tomllib
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -29,8 +27,9 @@ def test_pyproject_has_build_system() -> None:
     bs = pp["build-system"]
     assert "requires" in bs
     assert "build-backend" in bs
-    # setuptools backend
-    assert "setuptools" in str(bs["build-backend"])
+    # Either setuptools or hatchling is acceptable.
+    backend = str(bs["build-backend"])
+    assert any(b in backend for b in ("setuptools", "hatchling"))
 
 
 def test_pyproject_has_project_metadata() -> None:

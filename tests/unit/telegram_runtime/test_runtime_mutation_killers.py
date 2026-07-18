@@ -7,16 +7,16 @@ silently break.
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError, dataclass
-from typing import Any
+from dataclasses import FrozenInstanceError
 
 import pytest
 
 
-def test_bot_runtime_init_validates_token_type() -> None:
+def test_bot_runtime_init_validates_token_type(monkeypatch: pytest.MonkeyPatch) -> None:
     """`bot_token` must be a non-empty string."""
     from seharness.telegram_runtime.bot_runtime import TelegramBotRuntime
 
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     with pytest.raises((TypeError, ValueError)):
         TelegramBotRuntime(bot_token=None, service=object())  # type: ignore[arg-type]
     with pytest.raises((TypeError, ValueError)):

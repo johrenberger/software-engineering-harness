@@ -11,8 +11,6 @@ Bind is 127.0.0.1 only (no public exposure).
 
 from __future__ import annotations
 
-import json
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -54,9 +52,11 @@ def test_server_state_provider_returns_snapshot() -> None:
     )
     server = cls(state_provider=provider, port=8765)
     snapshot = server.snapshot()
-    assert snapshot.slice == "12"
-    assert snapshot.last_green_commit == "9cd4831"
-    assert snapshot.runs == ("run-001", "run-002")
+    assert snapshot.current_slice == "12"
+    assert snapshot.last_green_commit is not None
+    assert snapshot.last_green_commit.sha == "9cd4831"
+    assert snapshot.latest_run is not None
+    assert snapshot.latest_run.run_id == "run-001"
 
 
 def test_server_routes_have_expected_paths() -> None:

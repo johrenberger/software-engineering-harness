@@ -7,10 +7,7 @@ wraps each call in a try/except + bounded message formatting.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 from unittest.mock import MagicMock
-
-import pytest
 
 
 @dataclass

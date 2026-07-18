@@ -123,9 +123,9 @@ class TelegramBotTransport:
         self,
         *,
         bot_token: str,
-        service: "object",
+        service: object,
         bot: _BotLike | None = None,
-        authorizer: "object | None" = None,
+        authorizer: object | None = None,
     ) -> None:
         if not isinstance(bot_token, str) or not bot_token:
             raise ValueError("bot_token must be a non-empty string")

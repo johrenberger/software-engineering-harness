@@ -1,0 +1,18 @@
+# Slice 12/13 — controller service wiring.
+#
+# Consumed by `ApplicationServiceFactory` (slice 12).
+# Each slot accepts either "stub" (default, used in tests) or a fully
+# qualified Python path to a production implementation.
+
+ci_monitor: stub          # seharness.ci.monitor.CiMonitor (real impl)
+task_executor: stub       # controller FeatureExecutor (real impl)
+run_ledger: stub          # controller RunLedger (always in-process)
+
+# Optional: workspace + repository layout.
+workspace_root: ~/.openclaw
+repository_root: ./repos
+
+# CI poll budget (used by CiMonitor.run() when wired).
+ci_poll:
+  max_attempts: 10
+  poll_interval_seconds: 30

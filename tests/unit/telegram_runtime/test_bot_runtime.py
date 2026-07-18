@@ -11,8 +11,6 @@ the slice-13 SPEC §23 Part A bullets 1-2.
 
 from __future__ import annotations
 
-import os
-import signal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -69,9 +67,7 @@ def test_runtime_does_not_start_polling_on_construction(
 ) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:abcdefghijklmnopqrstuvwx")
     cls = _import_runtime()
-    with patch(
-        "seharness.telegram_runtime.bot_runtime._build_application"
-    ) as build:
+    with patch("seharness.telegram_runtime.bot_runtime._build_application") as build:
         app = MagicMock()
         build.return_value = app
         runtime = cls(service=_StubApplicationService())
@@ -82,9 +78,7 @@ def test_runtime_does_not_start_polling_on_construction(
 def test_runtime_run_starts_polling(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:abcdefghijklmnopqrstuvwx")
     cls = _import_runtime()
-    with patch(
-        "seharness.telegram_runtime.bot_runtime._build_application"
-    ) as build:
+    with patch("seharness.telegram_runtime.bot_runtime._build_application") as build:
         app = MagicMock()
         build.return_value = app
         runtime = cls(service=_StubApplicationService())
@@ -96,9 +90,7 @@ def test_runtime_run_handles_sigint(monkeypatch: pytest.MonkeyPatch) -> None:
     """SIGINT during polling must trigger graceful shutdown, not crash."""
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:abcdefghijklmnopqrstuvwx")
     cls = _import_runtime()
-    with patch(
-        "seharness.telegram_runtime.bot_runtime._build_application"
-    ) as build:
+    with patch("seharness.telegram_runtime.bot_runtime._build_application") as build:
         app = MagicMock()
         # Simulate KeyboardInterrupt raised by run_polling on SIGINT.
         app.run_polling.side_effect = KeyboardInterrupt()
@@ -128,6 +120,8 @@ def test_runtime_token_redacted_in_repr(monkeypatch: pytest.MonkeyPatch) -> None
     runtime = cls(service=_StubApplicationService())
     rendered = repr(runtime)
     assert "123456:abcdef" not in rendered
+    # Also via the safe repr helper.
+    assert "***" in runtime._safe_token_repr
 
 
 def test_runtime_does_not_start_polling_when_not_run(
@@ -135,9 +129,7 @@ def test_runtime_does_not_start_polling_when_not_run(
 ) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:abcdefghijklmnopqrstuvwx")
     cls = _import_runtime()
-    with patch(
-        "seharness.telegram_runtime.bot_runtime._build_application"
-    ) as build:
+    with patch("seharness.telegram_runtime.bot_runtime._build_application") as build:
         app = MagicMock()
         build.return_value = app
         runtime = cls(service=_StubApplicationService())
