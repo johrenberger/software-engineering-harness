@@ -70,7 +70,7 @@ def test_runtime_does_not_start_polling_on_construction(
     with patch("seharness.telegram_runtime.bot_runtime._build_application") as build:
         app = MagicMock()
         build.return_value = app
-        runtime = cls(service=_StubApplicationService())
+        cls(service=_StubApplicationService())
     # Construction must NOT have started polling.
     assert not app.run_polling.called
 

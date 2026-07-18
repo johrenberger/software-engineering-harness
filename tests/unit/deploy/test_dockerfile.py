@@ -87,10 +87,9 @@ def test_compose_dashboard_bind_is_loopback_only() -> None:
     )
     assert block_match is not None, "harness-dashboard service not found"
     block = block_match.group(0)
+    got_port = block.split("ports:")[1].split("\n")[0] if "ports:" in block else "no ports"
     assert "127.0.0.1:8765:8765" in block, (
-        "dashboard must bind to 127.0.0.1 only; got: %s" % block.split("ports:")[1].split("\n")[0]
-        if "ports:" in block
-        else "no ports"
+        f"dashboard must bind to 127.0.0.1 only; got: {got_port}"
     )
 
 

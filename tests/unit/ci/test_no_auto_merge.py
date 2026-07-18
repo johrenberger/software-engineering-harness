@@ -127,9 +127,13 @@ def test_ci_module_source_does_not_call_gh_pr_merge() -> None:
                         raise AssertionError(
                             f"{mod.__name__} contains forbidden call to '{dotted}'"
                         )
-            if isinstance(node, ast.Attribute):
-                if node.attr in ("merge_pull_request", "auto_merge", "merge_pr", "gh_merge"):
-                    raise AssertionError(
+            if isinstance(node, ast.Attribute) and node.attr in (
+                "merge_pull_request",
+                "auto_merge",
+                "merge_pr",
+                "gh_merge",
+            ):
+                raise AssertionError(
                         f"{mod.__name__} references forbidden attribute '.{node.attr}'"
                     )
 

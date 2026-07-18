@@ -79,7 +79,7 @@ class DashboardServer:
 
     def snapshot(self) -> DashboardSnapshot:
         """Render the current snapshot via the state provider."""
-        from seharness.controller.run_ledger import RunRecord, RunState
+        from seharness.controller.run_ledger import RunRecord, RunState  # noqa: PLC0415
 
         state = self._state_provider()
         if isinstance(state, DashboardState):
@@ -140,7 +140,7 @@ class DashboardServer:
 
 def cli() -> int:
     """Console-script entry point for the dashboard server."""
-    from seharness.controller.config import ApplicationServiceFactory
+    from seharness.controller.config import ApplicationServiceFactory  # noqa: PLC0415
 
     factory = ApplicationServiceFactory.default()
     service = factory.build()

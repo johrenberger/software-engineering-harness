@@ -97,7 +97,7 @@ def test_server_default_port_is_8765() -> None:
 
 
 def test_server_state_is_frozen_dataclass() -> None:
-    cls, state_cls = _import_server()
+    _cls, state_cls = _import_server()
     state = state_cls(
         slice="12",
         last_green_commit="9cd4831",

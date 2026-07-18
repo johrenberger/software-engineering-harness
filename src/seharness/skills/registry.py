@@ -51,10 +51,10 @@ def _parse_frontmatter(text: str) -> dict[str, str]:
     block = m.group(1)
     out: dict[str, str] = {}
     for line in block.splitlines():
-        line = line.rstrip()
-        if not line or line.startswith("#") or ":" not in line:
+        line_stripped = line.rstrip()
+        if not line_stripped or line_stripped.startswith("#") or ":" not in line_stripped:
             continue
-        key, _, value = line.partition(":")
+        key, _, value = line_stripped.partition(":")
         out[key.strip()] = value.strip().strip('"').strip("'")
     return out
 

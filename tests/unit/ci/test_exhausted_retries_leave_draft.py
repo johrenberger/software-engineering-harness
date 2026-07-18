@@ -110,7 +110,7 @@ def test_exhausted_budget_returns_exhausted_outcome() -> None:
     """PollPolicy with max_attempts=2, then a pending check on attempt 2
     → STILL_PENDING on attempt 1, EXHAUSTED on attempt 2."""
     policy = PollPolicy(interval_s=0.01, max_attempts=2, max_total_s=10.0)
-    monitor = StubCiMonitor(policy=policy, view_factory=lambda: _pending_view())
+    monitor = StubCiMonitor(policy=policy, view_factory=lambda: _pending_view())  # noqa: PLW0108
     result = monitor.run(pr_number="42", branch="ai/feature/test-slug")
     assert isinstance(result, PollResult)
     assert result.outcome == PollOutcome.EXHAUSTED
@@ -120,7 +120,7 @@ def test_exhausted_budget_returns_exhausted_outcome() -> None:
 def test_exhausted_total_time_returns_exhausted_outcome() -> None:
     """max_total_s=0.01 forces exhaustion regardless of attempts."""
     policy = PollPolicy(interval_s=0.01, max_attempts=100, max_total_s=0.01)
-    monitor = StubCiMonitor(policy=policy, view_factory=lambda: _pending_view())
+    monitor = StubCiMonitor(policy=policy, view_factory=lambda: _pending_view())  # noqa: PLW0108
     result = monitor.run(pr_number="42", branch="ai/feature/test-slug")
     assert result.outcome == PollOutcome.EXHAUSTED
 
@@ -128,7 +128,7 @@ def test_exhausted_total_time_returns_exhausted_outcome() -> None:
 def test_exhausted_result_leaves_pr_as_draft() -> None:
     """After exhaustion, is_ready must remain False (no transition)."""
     policy = PollPolicy(interval_s=0.01, max_attempts=1, max_total_s=10.0)
-    monitor = StubCiMonitor(policy=policy, view_factory=lambda: _pending_view())
+    monitor = StubCiMonitor(policy=policy, view_factory=lambda: _pending_view())  # noqa: PLW0108
     result = monitor.run(pr_number="42", branch="ai/feature/test-slug")
     assert result.outcome == PollOutcome.EXHAUSTED
     # StubCiMonitor MUST NOT auto-mark ready
@@ -161,7 +161,7 @@ def test_poll_returns_ready_when_all_green_first_attempt() -> None:
 def test_poll_returns_still_pending_under_budget() -> None:
     """If check is pending and budget remains, outcome = STILL_PENDING."""
     policy = PollPolicy(interval_s=0.01, max_attempts=10, max_total_s=10.0)
-    monitor = StubCiMonitor(policy=policy, view_factory=lambda: _pending_view())
+    monitor = StubCiMonitor(policy=policy, view_factory=lambda: _pending_view())  # noqa: PLW0108
     result = monitor.run(pr_number="42", branch="ai/feature/test-slug", stop_early=3)
     assert result.outcome == PollOutcome.STILL_PENDING
     assert result.attempts_made == 3

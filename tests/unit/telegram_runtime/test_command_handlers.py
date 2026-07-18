@@ -98,7 +98,7 @@ def test_dispatcher_dispatches_resume_with_run_id() -> None:
     svc.resume.return_value = "resumed run-001"
     dispatcher = cls(service=svc)
     update = _StubUpdate(chat_id=42, text="/resume run-001")
-    reply = dispatcher.dispatch(update)
+    dispatcher.dispatch(update)
     svc.resume.assert_called_once_with("run-001")
 
 
@@ -108,7 +108,7 @@ def test_dispatcher_dispatches_cancel_with_run_id() -> None:
     svc.cancel.return_value = "cancelled run-001"
     dispatcher = cls(service=svc)
     update = _StubUpdate(chat_id=42, text="/cancel run-001")
-    reply = dispatcher.dispatch(update)
+    dispatcher.dispatch(update)
     svc.cancel.assert_called_once_with("run-001")
 
 

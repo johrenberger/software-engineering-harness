@@ -27,7 +27,7 @@ class CommandDispatcher:
 
     service: Any
 
-    def dispatch(self, update: _StubUpdate) -> str:
+    def dispatch(self, update: _StubUpdate) -> str:  # noqa: PLR0911
         """Route the update and return the reply text."""
         text = (update.text or "").strip()
         if not text.startswith("/"):

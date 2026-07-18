@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
     from seharness.telegram_runtime.command_handlers import CommandDispatcher
 
+
+
 _LOG = logging.getLogger(__name__)
 
 _TELEGRAM_MAX_REPLY = 4096
@@ -37,9 +39,9 @@ def _parse_chat_ids(raw: str | None) -> tuple[int, ...]:
     return tuple(int(p) for p in parts)
 
 
-def _build_application(bot_token: str) -> "object":
+def _build_application(bot_token: str) -> object:
     """Build a python-telegram-bot Application from a bot token."""
-    from telegram.ext import Application  # noqa: F401
+    from telegram.ext import Application  # noqa: PLC0415
 
     app = Application.builder().token(bot_token).build()
     return app
@@ -91,16 +93,15 @@ class TelegramBotRuntime:
                 _parse_chat_ids(os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS")),
             )
 
-    def install_handlers(self) -> "object":
+    def install_handlers(self) -> object:
         """Install command handlers on the underlying python-telegram-bot
         application. Returns the Application instance.
         """
-        from telegram.ext import (
-            Application,
+        from telegram.ext import (  # noqa: PLC0415
             CommandHandler,
         )
 
-        from seharness.telegram_runtime.command_handlers import (
+        from seharness.telegram_runtime.command_handlers import (  # noqa: PLC0415
             CommandDispatcher,
         )
 
@@ -136,7 +137,7 @@ class TelegramBotRuntime:
             return 0
 
     def __repr__(self) -> str:
-        from seharness.telegram.auth import Redactor
+        from seharness.telegram.auth import Redactor  # noqa: PLC0415
 
         return (
             f"TelegramBotRuntime(bot_token={Redactor().redact(self.bot_token)!r}, "
@@ -154,7 +155,7 @@ class TelegramBotRuntime:
 
 
 def _make_ptb_handler(
-    dispatcher: "CommandDispatcher",
+    dispatcher: CommandDispatcher,
 ) -> Callable[..., object]:
     """Adapt a CommandDispatcher to python-telegram-bot's handler signature."""
 
@@ -162,7 +163,7 @@ def _make_ptb_handler(
         chat = update.effective_chat
         text = update.message.text if update.message else ""
         chat_id = int(chat.id) if chat is not None else 0
-        from seharness.telegram_runtime.command_handlers import (
+        from seharness.telegram_runtime.command_handlers import (  # noqa: PLC0415
             _StubUpdate,
         )
 
@@ -173,7 +174,7 @@ def _make_ptb_handler(
 
 def cli() -> int:
     """Console-script entry point for the Telegram bot."""
-    from seharness.controller.config import ApplicationServiceFactory
+    from seharness.controller.config import ApplicationServiceFactory  # noqa: PLC0415
 
     factory = ApplicationServiceFactory.default()
     service = factory.build()

@@ -82,7 +82,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["PLR2004", "S101", "ARG", "FBT"]
+"tests/**/*.py" = ["PLR2004", "S101", "ARG", "FBT", "PLC0415", "RUF100"]
 "src/seharness/cli.py" = ["B008"]
 
 [tool.mypy]

@@ -147,7 +147,7 @@ def test_remediation_packet_is_frozen() -> None:
     from seharness.validation.remediation import BoundedEvidence
 
     bs = BoundedEvidence(
-        failure=None, relevant_files=tuple(), previous_green=None, allowed_paths=tuple()
+        failure=None, relevant_files=(), previous_green=None, allowed_paths=()
     )
     pkt = RemediationPacket(
         check_name="ci/build",
