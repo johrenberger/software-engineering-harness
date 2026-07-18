@@ -1,0 +1,11 @@
+{
+  "behavior": "01-fresh-context",
+  "test_file": "tests/unit/review/test_review_fresh_context.py",
+  "phase": "red",
+  "status": "failing-collection",
+  "error_count": 3,
+  "command": "pytest tests/unit/review/test_review_fresh_context.py --no-cov",
+  "exit_code": 2,
+  "stdout_summary": "===================== no tests collected, 1 error in 0.12s =====================",
+  "recorded_at": "2026-07-18T20:36:08.960410+00:00"
+}

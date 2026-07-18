@@ -1,0 +1,11 @@
+{
+  "behavior": "04-coverage-blocks-approval",
+  "test_file": "tests/unit/review/test_coverage_blocks_approval.py",
+  "phase": "red",
+  "status": "failing-collection",
+  "error_count": 3,
+  "command": "pytest tests/unit/review/test_coverage_blocks_approval.py --no-cov",
+  "exit_code": 2,
+  "stdout_summary": "===================== no tests collected, 1 error in 0.14s =====================",
+  "recorded_at": "2026-07-18T20:36:10.335565+00:00"
+}
