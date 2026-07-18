@@ -21,8 +21,8 @@ without real subprocess calls.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import pytest
 
@@ -71,12 +71,12 @@ def _stub_runner(red_dir: Path, green_dir: Path) -> Callable[[Path, Path], None]
 @pytest.fixture
 def fake_plan() -> object:
     """Build a real slice-5 ``Plan`` with one task."""
-    from seharness.artifacts.traceability import (
+    from seharness.artifacts.traceability import (  # noqa: PLC0415
         Plan,
         RequirementTrace,
         Task,
     )
-    from seharness.domain.requirements import (
+    from seharness.domain.requirements import (  # noqa: PLC0415
         FunctionalRequirementId,
         ScenarioId,
     )
@@ -86,9 +86,8 @@ def fake_plan() -> object:
         tasks=(
             Task(
                 task_id="T-1",
-                summary="Add foo()",
+                objective="Add foo()",
                 allowed_paths=("src/seharness/",),
-                prohibited_paths=(),
                 validation_commands=("pytest tests/unit/foo.py --no-cov -q",),
                 requirement_traces=(
                     RequirementTrace(
@@ -106,7 +105,7 @@ class TestTaskExecutionService:
     """Service boundary: takes plan + runner, returns TaskResult."""
 
     def test_execute_task_returns_task_result(self, tmp_path: Path, fake_plan: object) -> None:
-        from seharness.execution.service import TaskExecutionService, TaskResult
+        from seharness.execution.service import TaskExecutionService, TaskResult  # noqa: PLC0415
 
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -132,7 +131,7 @@ class TestTaskExecutionService:
     def test_execute_task_persists_task_result_json(
         self, tmp_path: Path, fake_plan: object
     ) -> None:
-        from seharness.execution.service import TaskExecutionService
+        from seharness.execution.service import TaskExecutionService  # noqa: PLC0415
 
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -160,9 +159,9 @@ class TestTaskExecutionService:
     def test_execute_task_rejects_when_evidence_missing(
         self, tmp_path: Path, fake_plan: object
     ) -> None:
-        from seharness.execution.service import (
-            TaskExecutionService,
+        from seharness.execution.service import (  # noqa: PLC0415
             TaskEvidenceError,
+            TaskExecutionService,
         )
 
         repo = tmp_path / "repo"
@@ -184,10 +183,11 @@ class TestTaskExecutionService:
                 runner=noop_runner,
             )
 
-    def test_execute_task_unknown_task_id_rejected(
-        self, tmp_path: Path, fake_plan: object
-    ) -> None:
-        from seharness.execution.service import TaskExecutionService, TaskNotFoundError
+    def test_execute_task_unknown_task_id_rejected(self, tmp_path: Path, fake_plan: object) -> None:
+        from seharness.execution.service import (  # noqa: PLC0415
+            TaskExecutionService,
+            TaskNotFoundError,
+        )
 
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -209,7 +209,7 @@ class TestTaskResultShape:
     """TaskResult exposes the documented fields."""
 
     def test_task_result_has_documented_fields(self, tmp_path: Path) -> None:
-        from seharness.execution.service import TaskResult
+        from seharness.execution.service import TaskResult  # noqa: PLC0415
 
         r = TaskResult(
             task_id="T-1",

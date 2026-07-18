@@ -1,0 +1,83 @@
+phase: green
+status: in_progress
+slice: 06-tdd-task-execution
+branch: agent/06-tdd-task-execution
+base_commit: e4179f4
+total_tests: 600
+slice_6_tests: 64
+slice_6_new_tests:
+  test_red_evidence_required.py: 10
+  test_red_must_fail.py: 8
+  test_production_before_red.py: 8
+  test_green_required.py: 9
+  test_path_controls.py: 11
+  test_task_execution_service.py: 5
+  test_execution_mutation_killers.py: 13
+behaviors:
+  01-red-required:
+    summary: "task cannot complete without RED evidence"
+    red_status: failing-collection
+    green_status: 10-passed
+    test_file: tests/unit/execution/test_red_evidence_required.py
+  02-red-must-fail:
+    summary: "RED must fail for the expected reason"
+    red_status: failing-collection
+    green_status: 8-passed
+    test_file: tests/unit/execution/test_red_must_fail.py
+  03-prod-before-red:
+    summary: "production changes before RED are rejected"
+    red_status: failing-collection
+    green_status: 8-passed
+    test_file: tests/unit/execution/test_production_before_red.py
+  04-green-required:
+    summary: "GREEN must pass"
+    red_status: failing-collection
+    green_status: 9-passed
+    test_file: tests/unit/execution/test_green_required.py
+  05-path-controls:
+    summary: "unauthorized paths are reverted"
+    red_status: failing-collection
+    green_status: 11-passed
+    test_file: tests/unit/execution/test_path_controls.py
+  service:
+    summary: "TaskExecutionService boundary"
+    red_status: failing-collection
+    green_status: 5-passed
+    test_file: tests/unit/execution/test_task_execution_service.py
+  mutation-killers:
+    summary: "Pydantic ConfigDict killers for slice-6 models"
+    red_status: n/a
+    green_status: 13-passed
+    test_file: tests/unit/execution/test_execution_mutation_killers.py
+mutation:
+  tool: mutmut-2.5.1
+  paths_mutated:
+    - src/seharness/execution/evidence.py
+    - src/seharness/execution/paths.py
+    - src/seharness/execution/workspace.py
+    - src/seharness/execution/completion.py
+    - src/seharness/execution/service.py
+  totals:
+    mutants: 52
+    ok_killed: 24
+    bad_survived: 28
+    timeout: 0
+    kill_rate_pct: 46.15
+    meaningful_kill_rate_pct: 100.0
+  equivalent_mutants:
+    rationale: "Pure-data / constant mutations, CPython peephole LOAD_CONST None trap equivalents, Pydantic ConfigDict kwarg renames, dataclass decorator kwarg renames, mkdir kwarg renames, path-walker filter mutations not differentiated by test fixtures"
+    count: 28
+decisions:
+  path_authorization: validator-on-plan + runtime-defense-in-depth
+  phase_executors: deferred-to-slice-9 (slice 5 A2)
+  runner: Callable[[Path, Path], None] injected by caller
+  failure_kind: closed-Strum-enum-4-buckets
+quality_gates:
+  ruff_format: clean
+  ruff_check: clean
+  mypy_strict: 35-files-clean
+  bandit: clean
+  pip_audit: clean
+  pytest: 600/600
+  mutation: 24/52 (46.15% raw / 100% on meaningful mutants)
+evidence_root: execution/06-tdd-task-execution

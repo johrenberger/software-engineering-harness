@@ -21,7 +21,6 @@ from pathlib import Path
 
 import pytest
 
-
 _RED_EXPECTED_FAIL = {
     "phase": "red",
     "exit_code": 1,
@@ -48,7 +47,10 @@ class TestRedMustFail:
     """Bullet 2: RED evidence must show the test failed."""
 
     def test_red_with_exit_code_zero_is_rejected(self, red_dir: Path) -> None:
-        from seharness.execution.completion import TaskCompletionValidator, CompletionRejection
+        from seharness.execution.completion import (  # noqa: PLC0415
+            CompletionRejection,
+            TaskCompletionValidator,
+        )
 
         # Mutate the result to show passing RED (exit_code=0).
         payload = json.loads((red_dir / "result.json").read_text())
@@ -60,7 +62,7 @@ class TestRedMustFail:
         assert "passed" in str(exc_info.value).lower() or "red" in str(exc_info.value).lower()
 
     def test_red_with_exit_code_one_accepted(self, red_dir: Path) -> None:
-        from seharness.execution.completion import TaskCompletionValidator
+        from seharness.execution.completion import TaskCompletionValidator  # noqa: PLC0415
 
         # No exception \u2014 exit_code=1 is expected.
         TaskCompletionValidator().assert_red_only_fails(red_dir)
@@ -70,7 +72,10 @@ class TestRedFailureKind:
     """Bullet 2: RED must fail for the *expected* reason, not unrelated."""
 
     def test_red_with_unrelated_failure_kind_rejected(self, red_dir: Path) -> None:
-        from seharness.execution.completion import TaskCompletionValidator, CompletionRejection
+        from seharness.execution.completion import (  # noqa: PLC0415
+            CompletionRejection,
+            TaskCompletionValidator,
+        )
 
         payload = json.loads((red_dir / "result.json").read_text())
         payload["failure_kind"] = "collection_error"
@@ -83,7 +88,7 @@ class TestRedFailureKind:
         assert "unrelated" in msg or "collection" in msg or "failure_kind" in msg
 
     def test_red_with_expected_failure_kind_accepted(self, red_dir: Path) -> None:
-        from seharness.execution.completion import TaskCompletionValidator
+        from seharness.execution.completion import TaskCompletionValidator  # noqa: PLC0415
 
         payload = json.loads((red_dir / "result.json").read_text())
         payload["failure_kind"] = "expected_failure"
@@ -95,7 +100,10 @@ class TestRedFailureKindEnum:
     """Failure kind is a closed enum; unknown kinds are rejected."""
 
     def test_unknown_failure_kind_is_rejected(self, red_dir: Path) -> None:
-        from seharness.execution.completion import TaskCompletionValidator, CompletionRejection
+        from seharness.execution.completion import (  # noqa: PLC0415
+            CompletionRejection,
+            TaskCompletionValidator,
+        )
 
         payload = json.loads((red_dir / "result.json").read_text())
         payload["failure_kind"] = "vibes"
@@ -105,7 +113,10 @@ class TestRedFailureKindEnum:
             TaskCompletionValidator().assert_red_only_fails(red_dir)
 
     def test_missing_failure_kind_is_rejected(self, red_dir: Path) -> None:
-        from seharness.execution.completion import TaskCompletionValidator, CompletionRejection
+        from seharness.execution.completion import (  # noqa: PLC0415
+            CompletionRejection,
+            TaskCompletionValidator,
+        )
 
         payload = json.loads((red_dir / "result.json").read_text())
         del payload["failure_kind"]
@@ -119,7 +130,7 @@ class TestFailureKindValues:
     """The closed FailureKind enum covers the documented buckets."""
 
     def test_failure_kind_enum_lists_documented_values(self) -> None:
-        from seharness.execution.evidence import FailureKind
+        from seharness.execution.evidence import FailureKind  # noqa: PLC0415
 
         names = {k.name for k in FailureKind}
         assert "EXPECTED_FAILURE" in names
@@ -128,7 +139,7 @@ class TestFailureKindValues:
         assert "INFRASTRUCTURE_ERROR" in names
 
     def test_failure_kind_values_are_stable_strings(self) -> None:
-        from seharness.execution.evidence import FailureKind
+        from seharness.execution.evidence import FailureKind  # noqa: PLC0415
 
         assert FailureKind.EXPECTED_FAILURE.value == "expected_failure"
         assert FailureKind.UNRELATED_FAILURE.value == "unrelated_failure"

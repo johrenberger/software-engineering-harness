@@ -1,0 +1,12 @@
+{
+  "behavior": "service",
+  "test_file": "tests/unit/execution/test_task_execution_service.py",
+  "summary": "slice-6 service tests",
+  "phase": "green",
+  "passed": 5,
+  "failed": 0,
+  "duration_s": 0.11,
+  "command": "pytest tests/unit/execution/test_task_execution_service.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T19:50:23.120613+00:00"
+}

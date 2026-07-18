@@ -1,0 +1,12 @@
+{
+  "behavior": "mutation-killers",
+  "test_file": "tests/unit/execution/test_execution_mutation_killers.py",
+  "summary": "slice-6 mutation-killers tests",
+  "phase": "green",
+  "passed": 13,
+  "failed": 0,
+  "duration_s": 0.11,
+  "command": "pytest tests/unit/execution/test_execution_mutation_killers.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T19:50:23.543987+00:00"
+}

@@ -1,0 +1,13 @@
+{
+  "behavior": "service",
+  "test_file": "tests/unit/execution/test_task_execution_service.py",
+  "summary": "RED state: collection error (modules did not exist)",
+  "phase": "red",
+  "passed": 0,
+  "failed": 0,
+  "exit_code": 2,
+  "duration_s": 0.0,
+  "command": "pytest tests/unit/execution/test_task_execution_service.py --no-cov -q",
+  "red_commit": "6e95a45",
+  "recorded_at": "2026-07-18T19:50:29.371215+00:00"
+}

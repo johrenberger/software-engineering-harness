@@ -27,9 +27,9 @@ class TestEvidenceResultKillers:
     """The Pydantic evidence result models must reject the obvious mutations."""
 
     def test_red_result_rejects_extra_field(self) -> None:
-        from seharness.execution.evidence import RedResult
+        from seharness.execution.evidence import RedResult  # noqa: PLC0415
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             RedResult(
                 phase="red",
                 exit_code=1,
@@ -41,7 +41,7 @@ class TestEvidenceResultKillers:
             )
 
     def test_red_result_is_frozen(self) -> None:
-        from seharness.execution.evidence import RedResult
+        from seharness.execution.evidence import RedResult  # noqa: PLC0415
 
         r = RedResult(
             phase="red",
@@ -51,11 +51,11 @@ class TestEvidenceResultKillers:
             command="pytest t",
             failure_kind="expected_failure",
         )
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             r.exit_code = 0  # type: ignore[misc]
 
     def test_red_result_default_failure_kind_omitted_is_expected(self) -> None:
-        from seharness.execution.evidence import RedResult
+        from seharness.execution.evidence import RedResult  # noqa: PLC0415
 
         # OMIT failure_kind \u2014 must NOT default to anything except None.
         r = RedResult(
@@ -68,7 +68,7 @@ class TestEvidenceResultKillers:
         assert r.failure_kind is None
 
     def test_green_result_default_covered_tests_omitted_is_empty_tuple(self) -> None:
-        from seharness.execution.evidence import GreenResult
+        from seharness.execution.evidence import GreenResult  # noqa: PLC0415
 
         g = GreenResult(
             phase="green",
@@ -80,9 +80,9 @@ class TestEvidenceResultKillers:
         assert tuple(g.covered_tests) == ()
 
     def test_green_result_rejects_negative_duration(self) -> None:
-        from seharness.execution.evidence import GreenResult
+        from seharness.execution.evidence import GreenResult  # noqa: PLC0415
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             GreenResult(
                 phase="green",
                 exit_code=0,
@@ -94,7 +94,7 @@ class TestEvidenceResultKillers:
     def test_green_result_accepts_zero_duration(self) -> None:
         """Boundary value: ``ge=0`` allows 0. Mutation ``ge=0\u2192ge=1``
         must be killed here."""
-        from seharness.execution.evidence import GreenResult
+        from seharness.execution.evidence import GreenResult  # noqa: PLC0415
 
         g = GreenResult(
             phase="green",
@@ -113,7 +113,7 @@ class TestWorkspaceSnapshotKillers:
     \u2014 must not change observable behaviour."""
 
     def test_snapshot_record_persists_size(self, tmp_path: Path) -> None:
-        from seharness.execution.workspace import WorkspaceSnapshot
+        from seharness.execution.workspace import WorkspaceSnapshot  # noqa: PLC0415
 
         snap = WorkspaceSnapshot(root=tmp_path, captured_at=None)
         f = tmp_path / "foo.py"
@@ -123,7 +123,7 @@ class TestWorkspaceSnapshotKillers:
         assert f.relative_to(tmp_path).as_posix() in snap.paths
 
     def test_snapshot_paths_is_iterable(self, tmp_path: Path) -> None:
-        from seharness.execution.workspace import WorkspaceSnapshot
+        from seharness.execution.workspace import WorkspaceSnapshot  # noqa: PLC0415
 
         snap = WorkspaceSnapshot(root=tmp_path, captured_at=None)
         f = tmp_path / "foo.py"
@@ -138,9 +138,9 @@ class TestPathAuthorizationRuleKillers:
     """``PathAuthorizationRule`` invariants under common mutations."""
 
     def test_rule_rejects_empty_allowed_paths(self) -> None:
-        from seharness.execution.paths import (
-            PathAuthorizationRule,
+        from seharness.execution.paths import (  # noqa: PLC0415
             AllowedPaths,
+            PathAuthorizationRule,
             ProhibitedPaths,
         )
 
@@ -154,9 +154,9 @@ class TestPathAuthorizationRuleKillers:
     def test_rule_overlap_allowed_prohibited_raises(self) -> None:
         """An allowed_paths entry cannot also be in prohibited_paths.
         Otherwise the rule's answer depends on which check runs first."""
-        from seharness.execution.paths import (
-            PathAuthorizationRule,
+        from seharness.execution.paths import (  # noqa: PLC0415
             AllowedPaths,
+            PathAuthorizationRule,
             ProhibitedPaths,
         )
 
@@ -168,9 +168,9 @@ class TestPathAuthorizationRuleKillers:
             )
 
     def test_rule_path_normalization_is_consistent(self) -> None:
-        from seharness.execution.paths import (
-            PathAuthorizationRule,
+        from seharness.execution.paths import (  # noqa: PLC0415
             AllowedPaths,
+            PathAuthorizationRule,
             ProhibitedPaths,
         )
 
@@ -187,7 +187,7 @@ class TestTaskResultKillers:
     """``TaskResult`` is frozen and validate_assignment."""
 
     def test_task_result_is_frozen(self, tmp_path: Path) -> None:
-        from seharness.execution.service import TaskResult
+        from seharness.execution.service import TaskResult  # noqa: PLC0415
 
         r = TaskResult(
             task_id="T-1",
@@ -197,13 +197,13 @@ class TestTaskResultKillers:
             green_exit_code=0,
             violations=(),
         )
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             r.completed = False  # type: ignore[misc]
 
     def test_task_result_rejects_extra_field(self, tmp_path: Path) -> None:
-        from seharness.execution.service import TaskResult
+        from seharness.execution.service import TaskResult  # noqa: PLC0415
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             TaskResult(
                 task_id="T-1",
                 completed=True,

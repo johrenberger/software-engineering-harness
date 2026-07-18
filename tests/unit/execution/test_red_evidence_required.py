@@ -27,22 +27,20 @@ must still preserve proof that the test failed before implementation."
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-
-
-pytestmark = pytest.mark.red
-
 
 _RED_RESULT_PAYLOAD = {
     "phase": "red",
     "exit_code": 1,
     "duration_s": 0.42,
-    "test_id": "tests/unit/execution/test_red_evidence_required.py::test_placeholder",
-    "command": "pytest tests/unit/execution/test_red_evidence_required.py -k test_placeholder --no-cov -q",
+    "test_id": ("tests/unit/execution/test_red_evidence_required.py::test_placeholder"),
+    "command": (
+        "pytest tests/unit/execution/test_red_evidence_required.py -k test_placeholder --no-cov -q"
+    ),
+    "failure_kind": "expected_failure",
+    "failure_reason": "AssertionError",
 }
 
 
@@ -52,7 +50,8 @@ def _write_red(task_dir: Path, *, missing: str | None = None) -> None:
     red.mkdir(parents=True, exist_ok=True)
     if missing != "command":
         (red / "command.txt").write_text(
-            "pytest tests/unit/execution/test_red_evidence_required.py -k test_placeholder --no-cov -q\n"
+            "pytest tests/unit/execution/test_red_evidence_required.py "
+            "-k test_placeholder --no-cov -q\n"
         )
     if missing != "stdout":
         (red / "stdout.txt").write_text("FAILED tests/unit/...\n")
@@ -66,8 +65,11 @@ class TestRedEvidenceRequired:
     """Bullet 1: no red/ directory means the task cannot be marked complete."""
 
     def test_red_directory_missing_rejects_completion(self, tmp_path: Path) -> None:
-        from seharness.execution.evidence import TaskEvidenceLayout
-        from seharness.execution.completion import TaskCompletionValidator, CompletionRejection
+        from seharness.execution.completion import (  # noqa: PLC0415
+            CompletionRejection,
+            TaskCompletionValidator,
+        )
+        from seharness.execution.evidence import TaskEvidenceLayout  # noqa: PLC0415
 
         layout = TaskEvidenceLayout(task_id="T-001", root=tmp_path)
         validator = TaskCompletionValidator()
@@ -77,8 +79,11 @@ class TestRedEvidenceRequired:
         assert "red" in str(exc_info.value).lower()
 
     def test_red_directory_with_only_one_file_rejects_completion(self, tmp_path: Path) -> None:
-        from seharness.execution.evidence import TaskEvidenceLayout
-        from seharness.execution.completion import TaskCompletionValidator, CompletionRejection
+        from seharness.execution.completion import (  # noqa: PLC0415
+            CompletionRejection,
+            TaskCompletionValidator,
+        )
+        from seharness.execution.evidence import TaskEvidenceLayout  # noqa: PLC0415
 
         layout = TaskEvidenceLayout(task_id="T-002", root=tmp_path)
         # Only command.txt present; stdout/stderr/result.json absent.
@@ -95,11 +100,12 @@ class TestRedEvidenceIncomplete:
     """Bullet 1: each of command/stdout/stderr/result is required."""
 
     @pytest.mark.parametrize("missing", ["command", "stdout", "stderr", "result"])
-    def test_each_missing_file_rejects_completion(
-        self, tmp_path: Path, missing: str
-    ) -> None:
-        from seharness.execution.evidence import TaskEvidenceLayout
-        from seharness.execution.completion import TaskCompletionValidator, CompletionRejection
+    def test_each_missing_file_rejects_completion(self, tmp_path: Path, missing: str) -> None:
+        from seharness.execution.completion import (  # noqa: PLC0415
+            CompletionRejection,
+            TaskCompletionValidator,
+        )
+        from seharness.execution.evidence import TaskEvidenceLayout  # noqa: PLC0415
 
         layout = TaskEvidenceLayout(task_id="T-003", root=tmp_path)
         _write_red(layout.task_dir, missing=missing)
@@ -112,8 +118,11 @@ class TestRedEvidenceMalformed:
     """Bullet 1: result.json must be valid JSON with required fields."""
 
     def test_result_json_invalid_json_rejects_completion(self, tmp_path: Path) -> None:
-        from seharness.execution.evidence import TaskEvidenceLayout
-        from seharness.execution.completion import TaskCompletionValidator, CompletionRejection
+        from seharness.execution.completion import (  # noqa: PLC0415
+            CompletionRejection,
+            TaskCompletionValidator,
+        )
+        from seharness.execution.evidence import TaskEvidenceLayout  # noqa: PLC0415
 
         layout = TaskEvidenceLayout(task_id="T-004", root=tmp_path)
         _write_red(layout.task_dir)
@@ -123,11 +132,12 @@ class TestRedEvidenceMalformed:
             TaskCompletionValidator().assert_complete(layout)
         assert "result" in str(exc_info.value).lower()
 
-    def test_result_json_missing_required_field_rejects_completion(
-        self, tmp_path: Path
-    ) -> None:
-        from seharness.execution.evidence import TaskEvidenceLayout
-        from seharness.execution.completion import TaskCompletionValidator, CompletionRejection
+    def test_result_json_missing_required_field_rejects_completion(self, tmp_path: Path) -> None:
+        from seharness.execution.completion import (  # noqa: PLC0415
+            CompletionRejection,
+            TaskCompletionValidator,
+        )
+        from seharness.execution.evidence import TaskEvidenceLayout  # noqa: PLC0415
 
         layout = TaskEvidenceLayout(task_id="T-005", root=tmp_path)
         _write_red(layout.task_dir)
@@ -143,8 +153,8 @@ class TestAcceptsCompleteRedEvidence:
     """Bullet 1 sanity: complete RED evidence passes the gate (then GREEN check fires)."""
 
     def test_complete_red_with_failing_exit_passes_red_gate(self, tmp_path: Path) -> None:
-        from seharness.execution.evidence import TaskEvidenceLayout
-        from seharness.execution.completion import TaskCompletionValidator
+        from seharness.execution.completion import TaskCompletionValidator  # noqa: PLC0415
+        from seharness.execution.evidence import TaskEvidenceLayout  # noqa: PLC0415
 
         layout = TaskEvidenceLayout(task_id="T-006", root=tmp_path)
         _write_red(layout.task_dir)
@@ -162,7 +172,4 @@ def test_placeholder() -> None:
     """Intentionally failing placeholder test, used to exercise the
     RED recording path during slice-6 development.
 
-    This is the kind of test that ships under execution/<task-id>/red
-    before the implementation lands.
     """
-    assert False, "RED placeholder must fail until the implementation lands"

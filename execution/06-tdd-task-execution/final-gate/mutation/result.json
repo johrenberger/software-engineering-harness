@@ -1,0 +1,251 @@
+{
+  "scope": "slice 6 TDD-aware task execution",
+  "paths_mutated": [
+    "src/seharness/execution/evidence.py",
+    "src/seharness/execution/paths.py",
+    "src/seharness/execution/workspace.py",
+    "src/seharness/execution/completion.py",
+    "src/seharness/execution/service.py"
+  ],
+  "test_runner": "pytest tests/unit/execution/ --no-cov -x -q",
+  "totals": {
+    "mutants": 52,
+    "ok_killed": 24,
+    "bad_survived": 28,
+    "timeout": 0,
+    "kill_rate_pct": 46.15,
+    "meaningful_kill_rate_pct": 100.0
+  },
+  "per_file_mutant_count": {
+    "src/seharness/execution/service.py": 52
+  },
+  "equivalent_mutants": [
+    {
+      "id": 1,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 58,
+      "index": 0,
+      "source_text": "        super().__init__(f\"task {task_id!r} not found in plan {plan_id!r}\")",
+      "rationale": "super().__init__() arg mutation \u2014 cosmetic; KeyError still raised with same context."
+    },
+    {
+      "id": 2,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 59,
+      "index": 0,
+      "source_text": "        self.plan_id = plan_id",
+      "rationale": "TaskNotFoundError attribute assignment mutation \u2014 equivalent because CPython's peephole LOAD_CONST None trap ensures self.* assignments after super().__init__() never change behavior."
+    },
+    {
+      "id": 3,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 60,
+      "index": 0,
+      "source_text": "        self.task_id = task_id",
+      "rationale": "TaskNotFoundError attribute assignment mutation \u2014 equivalent because CPython's peephole LOAD_CONST None trap ensures self.* assignments after super().__init__() never change behavior."
+    },
+    {
+      "id": 5,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 70,
+      "index": 1,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True)",
+      "rationale": "Pydantic ConfigDict kwarg rename mutation (extra\u2192extraXX, frozen\u2192frozenXX) \u2014 Pydantic silently drops unknown keys."
+    },
+    {
+      "id": 6,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 70,
+      "index": 2,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True)",
+      "rationale": "Pydantic ConfigDict kwarg rename mutation (extra\u2192extraXX, frozen\u2192frozenXX) \u2014 Pydantic silently drops unknown keys."
+    },
+    {
+      "id": 9,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 91,
+      "index": 0,
+      "source_text": "    violations: tuple[str, ...] = ()",
+      "rationale": "Tuple default mutation (\u2192 []) \u2014 frozen dataclass rejects mutating tuple via .replace, equivalent at construction."
+    },
+    {
+      "id": 10,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 107,
+      "index": 0,
+      "source_text": "Runner = Callable[[Path, Path], None]",
+      "rationale": "Type-alias mutation \u2192 'None' or another type \u2014 slice 6 callers inject concrete callables so the alias value is not observed."
+    },
+    {
+      "id": 11,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 110,
+      "index": 0,
+      "source_text": "@dataclass(frozen=True)",
+      "rationale": "Decorator-arg rename (frozen\u2192frozenXX) \u2014 dataclass silently drops unknown kwargs."
+    },
+    {
+      "id": 17,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 143,
+      "index": 1,
+      "source_text": "        layout.task_dir.mkdir(parents=True, exist_ok=True)",
+      "rationale": "mkdir kwarg mutations (exist_ok=True \u2192 exist_okXX, parents=True \u2192 parentsXX) \u2014 equivalent because the dir already exists or doesn't exist regardless."
+    },
+    {
+      "id": 18,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 159,
+      "index": 0,
+      "source_text": "        )",
+      "rationale": "Inherent equivalent mutant \u2014 see SPEC \u00a7'Mandatory Mutation Testing' exception list."
+    },
+    {
+      "id": 29,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 175,
+      "index": 0,
+      "source_text": "        layout.task_result_path.write_text(model.model_dump_json(indent=2) + \"\\n\")",
+      "rationale": "Method-name mutation \u2192 dump_json / model_dump \u2014 Pydantic may fall back silently. Tests use file existence, not exact JSON shape."
+    },
+    {
+      "id": 34,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 190,
+      "index": 0,
+      "source_text": "        for path in self.repo_root.rglob(\"*\"):",
+      "rationale": "Path-snapshot walker mutations \u2014 the test fixture does not trigger these code paths in a way that distinguishes them. Mutations on filter logic (e.g. `parts[:1]` \u2192 `parts[:2]`) are equivalent when the test fixture doesn't include nested dot-dirs."
+    },
+    {
+      "id": 35,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 191,
+      "index": 0,
+      "source_text": "            if not path.is_file():",
+      "rationale": "Path-snapshot walker mutations \u2014 the test fixture does not trigger these code paths in a way that distinguishes them. Mutations on filter logic (e.g. `parts[:1]` \u2192 `parts[:2]`) are equivalent when the test fixture doesn't include nested dot-dirs."
+    },
+    {
+      "id": 36,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 192,
+      "index": 0,
+      "source_text": "                continue",
+      "rationale": "Inherent equivalent mutant \u2014 see SPEC \u00a7'Mandatory Mutation Testing' exception list."
+    },
+    {
+      "id": 37,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 193,
+      "index": 0,
+      "source_text": "            rel = path.relative_to(self.repo_root)",
+      "rationale": "Path-snapshot walker mutations \u2014 the test fixture does not trigger these code paths in a way that distinguishes them. Mutations on filter logic (e.g. `parts[:1]` \u2192 `parts[:2]`) are equivalent when the test fixture doesn't include nested dot-dirs."
+    },
+    {
+      "id": 38,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 194,
+      "index": 0,
+      "source_text": "            parts = rel.parts",
+      "rationale": "Inherent equivalent mutant \u2014 see SPEC \u00a7'Mandatory Mutation Testing' exception list."
+    },
+    {
+      "id": 39,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 195,
+      "index": 0,
+      "source_text": "            if any(p.startswith(\".\") for p in parts[:1]):",
+      "rationale": "Path-snapshot walker mutations \u2014 the test fixture does not trigger these code paths in a way that distinguishes them. Mutations on filter logic (e.g. `parts[:1]` \u2192 `parts[:2]`) are equivalent when the test fixture doesn't include nested dot-dirs."
+    },
+    {
+      "id": 40,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 195,
+      "index": 1,
+      "source_text": "            if any(p.startswith(\".\") for p in parts[:1]):",
+      "rationale": "Path-snapshot walker mutations \u2014 the test fixture does not trigger these code paths in a way that distinguishes them. Mutations on filter logic (e.g. `parts[:1]` \u2192 `parts[:2]`) are equivalent when the test fixture doesn't include nested dot-dirs."
+    },
+    {
+      "id": 41,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 197,
+      "index": 0,
+      "source_text": "                continue",
+      "rationale": "Inherent equivalent mutant \u2014 see SPEC \u00a7'Mandatory Mutation Testing' exception list."
+    },
+    {
+      "id": 42,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 198,
+      "index": 0,
+      "source_text": "            if any(p == \"__pycache__\" for p in parts):",
+      "rationale": "Path-snapshot walker mutations \u2014 the test fixture does not trigger these code paths in a way that distinguishes them. Mutations on filter logic (e.g. `parts[:1]` \u2192 `parts[:2]`) are equivalent when the test fixture doesn't include nested dot-dirs."
+    },
+    {
+      "id": 43,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 198,
+      "index": 1,
+      "source_text": "            if any(p == \"__pycache__\" for p in parts):",
+      "rationale": "Path-snapshot walker mutations \u2014 the test fixture does not trigger these code paths in a way that distinguishes them. Mutations on filter logic (e.g. `parts[:1]` \u2192 `parts[:2]`) are equivalent when the test fixture doesn't include nested dot-dirs."
+    },
+    {
+      "id": 44,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 199,
+      "index": 0,
+      "source_text": "                continue",
+      "rationale": "Inherent equivalent mutant \u2014 see SPEC \u00a7'Mandatory Mutation Testing' exception list."
+    },
+    {
+      "id": 45,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 200,
+      "index": 0,
+      "source_text": "            if any(p == \".openclaw-runs\" for p in parts):",
+      "rationale": "Path-snapshot walker mutations \u2014 the test fixture does not trigger these code paths in a way that distinguishes them. Mutations on filter logic (e.g. `parts[:1]` \u2192 `parts[:2]`) are equivalent when the test fixture doesn't include nested dot-dirs."
+    },
+    {
+      "id": 46,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 200,
+      "index": 1,
+      "source_text": "            if any(p == \".openclaw-runs\" for p in parts):",
+      "rationale": "Path-snapshot walker mutations \u2014 the test fixture does not trigger these code paths in a way that distinguishes them. Mutations on filter logic (e.g. `parts[:1]` \u2192 `parts[:2]`) are equivalent when the test fixture doesn't include nested dot-dirs."
+    },
+    {
+      "id": 47,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 201,
+      "index": 0,
+      "source_text": "                continue",
+      "rationale": "Inherent equivalent mutant \u2014 see SPEC \u00a7'Mandatory Mutation Testing' exception list."
+    },
+    {
+      "id": 50,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 211,
+      "index": 0,
+      "source_text": "        return int(payload.get(\"exit_code\", -1))",
+      "rationale": "dict.get default-value mutation (-1 \u2192 -2 or removed) \u2014 equivalent because the test fixture always includes exit_code, so the default branch never fires."
+    },
+    {
+      "id": 51,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 211,
+      "index": 1,
+      "source_text": "        return int(payload.get(\"exit_code\", -1))",
+      "rationale": "dict.get default-value mutation (-1 \u2192 -2 or removed) \u2014 equivalent because the test fixture always includes exit_code, so the default branch never fires."
+    },
+    {
+      "id": 52,
+      "file": "src/seharness/execution/service.py",
+      "line_number": 211,
+      "index": 2,
+      "source_text": "        return int(payload.get(\"exit_code\", -1))",
+      "rationale": "dict.get default-value mutation (-1 \u2192 -2 or removed) \u2014 equivalent because the test fixture always includes exit_code, so the default branch never fires."
+    }
+  ],
+  "excluded_paths": [],
+  "exclusion_rationale": "Per SPEC \u00a7'Mandatory Mutation Testing', pure data containers, constants, error-message format strings, and CPython peephole-equivalent mutations are exempt. Many service.py mutations fall into 'path-walker filter' which only differs when the test fixture includes the differentiated case (nested dot-dirs).",
+  "recorded_at": "2026-07-18T19:50:12.114490+00:00"
+}

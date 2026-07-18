@@ -1,0 +1,13 @@
+{
+  "behavior": "05-path-controls",
+  "test_file": "tests/unit/execution/test_path_controls.py",
+  "summary": "RED state: collection error (modules did not exist)",
+  "phase": "red",
+  "passed": 0,
+  "failed": 0,
+  "exit_code": 2,
+  "duration_s": 0.0,
+  "command": "pytest tests/unit/execution/test_path_controls.py --no-cov -q",
+  "red_commit": "6e95a45",
+  "recorded_at": "2026-07-18T19:50:29.370883+00:00"
+}

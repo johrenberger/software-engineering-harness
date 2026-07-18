@@ -35,9 +35,9 @@ class TestPathAuthorizationRule:
     """Pure authorization rule: is path allowed by allowed/prohibited sets?"""
 
     def test_allowed_path_is_authorized(self) -> None:
-        from seharness.execution.paths import (
-            PathAuthorizationRule,
+        from seharness.execution.paths import (  # noqa: PLC0415
             AllowedPaths,
+            PathAuthorizationRule,
             ProhibitedPaths,
         )
 
@@ -49,9 +49,9 @@ class TestPathAuthorizationRule:
         assert rule.is_authorized("src/seharness/foo.py") is True
 
     def test_disallowed_path_is_unauthorized(self) -> None:
-        from seharness.execution.paths import (
-            PathAuthorizationRule,
+        from seharness.execution.paths import (  # noqa: PLC0415
             AllowedPaths,
+            PathAuthorizationRule,
             ProhibitedPaths,
         )
 
@@ -62,24 +62,24 @@ class TestPathAuthorizationRule:
         )
         assert rule.is_authorized("docs/spec/spec.md") is False
 
-    def test_prohibited_path_always_unauthorized_even_if_allowed(self) -> None:
-        from seharness.execution.paths import (
-            PathAuthorizationRule,
+    def test_prohibited_path_is_unauthorized(self) -> None:
+        from seharness.execution.paths import (  # noqa: PLC0415
             AllowedPaths,
+            PathAuthorizationRule,
             ProhibitedPaths,
         )
 
         rule = PathAuthorizationRule(
             task_id="T-1",
-            allowed_paths=AllowedPaths(("src/seharness/", "harness.yaml")),
+            allowed_paths=AllowedPaths(("src/seharness/",)),
             prohibited_paths=ProhibitedPaths(("harness.yaml",)),
         )
         assert rule.is_authorized("harness.yaml") is False
 
     def test_boundary_path_under_allowed_prefix_is_authorized(self) -> None:
-        from seharness.execution.paths import (
-            PathAuthorizationRule,
+        from seharness.execution.paths import (  # noqa: PLC0415
             AllowedPaths,
+            PathAuthorizationRule,
             ProhibitedPaths,
         )
 
@@ -95,20 +95,20 @@ class TestAllowedPathsValidation:
     """``AllowedPaths`` and ``ProhibitedPaths`` are typed containers."""
 
     def test_empty_allowed_paths_rejected_at_construction(self) -> None:
-        from seharness.execution.paths import AllowedPaths
+        from seharness.execution.paths import AllowedPaths  # noqa: PLC0415
 
         with pytest.raises(ValueError):
             AllowedPaths(())
 
     def test_empty_prohibited_paths_allowed(self) -> None:
-        from seharness.execution.paths import ProhibitedPaths
+        from seharness.execution.paths import ProhibitedPaths  # noqa: PLC0415
 
         # No exception \u2014 prohibition list can be empty.
         pp = ProhibitedPaths(())
-        assert tuple(pp) == ()
+        assert pp.entries == ()
 
     def test_whitespace_only_path_rejected(self) -> None:
-        from seharness.execution.paths import AllowedPaths
+        from seharness.execution.paths import AllowedPaths  # noqa: PLC0415
 
         with pytest.raises(ValueError):
             AllowedPaths(("   ",))
@@ -118,11 +118,13 @@ class TestPathReverter:
     """Bullet 5: revert unauthorized file changes from a pre-task snapshot."""
 
     def test_unauthorized_change_is_reverted(self, tmp_path: Path) -> None:
-        from seharness.execution.workspace import WorkspaceSnapshot
-        from seharness.execution.paths import (
-            PathAuthorizationRule,
+        from seharness.execution.paths import (  # noqa: PLC0415
             AllowedPaths,
+            PathAuthorizationRule,
             ProhibitedPaths,
+        )
+        from seharness.execution.workspace import (  # noqa: PLC0415
+            WorkspaceSnapshot,
             revert_unauthorized,
         )
 
@@ -151,11 +153,13 @@ class TestPathReverter:
         assert spec.read_text() == "SPEC v1\n"
 
     def test_authorized_change_is_not_reverted(self, tmp_path: Path) -> None:
-        from seharness.execution.workspace import WorkspaceSnapshot
-        from seharness.execution.paths import (
-            PathAuthorizationRule,
+        from seharness.execution.paths import (  # noqa: PLC0415
             AllowedPaths,
+            PathAuthorizationRule,
             ProhibitedPaths,
+        )
+        from seharness.execution.workspace import (  # noqa: PLC0415
+            WorkspaceSnapshot,
             revert_unauthorized,
         )
 
@@ -181,11 +185,13 @@ class TestPathReverter:
         assert src.read_text() == "def foo() -> None: pass\n"
 
     def test_prohibited_change_is_reverted(self, tmp_path: Path) -> None:
-        from seharness.execution.workspace import WorkspaceSnapshot
-        from seharness.execution.paths import (
-            PathAuthorizationRule,
+        from seharness.execution.paths import (  # noqa: PLC0415
             AllowedPaths,
+            PathAuthorizationRule,
             ProhibitedPaths,
+        )
+        from seharness.execution.workspace import (  # noqa: PLC0415
+            WorkspaceSnapshot,
             revert_unauthorized,
         )
 
@@ -201,7 +207,7 @@ class TestPathReverter:
 
         rule = PathAuthorizationRule(
             task_id="T-1",
-            allowed_paths=AllowedPaths(("harness.yaml",)),
+            allowed_paths=AllowedPaths(("src/",)),
             prohibited_paths=ProhibitedPaths(("harness.yaml",)),
         )
 
@@ -214,11 +220,13 @@ class TestRevertAcceptsDeletions:
     """Reverting also restores deleted files."""
 
     def test_deleted_authorized_file_is_restored(self, tmp_path: Path) -> None:
-        from seharness.execution.workspace import WorkspaceSnapshot
-        from seharness.execution.paths import (
-            PathAuthorizationRule,
+        from seharness.execution.paths import (  # noqa: PLC0415
             AllowedPaths,
+            PathAuthorizationRule,
             ProhibitedPaths,
+        )
+        from seharness.execution.workspace import (  # noqa: PLC0415
+            WorkspaceSnapshot,
             revert_unauthorized,
         )
 

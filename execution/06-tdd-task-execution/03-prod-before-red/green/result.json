@@ -1,0 +1,12 @@
+{
+  "behavior": "03-prod-before-red",
+  "test_file": "tests/unit/execution/test_production_before_red.py",
+  "summary": "production changes before RED are rejected",
+  "phase": "green",
+  "passed": 8,
+  "failed": 0,
+  "duration_s": 0.1,
+  "command": "pytest tests/unit/execution/test_production_before_red.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T19:50:21.805382+00:00"
+}
