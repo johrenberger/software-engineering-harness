@@ -38,7 +38,7 @@ jobs:
         run: mypy --strict src/seharness
 
       - name: bandit
-        run: bandit -q -r src/seharness
+        run: bandit --ini .bandit -q -r src/seharness
 
       - name: pip-audit
         run: pip-audit

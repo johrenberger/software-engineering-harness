@@ -1,0 +1,6 @@
+[bandit]
+# B101 (assert_used): intentional runtime invariant guards; stripped under
+# -O but the harness is never shipped optimised. Mutation-killers across
+# slices 10-13 rely on these assertions for contract enforcement.
+skips = B101
+exclude_dirs = tests,.venv,.git,build,dist

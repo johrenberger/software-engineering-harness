@@ -31,7 +31,10 @@ mutmut-report/
 .ruff_cache/
 
 # Bandit
-.bandit
+.bandit/
+# But keep the .bandit ini file (not the bandit baseline directory)
+!.bandit
+!.mutmut-cache
 
 # IDE / editor
 .vscode/

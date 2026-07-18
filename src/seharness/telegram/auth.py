@@ -51,7 +51,7 @@ class TelegramAuthorizer:
             raise UnauthorizedChatError(chat_id=chat_id)
 
 
-_REDACTION_TOKEN = "***REDACTED***"
+_REDACTION_TOKEN = "***REDACTED***"  # nosec B105 — sentinel redaction marker, not a credential
 
 
 class Redactor:
