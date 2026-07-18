@@ -1,0 +1,9 @@
+{
+  "phase": "red",
+  "behavior": "model routing validation",
+  "test_file": "tests/unit/config/test_routing_validation.py",
+  "note": "Behavior implemented in behavior 1 (Literal types). Added as regression-pinning test rather than strict RED->GREEN. Acceptable because the test exercises the same validation path already in place.",
+  "exit_code": 0,
+  "outcome": "passed on first run (5/5)",
+  "timestamp": "2026-07-18T15:54:08Z"
+}

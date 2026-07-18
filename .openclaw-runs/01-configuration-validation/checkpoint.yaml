@@ -1,0 +1,96 @@
+# Slice 1 checkpoint — Configuration Validation
+# Agent: MiniMax-M3 via OpenClaw v2026.5.28
+# Slice: 01-configuration-validation
+# Branch: agent/01-configuration-validation
+# Generated: 2026-07-18
+# Updated: 2026-07-18 (mutation-killers merged)
+
+slice: 01
+name: Configuration Validation
+branch: agent/01-configuration-validation
+base_branch: main
+status: green
+
+# ------------------------------------------------------------------
+# Behaviors (RED -> GREEN -> REFACTOR -> Mutation evidence)
+# ------------------------------------------------------------------
+behaviors:
+  - id: 01-001
+    name: typed-config-models
+    description: Pydantic v2 models with extra='forbid' for HarnessConfig and sections
+    outcome: green
+    cycles:
+      - { phase: red,    artifact: execution/01-002-config-models/red/result.json }
+      - { phase: green,  artifact: execution/01-002-config-models/green/result.json }
+  - id: 01-002
+    name: precedence-resolution
+    description: load_config() merges CLI > env > local > repo > defaults
+    outcome: green
+    cycles:
+      - { phase: red,    artifact: execution/01-004-precedence/red/result.json }
+      - { phase: green,  artifact: execution/01-004-precedence/green/result.json }
+  - id: 01-003
+    name: model-routing-validation
+    description: ModelsConfig.planning/implementation/remediation/review must be a known provider
+    outcome: green
+    cycles:
+      - { phase: red,    artifact: execution/01-005-model-routing-validation/red/result.json }
+      - { phase: green,  artifact: execution/01-005-model-routing-validation/green/result.json }
+  - id: 01-004
+    name: cli-validate-config
+    description: Typer subcommand `seharness validate-config` with text + JSON output
+    outcome: green
+    cycles:
+      - { phase: red,    artifact: execution/01-006-cli-validate-config/red/result.json }
+      - { phase: green,  artifact: execution/01-006-cli-validate-config/green/result.json }
+  - id: 01-005
+    name: example-configs
+    description: committed harness.yaml + gitignored examples/harness.local.yaml
+    outcome: green
+
+# ------------------------------------------------------------------
+# Final gate
+# ------------------------------------------------------------------
+gates:
+  ruff_format:   { status: pass, command: 'ruff format --check src/seharness/ tests/' }
+  ruff_check:    { status: pass, command: 'ruff check src/seharness/ tests/' }
+  mypy_strict:   { status: pass, command: 'mypy --strict src/seharness/' }
+  pytest:        { status: pass, total: 34, passed: 34, failed: 0 }
+  bandit:        { status: pass, command: 'bandit -r src/seharness/' }
+  pip_audit:     { status: pass, vulnerabilities: 0, command: 'pip-audit' }
+  mutation:      {
+    status: acceptable,
+    total_mutants: 80,
+    killed: 68,
+    survived: 12,
+    survivor_kind: 'trivial constant-default substitutions',
+    evidence: execution/01-final-gate/mutation/result.json,
+  }
+
+# ------------------------------------------------------------------
+# Stack confirmed
+# ------------------------------------------------------------------
+stack:
+  python: '3.13.5'
+  uv: '0.11.29'
+  pydantic: '2.x (extra="forbid")'
+  typer: '0.27'
+  ruff: latest 0.x
+  mypy: 1.x strict
+  bandit: 1.x
+  pip_audit: 2.x
+  mutmut: 2.x
+
+# ------------------------------------------------------------------
+# API surface introduced (for downstream slices)
+# ------------------------------------------------------------------
+exports:
+  package: seharness
+  modules:
+    - seharness.config        # Pydantic models
+    - seharness.config_loader # load_config()
+    - seharness.exceptions    # ConfigError, ConfigFileError, EnvCoercionError
+    - seharness.cli           # Typer app + main() + 'validate-config' subcommand
+  console_script:
+    bin: seharness
+    entry: seharness.cli:main

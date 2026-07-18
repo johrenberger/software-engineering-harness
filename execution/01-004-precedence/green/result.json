@@ -1,0 +1,11 @@
+{
+  "phase": "green",
+  "behavior": "precedence resolution (CLI > env > local > repo > defaults)",
+  "test_file": "tests/unit/config/test_precedence.py",
+  "exit_code": 0,
+  "outcome": "passed",
+  "tests_passed": 7,
+  "tests_failed": 0,
+  "mypy_strict": "clean",
+  "timestamp": "2026-07-18T15:53:35Z"
+}

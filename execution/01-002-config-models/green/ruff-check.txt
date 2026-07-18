@@ -1,0 +1,11 @@
+E501 Line too long (114 > 100)
+  --> src/seharness/config.py:65:101
+   |
+63 |     review: ProviderName = "minimax"
+64 |     fallback: dict[ProviderName, ProviderName] = Field(
+65 |         default_factory=lambda: cast("dict[ProviderName, ProviderName]", {"minimax": "codex", "codex": "minimax"})
+   |                                                                                                     ^^^^^^^^^^^^^^
+66 |     )
+   |
+
+Found 1 error.

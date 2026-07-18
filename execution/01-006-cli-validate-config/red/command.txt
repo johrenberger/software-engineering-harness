@@ -1,0 +1,3 @@
+command: .venv/bin/python -m pytest tests/unit/test_cli_validate_config.py --no-cov
+cwd: /PWD
+expected_outcome: FAIL (ImportError: seharness.cli)

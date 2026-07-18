@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mutmut-cache/
+.mutmut.pywc
+mutmut-report/
+.mutmut/
+
+# Type checking
+.mypy_cache/
+.ruff_cache/
+
+# Bandit
+.bandit
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# uv (lockfile is committed; see pyproject.toml tooling)
+# uv.lock
+
+# Local artifacts (git-ignored at runtime; agent checkpoints within
+# .openclaw-runs/ are EXPLICITLY tracked via `git add -f` when needed)
+.harness-runs/
+.openclaw-runs/*.log
+.openclaw-runs/.cache/
+*.log
+# Local config overrides — operators copy this to a real location
+examples/harness.local.yaml
+examples/harness.local.*.yaml
+
+# Secrets / env
+.env
+.env.*
+!.env.example

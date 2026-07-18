@@ -1,0 +1,17 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-8.4.2, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 7 items
+
+tests/unit/test_cli_validate_config.py::TestValidateConfigHelp::test_help_exits_zero PASSED [ 14%]
+tests/unit/test_cli_validate_config.py::TestValidateConfigHelp::test_validate_config_help PASSED [ 28%]
+tests/unit/test_cli_validate_config.py::TestValidateConfigTextMode::test_valid_empty_config_returns_success PASSED [ 42%]
+tests/unit/test_cli_validate_config.py::TestValidateConfigTextMode::test_valid_yaml_returns_success PASSED [ 57%]
+tests/unit/test_cli_validate_config.py::TestValidateConfigTextMode::test_invalid_yaml_returns_nonzero PASSED [ 71%]
+tests/unit/test_cli_validate_config.py::TestValidateConfigJsonOutput::test_json_output_is_valid_json PASSED [ 85%]
+tests/unit/test_cli_validate_config.py::TestValidateConfigJsonOutput::test_json_output_on_failure_contains_error PASSED [100%]
+
+============================== 7 passed in 0.20s ===============================

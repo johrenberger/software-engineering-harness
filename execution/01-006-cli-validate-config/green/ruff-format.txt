@@ -1,0 +1,2 @@
+Would reformat: src/seharness/cli.py
+1 file would be reformatted, 4 files already formatted

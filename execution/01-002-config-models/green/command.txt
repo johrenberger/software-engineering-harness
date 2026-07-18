@@ -1,0 +1,3 @@
+command: .venv/bin/python -m pytest tests/unit/config/test_config_models.py -x --no-cov
+cwd: /PWD
+exit_code: 0

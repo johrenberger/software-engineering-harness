@@ -1,0 +1,18 @@
+# Local harness override example.
+#
+# Copy this file to ./seharness.local.yaml (git-ignored) and edit.
+# Anything you set here overrides the committed harness.yaml and the
+# built-in defaults, but is overridden by environment variables and CLI
+# flags.
+
+# Example: redirect artifacts to a fast scratch disk.
+# harness:
+#   artifact_root: /tmp/seharness-runs
+
+# Example: prefer MiniMax for implementation instead of Codex.
+# models:
+#   implementation: minimax
+
+# Example: relax validation repair limit on a flaky machine.
+# execution:
+#   validation_repair_limit: 5

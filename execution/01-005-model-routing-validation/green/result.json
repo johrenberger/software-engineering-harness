@@ -1,0 +1,9 @@
+{
+  "phase": "green",
+  "behavior": "model routing validation",
+  "exit_code": 0,
+  "outcome": "passed",
+  "tests_passed": 5,
+  "tests_failed": 0,
+  "timestamp": "2026-07-18T15:54:09Z"
+}

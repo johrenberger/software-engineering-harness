@@ -1,0 +1,4 @@
+command: .venv/bin/python -m pytest tests/unit/config/test_config_models.py -x --no-cov
+cwd: /data/.openclaw/workspace/software-engineering-harness
+PYTHONPATH: implicit via uv venv
+expected_outcome: FAIL (ModuleNotFoundError: seharness.config)
