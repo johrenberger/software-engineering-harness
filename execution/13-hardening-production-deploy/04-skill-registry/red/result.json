@@ -1,0 +1,12 @@
+{
+  "behavior": "04-skill-registry",
+  "test_file": "tests/unit/skills/test_skill_manifests.py",
+  "summary": "OpenClaw SkillRegistry with 8 skills (per-command scopes)",
+  "phase": "red",
+  "passed": 0,
+  "failed": 8,
+  "duration_s": 0.03,
+  "command": "pytest tests/unit/skills/test_skill_manifests.py --no-cov -q",
+  "exit_code": 1,
+  "recorded_at": "2026-07-18T22:31:33.792768+00:00"
+}

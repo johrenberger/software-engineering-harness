@@ -1,0 +1,12 @@
+{
+  "behavior": "03-dashboard-server",
+  "test_file": "tests/unit/dashboard/test_dashboard_server.py",
+  "summary": "aiohttp DashboardServer on 127.0.0.1:8765 with / + /api/state + /healthz",
+  "phase": "red",
+  "passed": 0,
+  "failed": 10,
+  "duration_s": 0.14,
+  "command": "pytest tests/unit/dashboard/test_dashboard_server.py --no-cov -q",
+  "exit_code": 1,
+  "recorded_at": "2026-07-18T22:31:33.445048+00:00"
+}

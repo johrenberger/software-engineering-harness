@@ -1,0 +1,12 @@
+{
+  "behavior": "06-packaging",
+  "test_file": "tests/unit/deploy/test_packaging.py",
+  "summary": "pyproject.toml build backend + CHANGELOG + README + docs/user/* + .env.example",
+  "phase": "red",
+  "passed": 1,
+  "failed": 13,
+  "duration_s": 0.03,
+  "command": "pytest tests/unit/deploy/test_packaging.py --no-cov -q",
+  "exit_code": 1,
+  "recorded_at": "2026-07-18T22:31:34.489952+00:00"
+}

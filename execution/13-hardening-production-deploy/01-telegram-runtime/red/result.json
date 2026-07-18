@@ -1,0 +1,12 @@
+{
+  "behavior": "01-telegram-runtime",
+  "test_file": "tests/unit/telegram_runtime/test_bot_runtime.py",
+  "summary": "Production python-telegram-bot runtime with env-driven config + graceful SIGINT",
+  "phase": "red",
+  "passed": 0,
+  "failed": 10,
+  "duration_s": 0.05,
+  "command": "pytest tests/unit/telegram_runtime/test_bot_runtime.py --no-cov -q",
+  "exit_code": 1,
+  "recorded_at": "2026-07-18T22:31:32.588098+00:00"
+}

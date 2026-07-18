@@ -1,0 +1,12 @@
+{
+  "behavior": "02-command-handlers",
+  "test_file": "tests/unit/telegram_runtime/test_command_handlers.py",
+  "summary": "CommandDispatcher routes /start /help /status /runs /feature /pr /resume /cancel /dashboard",
+  "phase": "red",
+  "passed": 0,
+  "failed": 12,
+  "duration_s": 0.04,
+  "command": "pytest tests/unit/telegram_runtime/test_command_handlers.py --no-cov -q",
+  "exit_code": 1,
+  "recorded_at": "2026-07-18T22:31:32.940362+00:00"
+}
