@@ -1,0 +1,12 @@
+{
+  "behavior": "05-normalized-failures",
+  "test_file": "tests/unit/models/test_normalized_failures.py",
+  "summary": "Timeout and provider failure produce normalized results",
+  "phase": "green",
+  "passed": 13,
+  "failed": 0,
+  "duration_s": 0.1,
+  "command": "pytest tests/unit/models/test_normalized_failures.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T18:58:31.363244+00:00"
+}

@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 12 items
+
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterMetadata::test_provider_is_minimax_or_codex PASSED [  8%]
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterMetadata::test_kind_is_fake PASSED [ 16%]
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterFixtureLoading::test_loads_response_fixtures_from_directory PASSED [ 25%]
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterFixtureLoading::test_missing_fixture_raises_lookup_error PASSED [ 33%]
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterSimulatedFailures::test_simulate_malformed_output PASSED [ 41%]
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterSimulatedFailures::test_simulate_timeout_via_flag PASSED [ 50%]
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterSimulatedFailures::test_simulate_provider_failure PASSED [ 58%]
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterSimulatedFailures::test_simulate_malformed_triggers_repair_recommendation PASSED [ 66%]
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterControlledSourceChange::test_writes_controlled_source_change PASSED [ 75%]
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterControlledSourceChange::test_writes_rejected_outside_working_directory PASSED [ 83%]
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterResponseShape::test_response_records_provider_and_model PASSED [ 91%]
+tests/unit/models/test_fake_adapter.py::TestFakeAdapterResponseShape::test_response_records_usage_metadata PASSED [100%]
+
+============================== 12 passed in 0.11s ==============================

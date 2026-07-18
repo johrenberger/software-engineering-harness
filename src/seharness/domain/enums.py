@@ -1,4 +1,4 @@
-"""Domain enums for the workflow state machine.
+"""Domain enums for the workflow state machine and slice 4 model layer.
 
 These names are part of the harness contract:
 - They are persisted in run-state.json and events.jsonl.
@@ -46,3 +46,65 @@ class PhaseName(StrEnum):
     COMPLETED = "completed"
     BLOCKED = "blocked"
     FAILED = "failed"
+
+
+# ---------------------------------------------------------------------------
+# Slice 4 — model layer enums
+# ---------------------------------------------------------------------------
+
+
+class ProviderName(StrEnum):
+    """Provider identifier shared by configuration, routing, and adapter registry.
+
+    Slice 1 defined ``ProviderName`` as a Literal in ``config.py``. Slice 4
+    promotes it to a StrEnum so the same type can be used inside Pydantic
+    models and the adapter registry. ``config.py`` re-exports this enum so
+    existing imports keep working unchanged.
+    """
+
+    MINIMAX = "minimax"
+    CODEX = "codex"
+
+
+class ProviderKind(StrEnum):
+    """Adapter implementation kind.
+
+    - ``live`` — adapter makes a real network call (e.g. MiniMax HTTP).
+    - ``local`` — adapter shells out to a local runtime (e.g. Codex).
+    - ``fake`` — adapter returns scripted fixtures for deterministic tests.
+    """
+
+    LIVE = "live"
+    LOCAL = "local"
+    FAKE = "fake"
+
+
+class RoutingRole(StrEnum):
+    """Workflow role for routing decisions (per SPEC §10 default routing).
+
+    The default routing table is:
+        Planning: MiniMax
+        Implementation: Codex
+        Remediation: Codex
+        Review: MiniMax
+        Delivery: MiniMax
+    """
+
+    PLANNING = "planning"
+    IMPLEMENTATION = "implementation"
+    REMEDIATION = "remediation"
+    REVIEW = "review"
+    DELIVERY = "delivery"
+
+
+class RepairOutcome(StrEnum):
+    """Outcome of a single structured-output repair attempt.
+
+    Per SPEC §10: exactly ONE repair attempt is allowed. After a single
+    failed attempt the response is rejected and routed to the model router
+    for fallback decisions.
+    """
+
+    NOT_NEEDED = "not_needed"
+    REPAIRED = "repaired"
+    REJECTED = "rejected"

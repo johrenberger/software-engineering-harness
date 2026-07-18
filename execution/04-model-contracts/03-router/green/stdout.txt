@@ -1,0 +1,17 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 7 items
+
+tests/unit/models/test_router.py::TestRouterDispatch::test_router_uses_default_routing_table PASSED [ 14%]
+tests/unit/models/test_router.py::TestRouterDispatch::test_router_uses_custom_routing PASSED [ 28%]
+tests/unit/models/test_router.py::TestRouterFallback::test_router_falls_back_on_provider_failure PASSED [ 42%]
+tests/unit/models/test_router.py::TestRouterFallback::test_router_does_not_switch_on_first_validation_defect PASSED [ 57%]
+tests/unit/models/test_router.py::TestRouterFallback::test_router_raises_when_role_unrouted PASSED [ 71%]
+tests/unit/models/test_router.py::TestRouterFallback::test_router_raises_when_adapter_missing PASSED [ 85%]
+tests/unit/models/test_router.py::TestRouterRecordedOutcome::test_router_records_provider_used_in_response PASSED [100%]
+
+============================== 7 passed in 0.10s ===============================

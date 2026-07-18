@@ -1,0 +1,12 @@
+{
+  "behavior": "04-output-repair",
+  "test_file": "tests/unit/models/test_output_repair.py",
+  "summary": "Malformed structured output triggers ONE repair attempt",
+  "phase": "green",
+  "passed": 7,
+  "failed": 0,
+  "duration_s": 0.08,
+  "command": "pytest tests/unit/models/test_output_repair.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T18:58:30.929131+00:00"
+}

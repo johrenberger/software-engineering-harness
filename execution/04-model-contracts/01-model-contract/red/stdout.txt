@@ -1,0 +1,5 @@
+
+=========================== short test summary info ============================
+ERROR tests/unit/models/test_model_contract.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.14s

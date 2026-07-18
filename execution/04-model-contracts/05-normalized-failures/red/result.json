@@ -1,0 +1,16 @@
+{
+  "phase": "red",
+  "behavior_id": "05-normalized-failures",
+  "test_file": "tests/unit/models/test_normalized_failures.py",
+  "tests": {
+    "total": 11,
+    "collected": 0,
+    "passed": 0,
+    "failed": 0,
+    "errors": 1,
+    "skipped": 0
+  },
+  "expected_failure_reason": "Collection error — missing public API (ProviderKind, ProviderName, RoutingRole, RepairOutcome, ModelAdapter, ModelRequest, ModelResponse, FakeModelAdapter, ModelRouter, StructuredOutputRepair, ModelError, ModelRepair, ModelUsage, get_adapter).",
+  "actual_failure_kind": "ImportError / ModuleNotFoundError",
+  "verdict": "RED — collection fails because no production module yet exposes the model layer public API."
+}

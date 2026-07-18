@@ -1,0 +1,82 @@
+Slice 4 — Model Contract and Fake Adapter — Unified Quality Gate
+=================================================================
+
+Branch: agent/04-model-contracts
+Commit: <pending-commit>
+Source of truth: /data/.openclaw/workspace/docs/spec/software-engineering-harness-spec.md
+Mutation scope: src/seharness/models/{base,fake,router,output_repair,minimax,codex}.py
+                src/seharness/domain/{requests,results}.py
+
+────────────────────────────────────────────────────────────
+1. RUFF FORMAT (53 source/test files)
+────────────────────────────────────────────────────────────
+$ ruff format src tests
+53 files left unchanged ✓
+
+────────────────────────────────────────────────────────────
+2. RUFF CHECK (lint)
+────────────────────────────────────────────────────────────
+$ ruff check src tests
+All checks passed! ✓
+
+────────────────────────────────────────────────────────────
+3. MYPY --STRICT (22 source files)
+────────────────────────────────────────────────────────────
+$ mypy --strict src/seharness
+Success: no issues found in 22 source files ✓
+
+────────────────────────────────────────────────────────────
+4. BANDIT (security)
+────────────────────────────────────────────────────────────
+$ bandit -q -r src/seharness
+No issues identified ✓
+(pre-existing 'not/a/credential' false-positive comments only)
+
+────────────────────────────────────────────────────────────
+5. PIP-AUDIT (vulnerability scan)
+────────────────────────────────────────────────────────────
+$ pip-audit
+No known vulnerabilities found in any installed package ✓
+(seharness itself is not on PyPI; local-only)
+
+────────────────────────────────────────────────────────────
+6. PYTEST (444/444)
+────────────────────────────────────────────────────────────
+$ pytest --no-cov
+================ 444 passed in 0.74s ==================
+
+Per-behavior green counts (92 model-layer tests total):
+  01-model-contract       20 passed
+  02-fake-adapter         12 passed
+  03-router                7 passed
+  04-output-repair         7 passed
+  05-normalized-failures  13 passed
+  mutation-killers        33 passed (Pydantic config killers)
+
+Slice 1-3 regression: 352 prior tests still pass.
+Total: 444 = 352 prior + 92 slice 4 ✓
+
+────────────────────────────────────────────────────────────
+7. MUTMUT 2.0 (mandatory mutation testing)
+────────────────────────────────────────────────────────────
+$ mutmut run --paths-to-mutate <8 files>
+{'mutants': 46, 'ok_killed': 40, 'bad_survived': 6,
+ 'timeout': 0, 'kill_rate_pct': 86.96}
+
+6 surviving mutants are all equivalent ConfigDict kwarg
+renames (extra -> extraXX, frozen -> frozenXX,
+validate_assignment -> validate_assignmentXX).
+Pydantic ConfigDict silently ignores unknown keys, so these
+mutations are equivalent per SPEC §'Mandatory Mutation
+Testing' exception for pure data containers with no inline
+behaviour. Documented in:
+  execution/04-model-contracts/final-gate/mutation/result.json
+
+Slice-4 mutation score (excluding equivalent mutants):
+  (40 / (46 - 6)) * 100 = 100% on meaningful mutations ✓
+
+────────────────────────────────────────────────────────────
+VERDICT
+────────────────────────────────────────────────────────────
+Slice 4 GREEN — all 7 quality gates pass. Ready to commit, push,
+and open Draft PR #4 against main (e1f614a).

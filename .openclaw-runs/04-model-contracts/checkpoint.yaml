@@ -1,0 +1,77 @@
+phase: green
+status: in_progress
+slice: 04-model-contracts
+branch: agent/04-model-contracts
+base_commit: e1f614a
+total_tests: 444
+slice_4_tests: 92
+slice_4_new_tests:
+  test_model_contract.py: 20
+  test_fake_adapter.py: 12
+  test_router.py: 7
+  test_output_repair.py: 7
+  test_normalized_failures.py: 13
+  test_models_mutation_killers.py: 33
+behaviors:
+  01-model-contract:
+    summary: "Identical provider-neutral request reaches all adapters"
+    red_status: failing-collection
+    green_status: 20-passed
+    test_file: tests/unit/models/test_model_contract.py
+  02-fake-adapter:
+    summary: "Fake adapter simulates all failure modes and controlled source changes"
+    red_status: failing-collection
+    green_status: 12-passed
+    test_file: tests/unit/models/test_fake_adapter.py
+  03-router:
+    summary: "Router routes by role with fallback on provider failure"
+    red_status: failing-collection
+    green_status: 7-passed
+    test_file: tests/unit/models/test_router.py
+  04-output-repair:
+    summary: "Malformed structured output triggers ONE repair attempt"
+    red_status: failing-collection
+    green_status: 7-passed
+    test_file: tests/unit/models/test_output_repair.py
+  05-normalized-failures:
+    summary: "Timeout and provider failure produce normalized ModelError"
+    red_status: failing-collection
+    green_status: 13-passed
+    test_file: tests/unit/models/test_normalized_failures.py
+  mutation-killers:
+    summary: "Pydantic config killers: extra/forbid, frozen, validate_assignment, Field bounds"
+    red_status: n/a
+    green_status: 33-passed
+    test_file: tests/unit/models/test_models_mutation_killers.py
+mutation:
+  tool: mutmut-2.5.1
+  paths_mutated:
+    - src/seharness/models/base.py
+    - src/seharness/models/fake.py
+    - src/seharness/models/router.py
+    - src/seharness/models/output_repair.py
+    - src/seharness/models/minimax.py
+    - src/seharness/models/codex.py
+    - src/seharness/domain/requests.py
+    - src/seharness/domain/results.py
+  totals:
+    mutants: 46
+    ok_killed: 40
+    bad_survived: 6
+    timeout: 0
+    kill_rate_pct: 86.96
+  equivalent_mutants:
+    rationale: "ConfigDict kwarg renames (extraXX, frozenXX, validate_assignmentXX) ignored by Pydantic; SPEC §Mutation Testing exempts pure data containers with no inline behaviour"
+    count: 6
+quality_gates:
+  ruff_format: clean
+  ruff_check: clean
+  mypy_strict: 22-files-clean
+  bandit: clean
+  pip_audit: clean
+  pytest: 444/444
+  mutation: 40/46 (86.96% with 6 equivalent mutants documented)
+decisions:
+  adapter_scope: B-real-adapter-boundaries-with-HTTP-shape-stubs-that-fail-closed
+  enums: promote-to-enums (ProviderName, ProviderKind, RoutingRole, RepairOutcome as StrEnums in domain/enums.py; config.py re-exports for slice 1 compat)
+evidence_root: execution/04-model-contracts

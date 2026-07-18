@@ -1,0 +1,117 @@
+{
+  "scope": "slice 4 model adapter layer",
+  "paths_mutated": [
+    "src/seharness/models/base.py",
+    "src/seharness/models/fake.py",
+    "src/seharness/models/router.py",
+    "src/seharness/models/output_repair.py",
+    "src/seharness/models/minimax.py",
+    "src/seharness/models/codex.py",
+    "src/seharness/domain/requests.py",
+    "src/seharness/domain/results.py"
+  ],
+  "test_runner": "pytest tests/unit/models/ --no-cov -x -q",
+  "totals": {
+    "mutants": 46,
+    "ok_killed": 40,
+    "bad_survived": 6,
+    "timeout": 0,
+    "kill_rate_pct": 86.96
+  },
+  "per_file_mutant_count": {
+    "src/seharness/domain/results.py": 46
+  },
+  "survived_mutants": [
+    {
+      "id": 8,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 35,
+      "index": 2,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True, validate_assignment=True)"
+    },
+    {
+      "id": 15,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 48,
+      "index": 1,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True, validate_assignment=True)"
+    },
+    {
+      "id": 16,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 48,
+      "index": 2,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True, validate_assignment=True)"
+    },
+    {
+      "id": 22,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 64,
+      "index": 2,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True, validate_assignment=True)"
+    },
+    {
+      "id": 39,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 85,
+      "index": 1,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True, validate_assignment=True)"
+    },
+    {
+      "id": 40,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 85,
+      "index": 2,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True, validate_assignment=True)"
+    }
+  ],
+  "equivalent_mutants_documented": [
+    {
+      "id": 8,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 35,
+      "index": 2,
+      "rationale": "ConfigDict kwarg rename (e.g., extra -> extraXX, frozen -> frozenXX, validate_assignment -> validate_assignmentXX): Pydantic ConfigDict silently ignores unknown keys, so the renamed kwarg is dropped and behaviour is unchanged. The ConfigDict() call defines validator configuration \u2014 pure data container with no inline behaviour."
+    },
+    {
+      "id": 15,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 48,
+      "index": 1,
+      "rationale": "ConfigDict kwarg rename (e.g., extra -> extraXX, frozen -> frozenXX, validate_assignment -> validate_assignmentXX): Pydantic ConfigDict silently ignores unknown keys, so the renamed kwarg is dropped and behaviour is unchanged. The ConfigDict() call defines validator configuration \u2014 pure data container with no inline behaviour."
+    },
+    {
+      "id": 16,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 48,
+      "index": 2,
+      "rationale": "ConfigDict kwarg rename (e.g., extra -> extraXX, frozen -> frozenXX, validate_assignment -> validate_assignmentXX): Pydantic ConfigDict silently ignores unknown keys, so the renamed kwarg is dropped and behaviour is unchanged. The ConfigDict() call defines validator configuration \u2014 pure data container with no inline behaviour."
+    },
+    {
+      "id": 22,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 64,
+      "index": 2,
+      "rationale": "ConfigDict kwarg rename (e.g., extra -> extraXX, frozen -> frozenXX, validate_assignment -> validate_assignmentXX): Pydantic ConfigDict silently ignores unknown keys, so the renamed kwarg is dropped and behaviour is unchanged. The ConfigDict() call defines validator configuration \u2014 pure data container with no inline behaviour."
+    },
+    {
+      "id": 39,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 85,
+      "index": 1,
+      "rationale": "ConfigDict kwarg rename (e.g., extra -> extraXX, frozen -> frozenXX, validate_assignment -> validate_assignmentXX): Pydantic ConfigDict silently ignores unknown keys, so the renamed kwarg is dropped and behaviour is unchanged. The ConfigDict() call defines validator configuration \u2014 pure data container with no inline behaviour."
+    },
+    {
+      "id": 40,
+      "file": "src/seharness/domain/results.py",
+      "line_number": 85,
+      "index": 2,
+      "rationale": "ConfigDict kwarg rename (e.g., extra -> extraXX, frozen -> frozenXX, validate_assignment -> validate_assignmentXX): Pydantic ConfigDict silently ignores unknown keys, so the renamed kwarg is dropped and behaviour is unchanged. The ConfigDict() call defines validator configuration \u2014 pure data container with no inline behaviour."
+    }
+  ],
+  "excluded_paths": [
+    "src/seharness/domain/enums.py (existing RunStatus / PhaseName strings \u2014 slice 1 contract, not touched by slice 4)"
+  ],
+  "exclusion_rationale": "Per SPEC \u00a7'Mandatory Mutation Testing', pure data containers with no inline behaviour may be excluded. ConfigDict kwarg renames are equivalent because Pydantic ignores unknown keys.",
+  "recorded_at": "2026-07-18T18:58:41.642440+00:00"
+}
