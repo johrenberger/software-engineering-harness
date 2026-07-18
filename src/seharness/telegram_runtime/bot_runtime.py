@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from seharness.telegram_runtime.command_handlers import CommandDispatcher
 
 
-
 _LOG = logging.getLogger(__name__)
 
 _TELEGRAM_MAX_REPLY = 4096

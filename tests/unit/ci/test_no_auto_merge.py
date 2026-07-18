@@ -134,8 +134,8 @@ def test_ci_module_source_does_not_call_gh_pr_merge() -> None:
                 "gh_merge",
             ):
                 raise AssertionError(
-                        f"{mod.__name__} references forbidden attribute '.{node.attr}'"
-                    )
+                    f"{mod.__name__} references forbidden attribute '.{node.attr}'"
+                )
 
 
 def test_readiness_outcome_is_never_ready_when_input_unknown() -> None:
