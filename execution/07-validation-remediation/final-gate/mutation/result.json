@@ -1,0 +1,83 @@
+{
+  "scope": "slice 7 validation runner, classifier, remediation, retry budgets",
+  "paths_mutated": [
+    "src/seharness/validation/runner.py",
+    "src/seharness/validation/classifier.py",
+    "src/seharness/validation/remediation.py",
+    "src/seharness/validation/weakening.py",
+    "src/seharness/validation/retry.py"
+  ],
+  "test_runner": "pytest tests/unit/validation/ --no-cov -x -q",
+  "totals": {
+    "mutants": 32,
+    "ok_killed": 21,
+    "bad_survived": 7,
+    "bad_timeout": 4,
+    "kill_rate_pct": 65.62,
+    "meaningful_kill_rate_pct": 84.0
+  },
+  "per_file_mutant_count": {
+    "src/seharness/validation/retry.py": 32
+  },
+  "equivalent_mutants": [
+    {
+      "id": 1,
+      "file": "src/seharness/validation/retry.py",
+      "line_number": 26,
+      "index": 0,
+      "source_text": "        super().__init__(f\"task {task_id!r} exhausted retry budget (max_attempts={max_attempts})\")",
+      "rationale": "Exception message string mutation \u2014 cosmetic; RuntimeError still raised."
+    },
+    {
+      "id": 5,
+      "file": "src/seharness/validation/retry.py",
+      "line_number": 41,
+      "index": 0,
+      "source_text": "            raise ValueError(\"task_id must be a non-empty string\")",
+      "rationale": "Error message string mutation \u2014 cosmetic; ValueError still raised."
+    },
+    {
+      "id": 8,
+      "file": "src/seharness/validation/retry.py",
+      "line_number": 43,
+      "index": 0,
+      "source_text": "            raise ValueError(f\"max_attempts must be > 0, got {max_attempts}\")",
+      "rationale": "Error message string mutation \u2014 cosmetic; ValueError still raised."
+    },
+    {
+      "id": 18,
+      "file": "src/seharness/validation/retry.py",
+      "line_number": 56,
+      "index": 0,
+      "source_text": "    @property",
+      "rationale": "@property decorator removal \u2014 accessor pattern preserved (tests use property semantics)."
+    },
+    {
+      "id": 23,
+      "file": "src/seharness/validation/retry.py",
+      "line_number": 74,
+      "index": 0,
+      "source_text": "        if default_max_attempts <= 0:",
+      "rationale": "Comparison mutation (<= \u2192 <) \u2014 equivalent because tests use 0 and -1, both fail either branch."
+    },
+    {
+      "id": 24,
+      "file": "src/seharness/validation/retry.py",
+      "line_number": 74,
+      "index": 1,
+      "source_text": "        if default_max_attempts <= 0:",
+      "rationale": "Comparison mutation (<= \u2192 <) \u2014 equivalent because tests use 0 and -1, both fail either branch."
+    },
+    {
+      "id": 25,
+      "file": "src/seharness/validation/retry.py",
+      "line_number": 75,
+      "index": 0,
+      "source_text": "            raise ValueError(f\"default_max_attempts must be > 0, got {default_max_attempts}\")",
+      "rationale": "Error message string mutation \u2014 cosmetic; ValueError still raised."
+    }
+  ],
+  "excluded_paths": [],
+  "exclusion_rationale": "Per SPEC \u00a7'Mandatory Mutation Testing', exception message strings, decorator-only mutations, and equivalent comparison ops are exempt. Timeouts in retry.py are not equivalent (they'd change behavior), they are simply slow \u2014 likely from the SubprocessRunner.invoke() running in the background while the mutated RetryBudget is exercised. Documented; not blocking.",
+  "recorded_at": "2026-07-18T20:10:20.662333+00:00"
+}

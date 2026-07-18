@@ -1,0 +1,12 @@
+{
+  "behavior": "runner",
+  "test_file": "tests/unit/validation/test_validation_runner.py",
+  "summary": "ValidationRunner protocol + SubprocessRunner",
+  "phase": "green",
+  "passed": 7,
+  "failed": 0,
+  "duration_s": 0.09,
+  "command": "pytest tests/unit/validation/test_validation_runner.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T20:11:13.122681+00:00"
+}
