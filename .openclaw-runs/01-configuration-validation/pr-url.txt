@@ -1,0 +1,5 @@
+PR: https://github.com/johrenberger/software-engineering-harness/pull/1
+title: feat(config): slice 1 — configuration validation harness
+state: open (DRAFT)
+branch: agent/01-configuration-validation -> main
+opened: 2026-07-18
