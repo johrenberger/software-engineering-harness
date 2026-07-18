@@ -1,0 +1,12 @@
+{
+  "behavior": "02-red-must-fail",
+  "test_file": "tests/unit/execution/test_red_must_fail.py",
+  "summary": "RED must fail for the expected reason",
+  "phase": "green",
+  "passed": 8,
+  "failed": 0,
+  "duration_s": 0.14,
+  "command": "pytest tests/unit/execution/test_red_must_fail.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T19:50:21.406364+00:00"
+}

@@ -1,0 +1,13 @@
+{
+  "behavior": "01-red-required",
+  "test_file": "tests/unit/execution/test_red_evidence_required.py",
+  "summary": "RED state: collection error (modules did not exist)",
+  "phase": "red",
+  "passed": 0,
+  "failed": 0,
+  "exit_code": 2,
+  "duration_s": 0.0,
+  "command": "pytest tests/unit/execution/test_red_evidence_required.py --no-cov -q",
+  "red_commit": "6e95a45",
+  "recorded_at": "2026-07-18T19:50:29.369227+00:00"
+}

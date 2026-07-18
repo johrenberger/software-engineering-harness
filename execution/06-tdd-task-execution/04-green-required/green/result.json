@@ -1,0 +1,12 @@
+{
+  "behavior": "04-green-required",
+  "test_file": "tests/unit/execution/test_green_required.py",
+  "summary": "GREEN must pass",
+  "phase": "green",
+  "passed": 9,
+  "failed": 0,
+  "duration_s": 0.11,
+  "command": "pytest tests/unit/execution/test_green_required.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T19:50:22.245249+00:00"
+}

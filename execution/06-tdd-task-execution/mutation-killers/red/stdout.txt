@@ -1,0 +1,1 @@
+RED state captured at commit 6e95a45: pytest tests/unit/execution/test_execution_mutation_killers.py failed collection with ModuleNotFoundError on seharness.execution.* (source modules did not exist).

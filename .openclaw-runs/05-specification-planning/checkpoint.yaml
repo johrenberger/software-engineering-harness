@@ -1,5 +1,5 @@
-phase: green
-status: in_progress
+phase: merged
+status: done
 slice: 05-specification-planning
 branch: agent/05-specification-planning
 base_commit: 11566ca
@@ -68,6 +68,13 @@ mutation:
   equivalent_mutants:
     rationale: "StrEnum string value mutations (3), BeforeValidator returning None (4, Pydantic v2 falls back to original input), error-message format strings (2)"
     count: 9
+pr:
+  number: 5
+  url: https://github.com/johrenberger/software-engineering-harness/pull/5
+  state: MERGED
+  merged_at: 2026-07-18T19:27:43Z
+  merged_by: johrenberger
+  merge_commit: e4179f4a44f040683f3a7e614063f06cbe5b3698
 quality_gates:
   ruff_format: clean
   ruff_check: clean
