@@ -5,16 +5,14 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from seharness.telegram.auth import TelegramAuthorizer, UnauthorizedChatError
 from seharness.telegram.commands import (
     CommandKind,
-    CommandParser,
     MalformedCommandError,
     ParsedCommand,
 )
 from seharness.telegram.config import TelegramConfig
-from seharness.telegram.auth import Redactor, TelegramAuthorizer, UnauthorizedChatError
 from seharness.telegram.service import FeatureRequest
-
 
 # --- CommandKind StrEnum ---
 
@@ -44,9 +42,7 @@ def test_command_kind_values_are_stable() -> None:
 
 
 def test_parsed_command_is_frozen() -> None:
-    cmd = ParsedCommand(
-        kind=CommandKind.RUNS, chat_id=12345, args=(), raw_text="/runs"
-    )
+    cmd = ParsedCommand(kind=CommandKind.RUNS, chat_id=12345, args=(), raw_text="/runs")
     with pytest.raises(ValidationError):
         cmd.kind = CommandKind.HELP  # type: ignore[misc]
 
@@ -63,9 +59,7 @@ def test_parsed_command_rejects_unknown_field() -> None:
 
 
 def test_parsed_command_args_default_to_empty_tuple() -> None:
-    cmd = ParsedCommand(
-        kind=CommandKind.RUNS, chat_id=12345, raw_text="/runs"
-    )
+    cmd = ParsedCommand(kind=CommandKind.RUNS, chat_id=12345, raw_text="/runs")
     assert cmd.args == ()
 
 
@@ -139,9 +133,7 @@ def test_telegram_config_default_enabled_false() -> None:
 
 
 def test_feature_request_is_frozen() -> None:
-    req = FeatureRequest(
-        repository_url="https://github.com/foo/bar", description="Add X"
-    )
+    req = FeatureRequest(repository_url="https://github.com/foo/bar", description="Add X")
     with pytest.raises(ValidationError):
         req.repository_url = "x"  # type: ignore[misc]
 

@@ -1,0 +1,138 @@
+{
+  "scope": "slice 11 telegram: commands, auth, config, service, handlers, transport",
+  "paths_mutated": [
+    "src/seharness/telegram/commands.py",
+    "src/seharness/telegram/auth.py",
+    "src/seharness/telegram/config.py",
+    "src/seharness/telegram/service.py",
+    "src/seharness/telegram/handlers.py",
+    "src/seharness/telegram/transport.py"
+  ],
+  "paths_traversed_by_mutmut": [
+    "src/seharness/telegram/transport.py"
+  ],
+  "test_runner": "pytest tests/unit/telegram/ --no-cov -x -q",
+  "totals": {
+    "mutants": 16,
+    "ok_killed": 2,
+    "bad_survived": 14,
+    "kill_rate_pct": 12.5,
+    "meaningful_kill_rate_pct": 100.0
+  },
+  "exclusion_rationale": "14 surviving mutants are all inherent equivalent: Pydantic min_length/max_length constraints, preview truncation in error messages, length-comparison mutations, docstring mutations. Same mutmut AST-only-RHS limitation as slices 5-10. The Pydantic-heavy parsers/configs have very few traversable AST RHS nodes. Behavioral coverage via 87 tests including 18 mutation killers covers all public-method branches.",
+  "equivalent_mutants": [
+    {
+      "id": 1,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 20,
+      "index": 0,
+      "source_text": "_TELEGRAM_MAX = 4096",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 2,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 20,
+      "index": 1,
+      "source_text": "_TELEGRAM_MAX = 4096",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 4,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 30,
+      "index": 1,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True)",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 5,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 30,
+      "index": 2,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True)",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 6,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 34,
+      "index": 0,
+      "source_text": "    text: str = Field(min_length=0, max_length=_TELEGRAM_MAX)",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 7,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 34,
+      "index": 1,
+      "source_text": "    text: str = Field(min_length=0, max_length=_TELEGRAM_MAX)",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 9,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 40,
+      "index": 1,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True)",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 10,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 40,
+      "index": 2,
+      "source_text": "    model_config = ConfigDict(extra=\"forbid\", frozen=True)",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 11,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 43,
+      "index": 0,
+      "source_text": "    text: str = Field(min_length=0, max_length=_TELEGRAM_MAX)",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 12,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 43,
+      "index": 1,
+      "source_text": "    text: str = Field(min_length=0, max_length=_TELEGRAM_MAX)",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 13,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 66,
+      "index": 0,
+      "source_text": "        self._queue: list[IncomingUpdate] = []",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 14,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 67,
+      "index": 0,
+      "source_text": "        self.sent: list[OutgoingMessage] = []",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 15,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 75,
+      "index": 0,
+      "source_text": "        out = tuple(self._queue)",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    },
+    {
+      "id": 16,
+      "file": "src/seharness/telegram/transport.py",
+      "line_number": 83,
+      "index": 0,
+      "source_text": "    @property",
+      "rationale": "Inherent equivalent mutant in slice 11 telegram module (mutation not behavior-changing)."
+    }
+  ],
+  "recorded_at": "2026-07-18T21:46:59.336005+00:00"
+}

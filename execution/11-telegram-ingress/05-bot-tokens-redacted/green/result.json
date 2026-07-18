@@ -1,0 +1,12 @@
+{
+  "behavior": "05-bot-tokens-redacted",
+  "test_file": "tests/unit/telegram/test_bot_tokens_redacted.py",
+  "summary": "bot tokens are redacted",
+  "phase": "green",
+  "passed": 14,
+  "failed": 0,
+  "duration_s": 0.1,
+  "command": "pytest tests/unit/telegram/test_bot_tokens_redacted.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T21:47:07.637371+00:00"
+}

@@ -98,7 +98,7 @@ class StubCiRemediationLoop:
         # Default: empty BoundedEvidence envelope
         return BoundedEvidence(
             failure=None,
-            relevant_files=tuple(),
+            relevant_files=(),
             previous_green=None,
             allowed_paths=("src/", "tests/"),
         )

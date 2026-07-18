@@ -26,14 +26,11 @@ from seharness.telegram.handlers import (
     StubApplicationService,
 )
 
-
 TELEGRAM_MAX = 4096
 
 
 def _parsed(kind: CommandKind, *args: str, chat_id: int = 12345) -> ParsedCommand:
-    return ParsedCommand(
-        kind=kind, chat_id=chat_id, args=args, raw_text=kind.value
-    )
+    return ParsedCommand(kind=kind, chat_id=chat_id, args=args, raw_text=kind.value)
 
 
 # /status
@@ -161,9 +158,7 @@ def test_pr_message_never_contains_merge_commands() -> None:
     lowered = result.message.lower()
     forbidden = ("gh pr merge", "merge_pull_request", "auto-merge", "auto_merge")
     for token in forbidden:
-        assert token not in lowered, (
-            f"/pr message contains forbidden token: {token}"
-        )
+        assert token not in lowered, f"/pr message contains forbidden token: {token}"
 
 
 def test_pr_handler_returns_error_for_no_pr() -> None:

@@ -1,0 +1,12 @@
+{
+  "behavior": "02-feature-invokes-application",
+  "test_file": "tests/unit/telegram/test_feature_invokes_application.py",
+  "summary": "/feature invokes the same application service as CLI",
+  "phase": "green",
+  "passed": 10,
+  "failed": 0,
+  "duration_s": 0.1,
+  "command": "pytest tests/unit/telegram/test_feature_invokes_application.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T21:47:06.350112+00:00"
+}

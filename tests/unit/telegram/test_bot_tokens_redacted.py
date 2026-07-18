@@ -11,8 +11,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from seharness.telegram.auth import Redactor
 from seharness.telegram.config import TelegramConfig
 
@@ -37,10 +35,9 @@ def test_redactor_scrubs_webhook_token() -> None:
 
 def test_redactor_is_case_insensitive() -> None:
     redactor = Redactor()
-    text = "Token: t=abcDEFghijKL:mnopQRstuv_WXYZ12345"
+    text = "Token: 1234567890:abcdefGhIjklMnOpQRsTUVwxyz"
     out = redactor.redact(text)
-    assert "abcDEFghijKL" not in out
-    assert "mnopQRstuv_WXYZ12345" not in out
+    assert "abcdefGhIjklMnOpQRsTUVwxyz" not in out
 
 
 def test_redactor_leaves_clean_text_unchanged() -> None:
@@ -57,10 +54,12 @@ def test_redactor_empty_string_returns_empty() -> None:
 
 def test_redactor_scrubs_multiple_tokens() -> None:
     redactor = Redactor()
-    text = "first 111:aaa second 222:bbb third"
+    text = (
+        "first 1234567890:ABCDefGHIjklMnOpQRsTUVwxyz second 9876543210:ZYXWvutsrqpoNMLkjiHGFedcba"
+    )
     out = redactor.redact(text)
-    assert "111:aaa" not in out
-    assert "222:bbb" not in out
+    assert "1234567890:ABCDefGHIjklMnOpQRsTUVwxyz" not in out
+    assert "9876543210:ZYXWvutsrqpoNMLkjiHGFedcba" not in out
 
 
 def test_redactor_preserves_non_token_colon_groups() -> None:

@@ -26,8 +26,8 @@ Public surface (re-exported):
 from .checks import (
     CheckConclusion,
     CheckRunState,
-    CheckStatus,
     ChecksClient,
+    CheckStatus,
     PullRequestCheck,
     RequiredChecksView,
     StubChecksClient,
@@ -35,9 +35,9 @@ from .checks import (
 from .monitor import CiMonitor, PollResult, StubCiMonitor
 from .polling import PollOutcome, PollPolicy, PollState
 from .readiness import (
+    ReadinessDecision,
     ReadyEvaluator,
     ReadyTransition,
-    ReadinessDecision,
     StubReadyTransition,
 )
 from .remediation import (
@@ -59,9 +59,9 @@ __all__ = [
     "PollResult",
     "PollState",
     "PullRequestCheck",
+    "ReadinessDecision",
     "ReadyEvaluator",
     "ReadyTransition",
-    "ReadinessDecision",
     "RemediationPacket",
     "RemediationReason",
     "RequiredChecksView",

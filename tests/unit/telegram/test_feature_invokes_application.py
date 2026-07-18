@@ -44,9 +44,7 @@ def test_feature_request_is_dataclass() -> None:
 def test_feature_handler_calls_application_service() -> None:
     app = StubApplicationService()
     handler = FeatureHandler(application=app)
-    result = handler.handle(
-        _parsed(args=("https://github.com/foo/bar", "Add login screen"))
-    )
+    result = handler.handle(_parsed(args=("https://github.com/foo/bar", "Add login screen")))
     assert result.ok is True
     assert len(app.calls) == 1
     req = app.calls[0]
@@ -58,9 +56,7 @@ def test_feature_handler_passes_repo_and_description_distinct() -> None:
     """Multi-word description MUST be preserved (no shell-style split)."""
     app = StubApplicationService()
     handler = FeatureHandler(application=app)
-    handler.handle(
-        _parsed(args=("https://github.com/foo/bar", "Add", "login", "screen"))
-    )
+    handler.handle(_parsed(args=("https://github.com/foo/bar", "Add", "login", "screen")))
     assert app.calls[0].description == "Add login screen"
 
 
@@ -68,9 +64,7 @@ def test_feature_handler_returns_bounded_result() -> None:
     """Result has ok + message + bounded size."""
     app = StubApplicationService()
     handler = FeatureHandler(application=app)
-    result = handler.handle(
-        _parsed(args=("https://github.com/foo/bar", "X"))
-    )
+    result = handler.handle(_parsed(args=("https://github.com/foo/bar", "X")))
     assert hasattr(result, "ok")
     assert hasattr(result, "message")
     assert len(result.message) <= 4096  # Telegram message cap

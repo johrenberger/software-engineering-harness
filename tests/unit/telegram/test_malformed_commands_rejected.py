@@ -16,7 +16,6 @@ from seharness.telegram.commands import (
     CommandKind,
     CommandParser,
     MalformedCommandError,
-    ParsedCommand,
 )
 
 
