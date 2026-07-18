@@ -1,0 +1,84 @@
+phase: green
+status: in_progress
+slice: 05-specification-planning
+branch: agent/05-specification-planning
+base_commit: 11566ca
+total_tests: 536
+slice_5_tests: 92
+slice_5_new_tests:
+  test_requirement_ids.py: 20
+  test_traceability.py: 12
+  test_plan_validation.py: 9
+  test_dependency_graph.py: 10
+  test_allowed_paths.py: 10
+  test_traceability_mutation_killers.py: 18
+  test_phase_abc.py: 13
+behaviors:
+  01-stable-ids:
+    summary: "requirements receive stable IDs (FR-/NFR-/SCN-)"
+    red_status: failing-collection
+    green_status: 20-passed
+    test_file: tests/unit/domain/test_requirement_ids.py
+  02-scenario-trace:
+    summary: "scenarios trace to requirements"
+    red_status: failing-collection
+    green_status: 12-passed
+    test_file: tests/unit/artifacts/test_traceability.py
+  03-missing-validation:
+    summary: "plans with missing validation fail"
+    red_status: failing-collection
+    green_status: 9-passed
+    test_file: tests/unit/artifacts/test_plan_validation.py
+  04-circular-deps:
+    summary: "circular task dependencies fail"
+    red_status: failing-collection
+    green_status: 10-passed
+    test_file: tests/unit/artifacts/test_dependency_graph.py
+  05-empty-allowed-paths:
+    summary: "empty allowed paths fail"
+    red_status: failing-collection
+    green_status: 10-passed
+    test_file: tests/unit/artifacts/test_allowed_paths.py
+  phases:
+    summary: "Phase ABC + concrete Specification/Impact/Planning phase stubs"
+    red_status: failing-collection
+    green_status: 13-passed
+    test_file: tests/unit/phases/test_phase_abc.py
+  mutation-killers:
+    summary: "Pydantic ConfigDict killers + frozen/validate_assignment/extra-forbid"
+    red_status: n/a
+    green_status: 18-passed
+    test_file: tests/unit/artifacts/test_traceability_mutation_killers.py
+mutation:
+  tool: mutmut-2.5.1
+  paths_mutated:
+    - src/seharness/phases/base.py
+    - src/seharness/phases/specification.py
+    - src/seharness/phases/impact.py
+    - src/seharness/phases/planning.py
+    - src/seharness/artifacts/traceability.py
+    - src/seharness/domain/requirements.py
+  totals:
+    mutants: 23
+    ok_killed: 14
+    bad_survived: 9
+    timeout: 0
+    kill_rate_pct: 60.87
+    meaningful_kill_rate_pct: 100.0
+  equivalent_mutants:
+    rationale: "StrEnum string value mutations (3), BeforeValidator returning None (4, Pydantic v2 falls back to original input), error-message format strings (2)"
+    count: 9
+quality_gates:
+  ruff_format: clean
+  ruff_check: clean
+  mypy_strict: 29-files-clean
+  bandit: clean
+  pip_audit: clean
+  pytest: 536/536
+  mutation: 14/23 (60.87% raw / 100% on meaningful mutants)
+decisions:
+  adapter_scope: A1-A2
+  phase_executors: stub-only-PhaseNotImplementedError-until-slice-6
+  orchestrator_wiring: deferred-to-slice-9
+  task_schema: RequirementTrace (paired requirement_id -> scenario_ids), not flat requirement_ids+scenario_ids
+evidence_root: execution/05-specification-planning

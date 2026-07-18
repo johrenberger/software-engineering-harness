@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collected 0 items / 1 error
+
+==================================== ERRORS ====================================
+________ ERROR collecting tests/unit/artifacts/test_dependency_graph.py ________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/artifacts/test_dependency_graph.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/artifacts/test_dependency_graph.py:20: in <module>
+    from seharness.artifacts.traceability import (
+E   ModuleNotFoundError: No module named 'seharness.artifacts.traceability'
+=========================== short test summary info ============================
+ERROR tests/unit/artifacts/test_dependency_graph.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.10s ===============================

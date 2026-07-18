@@ -1,0 +1,12 @@
+{
+  "behavior": "02-scenario-trace",
+  "test_file": "tests/unit/artifacts/test_traceability.py",
+  "summary": "scenarios trace to requirements",
+  "phase": "green",
+  "passed": 12,
+  "failed": 0,
+  "duration_s": 0.13,
+  "command": "pytest tests/unit/artifacts/test_traceability.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T19:18:01.006247+00:00"
+}

@@ -1,0 +1,17 @@
+{
+  "behavior": "01-stable-ids",
+  "test_files": [
+    "tests/unit/domain/test_requirement_ids.py"
+  ],
+  "summary": "requirements receive stable IDs (FR-/NFR-/SCN-)",
+  "phase": "red",
+  "passed": 0,
+  "failed": "collection",
+  "duration_s": 0.0,
+  "command": "pytest tests/unit/domain/test_requirement_ids.py --no-cov",
+  "exit_code": 2,
+  "errors": [
+    "E   ModuleNotFoundError: No module named 'seharness.domain.requirements'"
+  ],
+  "recorded_at": "2026-07-18T19:12:34.407812+00:00"
+}

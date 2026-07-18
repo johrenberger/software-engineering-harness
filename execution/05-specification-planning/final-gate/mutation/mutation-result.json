@@ -1,0 +1,8 @@
+{
+  "mutants": 23,
+  "ok_killed": 14,
+  "bad_survived": 9,
+  "timeout": 0,
+  "kill_rate_pct": 60.87,
+  "meaningful_kill_rate_pct": 100.0
+}

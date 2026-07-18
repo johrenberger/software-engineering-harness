@@ -1,0 +1,23 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 13 items
+
+tests/unit/phases/test_phase_abc.py::TestPhaseIsAbstract::test_cannot_instantiate_abc_directly PASSED [  7%]
+tests/unit/phases/test_phase_abc.py::TestPhaseIsAbstract::test_subclass_without_run_is_abstract PASSED [ 15%]
+tests/unit/phases/test_phase_abc.py::TestPhaseIsAbstract::test_subclass_with_run_is_instantiable PASSED [ 23%]
+tests/unit/phases/test_phase_abc.py::TestPhaseNotImplementedError::test_subclasses_stub_run_raises_not_implemented PASSED [ 30%]
+tests/unit/phases/test_phase_abc.py::TestPhaseNotImplementedError::test_phase_not_implemented_error_is_an_exception PASSED [ 38%]
+tests/unit/phases/test_phase_abc.py::TestPhaseNameRegistration::test_specification_phase_uses_phase_name_specification PASSED [ 46%]
+tests/unit/phases/test_phase_abc.py::TestPhaseNameRegistration::test_impact_phase_uses_phase_name_impact PASSED [ 53%]
+tests/unit/phases/test_phase_abc.py::TestPhaseNameRegistration::test_planning_phase_uses_phase_name_planning PASSED [ 61%]
+tests/unit/phases/test_phase_abc.py::TestPhaseRegistry::test_package_exports_specification_phase PASSED [ 69%]
+tests/unit/phases/test_phase_abc.py::TestPhaseRegistry::test_package_exports_impact_phase PASSED [ 76%]
+tests/unit/phases/test_phase_abc.py::TestPhaseRegistry::test_package_exports_planning_phase PASSED [ 84%]
+tests/unit/phases/test_phase_abc.py::TestPhaseRegistry::test_package_exports_phase_abc PASSED [ 92%]
+tests/unit/phases/test_phase_abc.py::TestPhaseRegistry::test_package_exports_phase_not_implemented_error PASSED [100%]
+
+============================== 13 passed in 0.02s ==============================

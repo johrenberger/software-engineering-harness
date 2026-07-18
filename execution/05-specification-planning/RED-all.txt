@@ -1,0 +1,88 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collected 0 items / 7 errors
+
+==================================== ERRORS ====================================
+__________ ERROR collecting tests/unit/domain/test_requirement_ids.py __________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/domain/test_requirement_ids.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/domain/test_requirement_ids.py:22: in <module>
+    from seharness.domain.requirements import (
+E   ModuleNotFoundError: No module named 'seharness.domain.requirements'
+__________ ERROR collecting tests/unit/artifacts/test_traceability.py __________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/artifacts/test_traceability.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/artifacts/test_traceability.py:22: in <module>
+    from seharness.artifacts.traceability import (
+E   ModuleNotFoundError: No module named 'seharness.artifacts.traceability'
+________ ERROR collecting tests/unit/artifacts/test_plan_validation.py _________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/artifacts/test_plan_validation.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/artifacts/test_plan_validation.py:18: in <module>
+    from seharness.artifacts.traceability import (
+E   ModuleNotFoundError: No module named 'seharness.artifacts.traceability'
+________ ERROR collecting tests/unit/artifacts/test_dependency_graph.py ________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/artifacts/test_dependency_graph.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/artifacts/test_dependency_graph.py:20: in <module>
+    from seharness.artifacts.traceability import (
+E   ModuleNotFoundError: No module named 'seharness.artifacts.traceability'
+_________ ERROR collecting tests/unit/artifacts/test_allowed_paths.py __________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/artifacts/test_allowed_paths.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/artifacts/test_allowed_paths.py:18: in <module>
+    from seharness.artifacts.traceability import (
+E   ModuleNotFoundError: No module named 'seharness.artifacts.traceability'
+_ ERROR collecting tests/unit/artifacts/test_traceability_mutation_killers.py __
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/artifacts/test_traceability_mutation_killers.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/artifacts/test_traceability_mutation_killers.py:18: in <module>
+    from seharness.artifacts.traceability import (
+E   ModuleNotFoundError: No module named 'seharness.artifacts.traceability'
+_____________ ERROR collecting tests/unit/phases/test_phase_abc.py _____________
+ImportError while importing test module '/data/.openclaw/workspace/software-engineering-harness/tests/unit/phases/test_phase_abc.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/phases/test_phase_abc.py:21: in <module>
+    from seharness.phases.base import Phase, PhaseNotImplementedError
+E   ModuleNotFoundError: No module named 'seharness.phases.base'
+=========================== short test summary info ============================
+ERROR tests/unit/domain/test_requirement_ids.py
+ERROR tests/unit/artifacts/test_traceability.py
+ERROR tests/unit/artifacts/test_plan_validation.py
+ERROR tests/unit/artifacts/test_dependency_graph.py
+ERROR tests/unit/artifacts/test_allowed_paths.py
+ERROR tests/unit/artifacts/test_traceability_mutation_killers.py
+ERROR tests/unit/phases/test_phase_abc.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 7 errors during collection !!!!!!!!!!!!!!!!!!!!
+============================== 7 errors in 0.14s ===============================

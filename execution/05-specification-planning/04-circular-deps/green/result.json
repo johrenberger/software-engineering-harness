@@ -1,0 +1,12 @@
+{
+  "behavior": "04-circular-deps",
+  "test_file": "tests/unit/artifacts/test_dependency_graph.py",
+  "summary": "circular task dependencies fail",
+  "phase": "green",
+  "passed": 10,
+  "failed": 0,
+  "duration_s": 0.12,
+  "command": "pytest tests/unit/artifacts/test_dependency_graph.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T19:18:02.140864+00:00"
+}

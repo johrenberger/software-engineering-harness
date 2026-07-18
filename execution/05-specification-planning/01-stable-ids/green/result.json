@@ -1,0 +1,12 @@
+{
+  "behavior": "01-stable-ids",
+  "test_file": "tests/unit/domain/test_requirement_ids.py",
+  "summary": "requirements receive stable IDs (FR-/NFR-/SCN-)",
+  "phase": "green",
+  "passed": 20,
+  "failed": 0,
+  "duration_s": 0.1,
+  "command": "pytest tests/unit/domain/test_requirement_ids.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T19:18:00.454595+00:00"
+}
