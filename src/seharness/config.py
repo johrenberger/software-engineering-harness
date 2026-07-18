@@ -16,7 +16,7 @@ Configuration precedence (highest wins):
 
 from __future__ import annotations
 
-from typing import Literal, cast
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -26,6 +26,14 @@ ProviderName = Literal["minimax", "codex"]
 # Provider IDs we know about today. New providers must be added here AND in
 # ``ModelsConfig`` routing defaults before they can be used in routing.
 _KNOWN_PROVIDERS: tuple[ProviderName, ...] = ("minimax", "codex")
+
+# Default routing fallback table. The constant is module-level so mypy can
+# infer the precise literal element type without a runtime cast (which would
+# produce a mutmut-false-positive equivalent mutant).
+_DEFAULT_FALLBACK: dict[ProviderName, ProviderName] = {
+    "minimax": "codex",
+    "codex": "minimax",
+}
 
 
 class _StrictModel(BaseModel):
@@ -62,9 +70,7 @@ class ModelsConfig(_StrictModel):
     remediation: ProviderName = "codex"
     review: ProviderName = "minimax"
     fallback: dict[ProviderName, ProviderName] = Field(
-        default_factory=lambda: cast(
-            "dict[ProviderName, ProviderName]", {"minimax": "codex", "codex": "minimax"}
-        )
+        default_factory=lambda: dict(_DEFAULT_FALLBACK)
     )
 
 

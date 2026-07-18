@@ -44,9 +44,11 @@ mutmut-report/
 # uv (lockfile is committed; see pyproject.toml tooling)
 # uv.lock
 
-# Local artifacts (git-ignored at runtime; local-only for the harness)
+# Local artifacts (git-ignored at runtime; agent checkpoints within
+# .openclaw-runs/ are EXPLICITLY tracked via `git add -f` when needed)
 .harness-runs/
-.openclaw-runs/
+.openclaw-runs/*.log
+.openclaw-runs/.cache/
 *.log
 # Local config overrides — operators copy this to a real location
 examples/harness.local.yaml
