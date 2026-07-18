@@ -1,0 +1,12 @@
+{
+  "behavior": "03-regression-test-first",
+  "test_file": "tests/unit/validation/test_regression_test_first.py",
+  "summary": "regression defects require a failing test first",
+  "phase": "green",
+  "passed": 6,
+  "failed": 0,
+  "duration_s": 0.08,
+  "command": "pytest tests/unit/validation/test_regression_test_first.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T20:11:11.034938+00:00"
+}

@@ -1,0 +1,12 @@
+{
+  "behavior": "retry-budgets",
+  "test_file": "tests/unit/validation/test_retries_exhausted.py",
+  "summary": "slice-7 retry-budgets tests",
+  "phase": "green",
+  "passed": 12,
+  "failed": 0,
+  "duration_s": 0.09,
+  "command": "pytest tests/unit/validation/test_retries_exhausted.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T20:10:55.976606+00:00"
+}

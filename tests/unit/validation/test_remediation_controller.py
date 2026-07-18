@@ -20,23 +20,30 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 
 class TestRemediationControllerService:
     """``RemediationController.request_fix`` returns a result object."""
 
-    def test_request_fix_returns_result(self, tmp_path: Path) -> None:
-        from seharness.validation.remediation import (
+    def test_request_fix_eventually_succeeds(self, tmp_path: Path) -> None:
+        from seharness.validation.remediation import (  # noqa: PLC0415
             RemediationController,
             RemediationResult,
         )
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
-        def fake_runner(cmd: str) -> CommandResult:
+        # Runner always fails on the validation probe, then succeeds on
+        # the first real attempt.
+        calls = {"probe": True}
+
+        def fake_runner(cmd: str, evidence: object) -> CommandResult:
+            is_probe = calls["probe"]
+            calls["probe"] = False
             return CommandResult(
-                command=cmd, exit_code=1, stdout="",
-                stderr="AssertionError: regression\n", duration_s=0.42,
+                command=cmd,
+                exit_code=1 if is_probe else 0,
+                stdout="",
+                stderr="AssertionError\n" if is_probe else "",
+                duration_s=0.42,
             )
 
         controller = RemediationController(
@@ -52,19 +59,22 @@ class TestRemediationControllerService:
         assert result.exhausted is False
 
     def test_request_fix_with_retry_then_success(self, tmp_path: Path) -> None:
-        from seharness.validation.remediation import (
+        from seharness.validation.remediation import (  # noqa: PLC0415
             RemediationController,
             RemediationResult,
         )
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
         attempts = {"count": 0}
 
-        def fake_runner(cmd: str) -> CommandResult:
+        def fake_runner(cmd: str, evidence: object) -> CommandResult:
             attempts["count"] += 1
             return CommandResult(
-                command=cmd, exit_code=0 if attempts["count"] >= 2 else 1,
-                stdout="", stderr="", duration_s=0.42,
+                command=cmd,
+                exit_code=0 if attempts["count"] >= 2 else 1,
+                stdout="",
+                stderr="",
+                duration_s=0.42,
             )
 
         controller = RemediationController(
@@ -76,7 +86,9 @@ class TestRemediationControllerService:
             regression_test="tests/unit/test_x.py::test_regression",
         )
         assert isinstance(result, RemediationResult)
-        assert result.attempts_made == 2
+        # Validation probe failed once; the first real attempt
+        # succeeded. So attempts_made == 1, not 2.
+        assert result.attempts_made == 1
         assert result.exhausted is False
 
 
@@ -84,7 +96,7 @@ class TestRemediationResultShape:
     """``RemediationResult`` exposes the documented fields."""
 
     def test_result_has_required_fields(self) -> None:
-        from seharness.validation.remediation import RemediationResult
+        from seharness.validation.remediation import RemediationResult  # noqa: PLC0415
 
         r = RemediationResult(
             regression_test="t",
@@ -102,19 +114,26 @@ class TestRemediationUsesBoundedEvidence:
     """The controller passes a ``BoundedEvidence`` to the runner."""
 
     def test_runner_receives_bounded_evidence(self, tmp_path: Path) -> None:
-        from seharness.validation.remediation import (
-            RemediationController,
+        from seharness.validation.remediation import (  # noqa: PLC0415
             BoundedEvidence,
+            RemediationController,
         )
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
         captured: dict[str, object] = {}
 
+        # First call (validation probe) fails; subsequent calls succeed.
+        calls = {"n": 0}
+
         def fake_runner(cmd: str, evidence: BoundedEvidence) -> CommandResult:
+            calls["n"] += 1
             captured["evidence"] = evidence
             return CommandResult(
-                command=cmd, exit_code=1, stdout="",
-                stderr="AssertionError\n", duration_s=0.42,
+                command=cmd,
+                exit_code=1 if calls["n"] == 1 else 0,
+                stdout="",
+                stderr="AssertionError\n" if calls["n"] == 1 else "",
+                duration_s=0.42,
             )
 
         controller = RemediationController(

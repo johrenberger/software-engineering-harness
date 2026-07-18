@@ -31,26 +31,19 @@ class TestWeakeningDetector:
     """The detector analyses a diff and flags weakenings."""
 
     def test_deleted_assertion_flagged(self) -> None:
-        from seharness.validation.weakening import (
+        from seharness.validation.weakening import (  # noqa: PLC0415
             TestWeakeningDetector,
             WeakeningKind,
         )
 
-        before = (
-            "def test_thing() -> None:\n"
-            "    assert foo() == 1\n"
-            "    assert bar() == 2\n"
-        )
-        after = (
-            "def test_thing() -> None:\n"
-            "    assert foo() == 1\n"
-        )
+        before = "def test_thing() -> None:\n    assert foo() == 1\n    assert bar() == 2\n"
+        after = "def test_thing() -> None:\n    assert foo() == 1\n"
         detector = TestWeakeningDetector()
         weakenings = detector.detect(before=before, after=after, path="t.py")
         assert any(w.kind == WeakeningKind.DELETED_ASSERTION for w in weakenings)
 
     def test_assertion_loosened_to_skip_flagged(self) -> None:
-        from seharness.validation.weakening import (
+        from seharness.validation.weakening import (  # noqa: PLC0415
             TestWeakeningDetector,
             WeakeningKind,
         )
@@ -62,7 +55,7 @@ class TestWeakeningDetector:
         assert any(w.kind == WeakeningKind.SKIP_REPLACES_ASSERTION for w in weakenings)
 
     def test_assertion_loosened_to_true_flagged(self) -> None:
-        from seharness.validation.weakening import (
+        from seharness.validation.weakening import (  # noqa: PLC0415
             TestWeakeningDetector,
             WeakeningKind,
         )
@@ -74,32 +67,28 @@ class TestWeakeningDetector:
         assert any(w.kind == WeakeningKind.TRIVIAL_ASSERTION for w in weakenings)
 
     def test_added_assertion_not_flagged(self) -> None:
-        from seharness.validation.weakening import TestWeakeningDetector
+        from seharness.validation.weakening import TestWeakeningDetector  # noqa: PLC0415
 
         before = "def test_thing() -> None:\n    assert foo() == 1\n"
-        after = (
-            "def test_thing() -> None:\n"
-            "    assert foo() == 1\n"
-            "    assert bar() == 2\n"
-        )
+        after = "def test_thing() -> None:\n    assert foo() == 1\n    assert bar() == 2\n"
         detector = TestWeakeningDetector()
         weakenings = detector.detect(before=before, after=after, path="t.py")
-        assert weakenings == []
+        assert tuple(weakenings) == ()
 
     def test_unchanged_test_not_flagged(self) -> None:
-        from seharness.validation.weakening import TestWeakeningDetector
+        from seharness.validation.weakening import TestWeakeningDetector  # noqa: PLC0415
 
         text = "def test_thing() -> None:\n    assert foo() == 1\n"
         detector = TestWeakeningDetector()
         weakenings = detector.detect(before=text, after=text, path="t.py")
-        assert weakenings == []
+        assert tuple(weakenings) == ()
 
 
 class TestWeakeningKindEnum:
     """``WeakeningKind`` is a closed enum."""
 
     def test_weakening_kind_values(self) -> None:
-        from seharness.validation.weakening import WeakeningKind
+        from seharness.validation.weakening import WeakeningKind  # noqa: PLC0415
 
         assert WeakeningKind.DELETED_ASSERTION.value == "deleted_assertion"
         assert WeakeningKind.SKIP_REPLACES_ASSERTION.value == "skip_replaces_assertion"
@@ -112,7 +101,7 @@ class TestWeakeningShape:
     """``Weakening`` record carries enough info to reject."""
 
     def test_weakening_carries_path_and_line(self) -> None:
-        from seharness.validation.weakening import (
+        from seharness.validation.weakening import (  # noqa: PLC0415
             TestWeakeningDetector,
             Weakening,
         )
@@ -133,17 +122,20 @@ class TestRemediationRefusesWeakening:
     """The remediation controller refuses to apply a weakening diff."""
 
     def test_weakening_diff_rejected(self, tmp_path: Path) -> None:
-        from seharness.validation.weakening import TestWeakeningDetector
-        from seharness.validation.remediation import (
+        from seharness.validation.remediation import (  # noqa: PLC0415
             RemediationController,
             WeakeningDetected,
         )
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
+        from seharness.validation.weakening import TestWeakeningDetector  # noqa: PLC0415
 
-        def fake_runner(cmd: str) -> CommandResult:
+        def fake_runner(cmd: str, evidence: object) -> CommandResult:
             return CommandResult(
-                command=cmd, exit_code=1, stdout="",
-                stderr="AssertionError\n", duration_s=0.42,
+                command=cmd,
+                exit_code=1,
+                stdout="",
+                stderr="AssertionError\n",
+                duration_s=0.42,
             )
 
         controller = RemediationController(
@@ -152,11 +144,7 @@ class TestRemediationRefusesWeakening:
             weakening_detector=TestWeakeningDetector(),
         )
 
-        before = (
-            "def test_regression() -> None:\n"
-            "    assert foo() == 1\n"
-            "    assert foo() == 2\n"
-        )
+        before = "def test_regression() -> None:\n    assert foo() == 1\n    assert foo() == 2\n"
         after = "def test_regression() -> None:\n    assert foo() == 1\n"
 
         with pytest.raises(WeakeningDetected):
@@ -171,14 +159,17 @@ class TestRemediationAcceptsNonWeakening:
     """A non-weakening diff is accepted."""
 
     def test_non_weakening_diff_accepted(self, tmp_path: Path) -> None:
-        from seharness.validation.weakening import TestWeakeningDetector
-        from seharness.validation.remediation import RemediationController
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.remediation import RemediationController  # noqa: PLC0415
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
+        from seharness.validation.weakening import TestWeakeningDetector  # noqa: PLC0415
 
-        def fake_runner(cmd: str) -> CommandResult:
+        def fake_runner(cmd: str, evidence: object) -> CommandResult:
             return CommandResult(
-                command=cmd, exit_code=1, stdout="",
-                stderr="AssertionError\n", duration_s=0.42,
+                command=cmd,
+                exit_code=1,
+                stdout="",
+                stderr="AssertionError\n",
+                duration_s=0.42,
             )
 
         controller = RemediationController(
@@ -187,11 +178,7 @@ class TestRemediationAcceptsNonWeakening:
             weakening_detector=TestWeakeningDetector(),
         )
 
-        text = (
-            "def test_regression() -> None:\n"
-            "    assert foo() == 1\n"
-            "    assert foo() == 2\n"
-        )
+        text = "def test_regression() -> None:\n    assert foo() == 1\n    assert foo() == 2\n"
 
         # No change \u2192 no weakening.
         controller.apply_diff(path="tests/unit/test_thing.py", before=text, after=text)

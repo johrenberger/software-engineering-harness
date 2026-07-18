@@ -1,0 +1,12 @@
+{
+  "behavior": "04-retries-exhausted",
+  "test_file": "tests/unit/validation/test_retries_exhausted.py",
+  "summary": "exhausted retries fail the run",
+  "phase": "green",
+  "passed": 12,
+  "failed": 0,
+  "duration_s": 0.08,
+  "command": "pytest tests/unit/validation/test_retries_exhausted.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T20:11:11.427746+00:00"
+}

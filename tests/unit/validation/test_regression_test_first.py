@@ -26,27 +26,27 @@ class TestRegressionTestRequired:
     """The remediation controller rejects calls without a regression test."""
 
     def test_no_regression_test_raises(self) -> None:
-        from seharness.validation.remediation import (
-            RemediationController,
+        from seharness.validation.remediation import (  # noqa: PLC0415
             RegressionTestRequired,
+            RemediationController,
         )
 
         controller = RemediationController(
             allowed_paths=("src/",),
-            runner=lambda cmd: None,  # type: ignore[arg-type]
+            runner=lambda cmd, evidence: None,  # type: ignore[arg-type]
         )
         with pytest.raises(RegressionTestRequired):
             controller.request_fix(regression_test=None)  # type: ignore[arg-type]
 
     def test_regression_test_path_must_be_in_allowed_paths(self, tmp_path: Path) -> None:
-        from seharness.validation.remediation import (
-            RemediationController,
+        from seharness.validation.remediation import (  # noqa: PLC0415
             RegressionTestRequired,
+            RemediationController,
         )
 
         controller = RemediationController(
             allowed_paths=("src/",),
-            runner=lambda cmd: None,  # type: ignore[arg-type]
+            runner=lambda cmd, evidence: None,  # type: ignore[arg-type]
         )
         # test lives outside allowed paths
         with pytest.raises(RegressionTestRequired):
@@ -57,18 +57,21 @@ class TestRegressionTestMustFail:
     """The regression test must currently FAIL."""
 
     def test_passing_regression_test_rejected(self, tmp_path: Path) -> None:
-        from seharness.validation.remediation import (
-            RemediationController,
+        from seharness.validation.remediation import (  # noqa: PLC0415
             RegressionTestNotFailing,
+            RemediationController,
         )
 
-        def fake_runner(cmd: str) -> object:
+        def fake_runner(cmd: str, evidence: object) -> object:
             # Return a passing command result
-            from seharness.validation.runner import CommandResult
+            from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
             return CommandResult(
-                command=cmd, exit_code=0, stdout="1 passed\n",
-                stderr="", duration_s=0.42,
+                command=cmd,
+                exit_code=0,
+                stdout="1 passed\n",
+                stderr="",
+                duration_s=0.42,
             )
 
         controller = RemediationController(
@@ -85,55 +88,69 @@ class TestRegressionTestAccepted:
     """A failing regression test is accepted."""
 
     def test_failing_regression_test_accepted(self) -> None:
-        from seharness.validation.remediation import RemediationController
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.remediation import RemediationController  # noqa: PLC0415
+        from seharness.validation.retry import RetriesExhausted  # noqa: PLC0415
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
-        def fake_runner(cmd: str) -> CommandResult:
+        def fake_runner(cmd: str, evidence: object) -> CommandResult:
             return CommandResult(
-                command=cmd, exit_code=1, stdout="",
-                stderr="AssertionError: regression\n", duration_s=0.42,
+                command=cmd,
+                exit_code=1,
+                stdout="",
+                stderr="AssertionError: regression\n",
+                duration_s=0.42,
             )
 
         controller = RemediationController(
             allowed_paths=("tests/",),
             runner=fake_runner,
         )
-        # Should not raise.
-        controller.request_fix(
-            regression_test="tests/unit/test_thing.py::test_regression",
-        )
+        # Test is currently failing, so validation passes; the
+        # retry budget then runs and exhausts. The point of this
+        # test is: validation did NOT raise RegressionTestRequired.
+        with pytest.raises(RetriesExhausted):
+            controller.request_fix(
+                regression_test="tests/unit/test_thing.py::test_regression",
+            )
 
 
 class TestRegressionTestPathValidation:
     """The regression test path must be well-formed."""
 
     def test_relative_path_accepted(self) -> None:
-        from seharness.validation.remediation import RemediationController
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.remediation import RemediationController  # noqa: PLC0415
+        from seharness.validation.retry import RetriesExhausted  # noqa: PLC0415
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
-        def fake_runner(cmd: str) -> CommandResult:
+        def fake_runner(cmd: str, evidence: object) -> CommandResult:
             return CommandResult(
-                command=cmd, exit_code=1, stdout="",
-                stderr="AssertionError\n", duration_s=0.42,
+                command=cmd,
+                exit_code=1,
+                stdout="",
+                stderr="AssertionError\n",
+                duration_s=0.42,
             )
 
         controller = RemediationController(
             allowed_paths=("tests/",),
             runner=fake_runner,
         )
-        controller.request_fix(
-            regression_test="tests/unit/test_thing.py::test_regression",
-        )
+        # Validation passes (path is in allowed_paths); retries
+        # then exhaust.
+        with pytest.raises(RetriesExhausted):
+            controller.request_fix(
+                regression_test="tests/unit/test_thing.py::test_regression",
+            )
 
     def test_empty_string_rejected(self) -> None:
-        from seharness.validation.remediation import (
-            RemediationController,
+        from seharness.validation.remediation import (  # noqa: PLC0415
             RegressionTestRequired,
+            RemediationController,
         )
 
         controller = RemediationController(
             allowed_paths=("tests/",),
-            runner=lambda cmd: None,  # type: ignore[arg-type]
+            runner=lambda cmd, evidence: None,  # type: ignore[arg-type]
         )
         with pytest.raises(RegressionTestRequired):
             controller.request_fix(regression_test="")

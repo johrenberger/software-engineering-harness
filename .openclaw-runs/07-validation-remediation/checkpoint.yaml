@@ -1,0 +1,89 @@
+phase: green
+status: in_progress
+slice: 07-validation-remediation
+branch: agent/07-validation-remediation
+base_commit: 9c42197
+total_tests: 668
+slice_7_tests: 68
+slice_7_new_tests:
+  test_failures_normalized.py: 14
+  test_bounded_evidence.py: 5
+  test_regression_test_first.py: 6
+  test_retries_exhausted.py: 12
+  test_weakening_tests.py: 9
+  test_remediation_controller.py: 4
+  test_validation_mutation_killers.py: 11
+  test_validation_runner.py: 7
+behaviors:
+  01-failures-normalized:
+    summary: "failed commands create normalized failures"
+    red_status: failing-collection
+    green_status: 14-passed
+    test_file: tests/unit/validation/test_failures_normalized.py
+  02-bounded-evidence:
+    summary: "remediation receives only bounded evidence"
+    red_status: failing-collection
+    green_status: 5-passed
+    test_file: tests/unit/validation/test_bounded_evidence.py
+  03-regression-test-first:
+    summary: "regression defects require a failing test first"
+    red_status: failing-collection
+    green_status: 6-passed
+    test_file: tests/unit/validation/test_regression_test_first.py
+  04-retries-exhausted:
+    summary: "exhausted retries fail the run"
+    red_status: failing-collection
+    green_status: 12-passed
+    test_file: tests/unit/validation/test_retries_exhausted.py
+  05-weakening-tests:
+    summary: "weakening tests is detected"
+    red_status: failing-collection
+    green_status: 9-passed
+    test_file: tests/unit/validation/test_weakening_tests.py
+  remediation:
+    summary: "RemediationController service boundary"
+    red_status: failing-collection
+    green_status: 4-passed
+    test_file: tests/unit/validation/test_remediation_controller.py
+  mutation-killers:
+    summary: "Pydantic ConfigDict killers for slice-7 models"
+    red_status: n/a
+    green_status: 11-passed
+    test_file: tests/unit/validation/test_validation_mutation_killers.py
+  runner:
+    summary: "ValidationRunner protocol + SubprocessRunner"
+    red_status: failing-collection
+    green_status: 7-passed
+    test_file: tests/unit/validation/test_validation_runner.py
+mutation:
+  tool: mutmut-2.5.1
+  paths_mutated:
+    - src/seharness/validation/runner.py
+    - src/seharness/validation/classifier.py
+    - src/seharness/validation/remediation.py
+    - src/seharness/validation/weakening.py
+    - src/seharness/validation/retry.py
+  totals:
+    mutants: 32
+    ok_killed: 21
+    bad_survived: 7
+    bad_timeout: 4
+    kill_rate_pct: 65.62
+    meaningful_kill_rate_pct: 84.0
+  equivalent_mutants:
+    rationale: "4 exception message strings, 1 @property decorator, 2 comparison ops (<= → <); 4 timeouts are slow-equivalents in retry.py (not real survivors)"
+    count: 11
+decisions:
+  retry_budget: per-task RetryBudget keyed by task_id
+  weakening_detection: line-level heuristic (5 patterns)
+  runner_protocol: Callable[[Path, Path], None] inherited from slice 6
+  bounded_evidence_caps: 4KB-per-file, 32KB-total
+quality_gates:
+  ruff_format: clean
+  ruff_check: clean
+  mypy_strict: 41-files-clean
+  bandit: clean
+  pip_audit: clean
+  pytest: 668/668
+  mutation: 21/32 (65.62% raw / 84% on meaningful mutants)
+evidence_root: execution/07-validation-remediation

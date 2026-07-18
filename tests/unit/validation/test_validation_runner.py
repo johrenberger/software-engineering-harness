@@ -23,7 +23,7 @@ class TestValidationRunnerProtocol:
     """The runner protocol is documented and stable."""
 
     def test_runner_has_run_method(self) -> None:
-        from seharness.validation.runner import ValidationRunner
+        from seharness.validation.runner import ValidationRunner  # noqa: PLC0415
 
         assert hasattr(ValidationRunner, "run")
 
@@ -33,33 +33,33 @@ class TestSubprocessRunner:
     ``CommandResult``."""
 
     def test_subprocess_runner_invokes_command(self, tmp_path: Path) -> None:
-        from seharness.validation.runner import (
-            SubprocessRunner,
+        from seharness.validation.runner import (  # noqa: PLC0415
             CommandResult,
+            SubprocessRunner,
         )
 
         runner = SubprocessRunner()
         result = runner.run(
-            f"true",  # `true` exits 0 on linux/macos
+            "true",  # `true` exits 0 on linux/macos
         )
         assert isinstance(result, CommandResult)
         assert result.exit_code == 0
 
     def test_subprocess_runner_captures_exit_code(self) -> None:
-        from seharness.validation.runner import (
-            SubprocessRunner,
+        from seharness.validation.runner import (  # noqa: PLC0415
             CommandResult,
+            SubprocessRunner,
         )
 
         runner = SubprocessRunner()
         result = runner.run(
-            f"false",  # `false` exits 1 on linux/macos
+            "false",  # `false` exits 1 on linux/macos
         )
         assert isinstance(result, CommandResult)
         assert result.exit_code != 0
 
     def test_subprocess_runner_measures_duration(self) -> None:
-        from seharness.validation.runner import (
+        from seharness.validation.runner import (  # noqa: PLC0415
             SubprocessRunner,
         )
 
@@ -72,20 +72,27 @@ class TestCommandResultValidation:
     """``CommandResult`` rejects impossible values."""
 
     def test_command_result_rejects_negative_duration(self) -> None:
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
         with pytest.raises(Exception):  # noqa: B017
             CommandResult(
-                command="t", exit_code=1, stdout="", stderr="",
+                command="t",
+                exit_code=1,
+                stdout="",
+                stderr="",
                 duration_s=-1.0,
             )
 
     def test_command_result_accepts_zero_duration(self) -> None:
         """Boundary value: ``ge=0`` allows 0."""
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
         r = CommandResult(
-            command="t", exit_code=1, stdout="", stderr="", duration_s=0,
+            command="t",
+            exit_code=1,
+            stdout="",
+            stderr="",
+            duration_s=0,
         )
         assert r.duration_s == 0
 
@@ -94,8 +101,9 @@ class TestFailureKindDeterminism:
     """``FailureKind`` is a StrEnum (deterministic string values)."""
 
     def test_failure_kind_round_trip(self) -> None:
-        from seharness.validation.runner import FailureKind
+        from seharness.validation.runner import FailureKind  # noqa: PLC0415
 
         for k in FailureKind:
             assert FailureKind(k.value) == k
-            assert str(k) == f"FailureKind.{k.name}"
+            assert str(k) == k.value
+            assert k.name in repr(k)

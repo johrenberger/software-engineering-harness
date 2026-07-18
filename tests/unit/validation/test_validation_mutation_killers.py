@@ -25,22 +25,29 @@ class TestCommandResultKillers:
     """``CommandResult`` is frozen."""
 
     def test_command_result_is_frozen(self) -> None:
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
         r = CommandResult(
-            command="pytest t", exit_code=1, stdout="", stderr="",
+            command="pytest t",
+            exit_code=1,
+            stdout="",
+            stderr="",
             duration_s=0.42,
         )
         with pytest.raises(Exception):  # noqa: B017
             r.exit_code = 0  # type: ignore[misc]
 
     def test_command_result_rejects_extra_field(self) -> None:
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
         with pytest.raises(Exception):  # noqa: B017
             CommandResult(
-                command="pytest t", exit_code=1, stdout="", stderr="",
-                duration_s=0.42, not_a_field="oops",
+                command="pytest t",
+                exit_code=1,
+                stdout="",
+                stderr="",
+                duration_s=0.42,
+                not_a_field="oops",
             )
 
 
@@ -48,43 +55,58 @@ class TestNormalizedFailureKillers:
     """``NormalizedFailure`` is frozen + has closeable ``kind`` enum."""
 
     def test_normalized_failure_is_frozen(self) -> None:
-        from seharness.validation.runner import NormalizedFailure, FailureKind
+        from seharness.validation.runner import FailureKind, NormalizedFailure  # noqa: PLC0415
 
         nf = NormalizedFailure(
-            kind=FailureKind.ASSERTION, exit_code=1, command="t",
-            message="m", source="stderr", duration_s=0.42,
+            kind=FailureKind.ASSERTION,
+            exit_code=1,
+            command="t",
+            message="m",
+            source="stderr",
+            duration_s=0.42,
         )
         with pytest.raises(Exception):  # noqa: B017
             nf.exit_code = 0  # type: ignore[misc]
 
     def test_normalized_failure_rejects_unknown_kind(self) -> None:
-        from seharness.validation.runner import NormalizedFailure
+        from seharness.validation.runner import NormalizedFailure  # noqa: PLC0415
 
         with pytest.raises(Exception):  # noqa: B017
             NormalizedFailure(
                 kind="vibes",  # type: ignore[arg-type]
-                exit_code=1, command="t", message="m", source="stderr",
+                exit_code=1,
+                command="t",
+                message="m",
+                source="stderr",
                 duration_s=0.42,
             )
 
     def test_normalized_failure_accepts_zero_duration(self) -> None:
         """Boundary value: ``ge=0`` allows 0. Mutation ``ge=0\u2192ge=1``
         must be killed here."""
-        from seharness.validation.runner import NormalizedFailure, FailureKind
+        from seharness.validation.runner import FailureKind, NormalizedFailure  # noqa: PLC0415
 
         nf = NormalizedFailure(
-            kind=FailureKind.ASSERTION, exit_code=1, command="t",
-            message="m", source="stderr", duration_s=0,
+            kind=FailureKind.ASSERTION,
+            exit_code=1,
+            command="t",
+            message="m",
+            source="stderr",
+            duration_s=0,
         )
         assert nf.duration_s == 0
 
     def test_normalized_failure_rejects_negative_duration(self) -> None:
-        from seharness.validation.runner import NormalizedFailure, FailureKind
+        from seharness.validation.runner import FailureKind, NormalizedFailure  # noqa: PLC0415
 
         with pytest.raises(Exception):  # noqa: B017
             NormalizedFailure(
-                kind=FailureKind.ASSERTION, exit_code=1, command="t",
-                message="m", source="stderr", duration_s=-1.0,
+                kind=FailureKind.ASSERTION,
+                exit_code=1,
+                command="t",
+                message="m",
+                source="stderr",
+                duration_s=-1.0,
             )
 
 
@@ -92,7 +114,7 @@ class TestBoundedEvidenceKillers:
     """``BoundedEvidence`` is frozen + extra-forbid."""
 
     def test_bounded_evidence_is_frozen(self) -> None:
-        from seharness.validation.remediation import BoundedEvidence
+        from seharness.validation.remediation import BoundedEvidence  # noqa: PLC0415
 
         env = BoundedEvidence(
             failure=None,  # type: ignore[arg-type]
@@ -104,7 +126,7 @@ class TestBoundedEvidenceKillers:
             env.allowed_paths = ()  # type: ignore[misc]
 
     def test_bounded_evidence_rejects_extra_field(self) -> None:
-        from seharness.validation.remediation import BoundedEvidence
+        from seharness.validation.remediation import BoundedEvidence  # noqa: PLC0415
 
         with pytest.raises(Exception):  # noqa: B017
             BoundedEvidence(
@@ -120,11 +142,13 @@ class TestRemediationResultKillers:
     """``RemediationResult`` invariants."""
 
     def test_remediation_result_rejects_extra_field(self) -> None:
-        from seharness.validation.remediation import RemediationResult
+        from seharness.validation.remediation import RemediationResult  # noqa: PLC0415
 
         with pytest.raises(Exception):  # noqa: B017
             RemediationResult(
-                regression_test="t", attempts_made=1, exhausted=False,
+                regression_test="t",
+                attempts_made=1,
+                exhausted=False,
                 bounded_evidence=None,  # type: ignore[arg-type]
                 last_command_result=None,  # type: ignore[arg-type]
                 surprise=True,
@@ -135,14 +159,14 @@ class TestWeakeningKillers:
     """``Weakening`` record + ``WeakeningKind`` invariants."""
 
     def test_weakening_kind_enum_is_closed(self) -> None:
-        from seharness.validation.weakening import WeakeningKind
+        from seharness.validation.weakening import WeakeningKind  # noqa: PLC0415
 
         # String values that aren't documented must NOT auto-coerce.
         with pytest.raises(Exception):  # noqa: B017
             WeakeningKind("made_up_kind")
 
     def test_weakening_carries_line_number(self) -> None:
-        from seharness.validation.weakening import (
+        from seharness.validation.weakening import (  # noqa: PLC0415
             TestWeakeningDetector,
             Weakening,
             WeakeningKind,

@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # CommandResult shape
 # ---------------------------------------------------------------------------
@@ -29,7 +28,7 @@ class TestCommandResultShape:
     """``CommandResult`` is the input to the failure classifier."""
 
     def test_command_result_carries_required_fields(self) -> None:
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
         r = CommandResult(
             command="pytest tests/unit/foo.py --no-cov -q",
@@ -54,7 +53,7 @@ class TestNormalizedFailureShape:
     """``NormalizedFailure`` carries stable fields."""
 
     def test_normalized_failure_carries_required_fields(self) -> None:
-        from seharness.validation.runner import NormalizedFailure, FailureKind
+        from seharness.validation.runner import FailureKind, NormalizedFailure  # noqa: PLC0415
 
         nf = NormalizedFailure(
             kind=FailureKind.ASSERTION,
@@ -76,7 +75,7 @@ class TestFailureKindEnum:
     """``FailureKind`` is a closed StrEnum."""
 
     def test_failure_kind_values_are_stable_strings(self) -> None:
-        from seharness.validation.runner import FailureKind
+        from seharness.validation.runner import FailureKind  # noqa: PLC0415
 
         assert FailureKind.ASSERTION.value == "assertion"
         assert FailureKind.COLLECTION_ERROR.value == "collection_error"
@@ -85,11 +84,13 @@ class TestFailureKindEnum:
         assert FailureKind.GENERIC_NONZERO.value == "generic_nonzero"
 
     def test_failure_kind_is_str_enum(self) -> None:
-        from seharness.validation.runner import FailureKind
+        from seharness.validation.runner import FailureKind  # noqa: PLC0415
 
         # StrEnum: equality with the underlying string is true.
         assert FailureKind.ASSERTION == "assertion"
-        assert str(FailureKind.TIMEOUT) == "FailureKind.TIMEOUT"
+        assert isinstance(FailureKind.ASSERTION, str)
+        # str() returns the underlying value.
+        assert str(FailureKind.TIMEOUT) == "timeout"
 
 
 # ---------------------------------------------------------------------------
@@ -101,8 +102,8 @@ class TestAssertionClassification:
     """Assertion failures \u2192 ``ASSERTION``."""
 
     def test_assertion_in_stderr(self) -> None:
-        from seharness.validation.classifier import FailureClassifier
-        from seharness.validation.runner import CommandResult, FailureKind
+        from seharness.validation.classifier import FailureClassifier  # noqa: PLC0415
+        from seharness.validation.runner import CommandResult, FailureKind  # noqa: PLC0415
 
         result = CommandResult(
             command="pytest t",
@@ -120,8 +121,8 @@ class TestCollectionErrorClassification:
     """Import / collection errors \u2192 ``COLLECTION_ERROR``."""
 
     def test_import_error_in_stderr(self) -> None:
-        from seharness.validation.classifier import FailureClassifier
-        from seharness.validation.runner import CommandResult, FailureKind
+        from seharness.validation.classifier import FailureClassifier  # noqa: PLC0415
+        from seharness.validation.runner import CommandResult, FailureKind  # noqa: PLC0415
 
         result = CommandResult(
             command="pytest t",
@@ -134,8 +135,8 @@ class TestCollectionErrorClassification:
         assert nf.kind == FailureKind.COLLECTION_ERROR
 
     def test_collection_error_in_stdout(self) -> None:
-        from seharness.validation.classifier import FailureClassifier
-        from seharness.validation.runner import CommandResult, FailureKind
+        from seharness.validation.classifier import FailureClassifier  # noqa: PLC0415
+        from seharness.validation.runner import CommandResult, FailureKind  # noqa: PLC0415
 
         result = CommandResult(
             command="pytest t",
@@ -152,8 +153,8 @@ class TestTimeoutClassification:
     """Timeouts \u2192 ``TIMEOUT``."""
 
     def test_timeout_marker_in_output(self) -> None:
-        from seharness.validation.classifier import FailureClassifier
-        from seharness.validation.runner import CommandResult, FailureKind
+        from seharness.validation.classifier import FailureClassifier  # noqa: PLC0415
+        from seharness.validation.runner import CommandResult, FailureKind  # noqa: PLC0415
 
         result = CommandResult(
             command="pytest t",
@@ -178,8 +179,8 @@ class TestInfrastructureClassification:
         ],
     )
     def test_infrastructure_patterns(self, stderr_fragment: str) -> None:
-        from seharness.validation.classifier import FailureClassifier
-        from seharness.validation.runner import CommandResult, FailureKind
+        from seharness.validation.classifier import FailureClassifier  # noqa: PLC0415
+        from seharness.validation.runner import CommandResult, FailureKind  # noqa: PLC0415
 
         result = CommandResult(
             command="pytest t",
@@ -196,8 +197,8 @@ class TestGenericNonZeroClassification:
     """Anything else with non-zero exit \u2192 ``GENERIC_NONZERO``."""
 
     def test_unknown_failure_pattern(self) -> None:
-        from seharness.validation.classifier import FailureClassifier
-        from seharness.validation.runner import CommandResult, FailureKind
+        from seharness.validation.classifier import FailureClassifier  # noqa: PLC0415
+        from seharness.validation.runner import CommandResult, FailureKind  # noqa: PLC0415
 
         result = CommandResult(
             command="pytest t",
@@ -214,11 +215,11 @@ class TestSuccessIsNotAFailure:
     """Exit 0 is not a failure (classifier raises or returns None)."""
 
     def test_exit_zero_raises(self) -> None:
-        from seharness.validation.classifier import (
-            FailureClassifier,
+        from seharness.validation.classifier import (  # noqa: PLC0415
             ClassificationError,
+            FailureClassifier,
         )
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
         result = CommandResult(
             command="pytest t",
@@ -235,8 +236,8 @@ class TestClassifierDeterministic:
     """Same input \u2192 same NormalizedFailure (determinism)."""
 
     def test_same_input_same_output(self) -> None:
-        from seharness.validation.classifier import FailureClassifier
-        from seharness.validation.runner import CommandResult
+        from seharness.validation.classifier import FailureClassifier  # noqa: PLC0415
+        from seharness.validation.runner import CommandResult  # noqa: PLC0415
 
         result = CommandResult(
             command="pytest t",

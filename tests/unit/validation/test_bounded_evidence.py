@@ -22,14 +22,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 
 class TestBoundedEvidenceShape:
     """The envelope exposes only the documented fields."""
 
     def test_envelope_has_required_fields(self) -> None:
-        from seharness.validation.remediation import BoundedEvidence
+        from seharness.validation.remediation import BoundedEvidence  # noqa: PLC0415
 
         env = BoundedEvidence(
             failure=None,  # type: ignore[arg-type]
@@ -47,13 +45,13 @@ class TestPathFiltering:
     """The builder drops files outside ``allowed_paths``."""
 
     def test_files_outside_allowed_paths_are_dropped(self, tmp_path: Path) -> None:
-        from seharness.validation.remediation import (
+        from seharness.validation.remediation import (  # noqa: PLC0415
             BoundedEvidenceBuilder,
         )
-        from seharness.validation.runner import (
+        from seharness.validation.runner import (  # noqa: PLC0415
             CommandResult,
-            NormalizedFailure,
             FailureKind,
+            NormalizedFailure,
         )
 
         repo = tmp_path / "repo"
@@ -75,7 +73,10 @@ class TestPathFiltering:
             duration_s=0.42,
         )
         result = CommandResult(
-            command="pytest t", exit_code=1, stdout="", stderr="assert foo() == 2\n",
+            command="pytest t",
+            exit_code=1,
+            stdout="",
+            stderr="assert foo() == 2\n",
             duration_s=0.42,
         )
 
@@ -94,11 +95,11 @@ class TestContentTruncation:
     """File content is truncated to ``max_bytes_per_file``."""
 
     def test_large_file_is_truncated(self, tmp_path: Path) -> None:
-        from seharness.validation.remediation import BoundedEvidenceBuilder
-        from seharness.validation.runner import (
+        from seharness.validation.remediation import BoundedEvidenceBuilder  # noqa: PLC0415
+        from seharness.validation.runner import (  # noqa: PLC0415
             CommandResult,
-            NormalizedFailure,
             FailureKind,
+            NormalizedFailure,
         )
 
         repo = tmp_path / "repo"
@@ -107,11 +108,18 @@ class TestContentTruncation:
         big.write_text("x = 1\n" * 10_000)  # ~70 KB
 
         failure = NormalizedFailure(
-            kind=FailureKind.ASSERTION, exit_code=1, command="pytest t",
-            message="assert x == 2", source="stderr", duration_s=0.42,
+            kind=FailureKind.ASSERTION,
+            exit_code=1,
+            command="pytest t",
+            message="assert x == 2",
+            source="stderr",
+            duration_s=0.42,
         )
         result = CommandResult(
-            command="pytest t", exit_code=1, stdout="", stderr="assert x == 2\n",
+            command="pytest t",
+            exit_code=1,
+            stdout="",
+            stderr="assert x == 2\n",
             duration_s=0.42,
         )
 
@@ -130,11 +138,11 @@ class TestTotalBudgetCap:
     """Total payload is capped at ``max_total_bytes``."""
 
     def test_total_payload_capped(self, tmp_path: Path) -> None:
-        from seharness.validation.remediation import BoundedEvidenceBuilder
-        from seharness.validation.runner import (
+        from seharness.validation.remediation import BoundedEvidenceBuilder  # noqa: PLC0415
+        from seharness.validation.runner import (  # noqa: PLC0415
             CommandResult,
-            NormalizedFailure,
             FailureKind,
+            NormalizedFailure,
         )
 
         repo = tmp_path / "repo"
@@ -143,11 +151,18 @@ class TestTotalBudgetCap:
             (repo / "src" / f"file_{i}.py").write_text("y = 1\n" * 1000)
 
         failure = NormalizedFailure(
-            kind=FailureKind.ASSERTION, exit_code=1, command="pytest t",
-            message="assert y == 2", source="stderr", duration_s=0.42,
+            kind=FailureKind.ASSERTION,
+            exit_code=1,
+            command="pytest t",
+            message="assert y == 2",
+            source="stderr",
+            duration_s=0.42,
         )
         result = CommandResult(
-            command="pytest t", exit_code=1, stdout="", stderr="assert y == 2\n",
+            command="pytest t",
+            exit_code=1,
+            stdout="",
+            stderr="assert y == 2\n",
             duration_s=0.42,
         )
 
@@ -166,11 +181,11 @@ class TestNoFullRepoLeak:
     """The envelope never contains a ``full_repo`` or ``all_files`` field."""
 
     def test_envelope_does_not_leak_full_repo(self, tmp_path: Path) -> None:
-        from seharness.validation.remediation import BoundedEvidenceBuilder
-        from seharness.validation.runner import (
+        from seharness.validation.remediation import BoundedEvidenceBuilder  # noqa: PLC0415
+        from seharness.validation.runner import (  # noqa: PLC0415
             CommandResult,
-            NormalizedFailure,
             FailureKind,
+            NormalizedFailure,
         )
 
         repo = tmp_path / "repo"
@@ -180,19 +195,27 @@ class TestNoFullRepoLeak:
         (repo / "secrets.env").write_text("API_KEY=secret123\n" * 100)
 
         failure = NormalizedFailure(
-            kind=FailureKind.ASSERTION, exit_code=1, command="pytest t",
-            message="assert x == 2", source="stderr", duration_s=0.42,
+            kind=FailureKind.ASSERTION,
+            exit_code=1,
+            command="pytest t",
+            message="assert x == 2",
+            source="stderr",
+            duration_s=0.42,
         )
         result = CommandResult(
-            command="pytest t", exit_code=1, stdout="", stderr="assert x == 2\n",
+            command="pytest t",
+            exit_code=1,
+            stdout="",
+            stderr="assert x == 2\n",
             duration_s=0.42,
         )
         builder = BoundedEvidenceBuilder(
-            repo_root=repo, allowed_paths=("src/",),
+            repo_root=repo,
+            allowed_paths=("src/",),
         )
         evidence = builder.build(failure=failure, command_result=result)
 
         # Verify the secret file does not appear in any relevant file.
         all_paths = [f.path for f in evidence.relevant_files]
         assert not any("secrets.env" in p for p in all_paths)
-        assert "API_KEY" not in str([f.content for f in evidence.relevant_files])
+        assert "API_KEY" not in str([f.content_bytes for f in evidence.relevant_files])
