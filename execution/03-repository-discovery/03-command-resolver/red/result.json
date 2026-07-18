@@ -1,0 +1,20 @@
+{
+  "behavior": "03-command-resolver",
+  "slice": "03-repository-discovery",
+  "phase": "red",
+  "tests_total": 13,
+  "status": "red",
+  "files_added": [
+    "tests/unit/repository/test_command_resolver.py"
+  ],
+  "code_changes": [],
+  "expected_failure": "ModuleNotFoundError: No module named 'seharness.repository.conventions'",
+  "test_groups": [
+    "TestTestCommandResolution (4 tests) — uv, poetry, setuptools, unknown",
+    "TestLintCommandResolution (3 tests) — ruff configured, respects runner, empty when not configured",
+    "TestTypeCheckCommandResolution (2 tests) — mypy configured / not",
+    "TestFormatCommandResolution (1 test) — ruff format",
+    "TestResolverDeterminism (1 test) — same input = same output",
+    "TestPluginFriendlyRegistry (2 tests) — register() + default gates"
+  ]
+}
