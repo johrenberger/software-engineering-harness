@@ -1,0 +1,11 @@
+{
+  "behavior": "04-failed-validation-blocks-pr",
+  "test_file": "tests/unit/delivery/test_failed_validation_blocks_pr.py",
+  "phase": "red",
+  "status": "failing-collection",
+  "error_count": 3,
+  "command": "pytest tests/unit/delivery/test_failed_validation_blocks_pr.py --no-cov",
+  "exit_code": 2,
+  "stdout_summary": "===================== no tests collected, 1 error in 0.10s =====================",
+  "recorded_at": "2026-07-18T20:48:53.159260+00:00"
+}
