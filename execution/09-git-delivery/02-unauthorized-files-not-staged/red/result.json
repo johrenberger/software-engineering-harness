@@ -1,0 +1,11 @@
+{
+  "behavior": "02-unauthorized-files-not-staged",
+  "test_file": "tests/unit/delivery/test_unauthorized_files_not_staged.py",
+  "phase": "red",
+  "status": "failing-collection",
+  "error_count": 3,
+  "command": "pytest tests/unit/delivery/test_unauthorized_files_not_staged.py --no-cov",
+  "exit_code": 2,
+  "stdout_summary": "===================== no tests collected, 1 error in 0.10s =====================",
+  "recorded_at": "2026-07-18T20:48:52.352395+00:00"
+}

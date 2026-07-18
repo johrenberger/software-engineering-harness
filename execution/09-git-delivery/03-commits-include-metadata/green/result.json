@@ -1,0 +1,12 @@
+{
+  "behavior": "03-commits-include-metadata",
+  "test_file": "tests/unit/delivery/test_commits_include_metadata.py",
+  "summary": "commits include requirement metadata",
+  "phase": "green",
+  "passed": 10,
+  "failed": 0,
+  "duration_s": 0.08,
+  "command": "pytest tests/unit/delivery/test_commits_include_metadata.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T20:52:40.628391+00:00"
+}

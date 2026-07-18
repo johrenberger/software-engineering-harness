@@ -1,0 +1,12 @@
+{
+  "behavior": "05-idempotent-resume",
+  "test_file": "tests/unit/delivery/test_idempotent_resume.py",
+  "summary": "duplicate resume does not create duplicate commits or PRs",
+  "phase": "green",
+  "passed": 12,
+  "failed": 0,
+  "duration_s": 0.1,
+  "command": "pytest tests/unit/delivery/test_idempotent_resume.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T20:52:41.464669+00:00"
+}

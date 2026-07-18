@@ -1,0 +1,12 @@
+{
+  "behavior": "branch",
+  "test_file": "tests/unit/delivery/test_branch_service.py",
+  "summary": "BranchService parameterized template",
+  "phase": "green",
+  "passed": 8,
+  "failed": 0,
+  "duration_s": 0.1,
+  "command": "pytest tests/unit/delivery/test_branch_service.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T20:52:41.874055+00:00"
+}

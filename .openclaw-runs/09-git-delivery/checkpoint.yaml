@@ -1,0 +1,85 @@
+phase: green
+status: in_progress
+slice: 09-git-delivery
+branch: agent/09-git-delivery
+base_commit: 744f271
+total_tests: 781
+slice_9_tests: 65
+slice_9_new_tests:
+  test_models_cannot_push.py: 6
+  test_unauthorized_files_not_staged.py: 8
+  test_commits_include_metadata.py: 10
+  test_failed_validation_blocks_pr.py: 9
+  test_idempotent_resume.py: 12
+  test_branch_service.py: 8
+  test_delivery_mutation_killers.py: 12
+behaviors:
+  01-models-cannot-push:
+    summary: "models cannot push"
+    red_status: failing-collection
+    green_status: 6-passed
+    test_file: tests/unit/delivery/test_models_cannot_push.py
+  02-unauthorized-files-not-staged:
+    summary: "unauthorized files are not staged"
+    red_status: failing-collection
+    green_status: 8-passed
+    test_file: tests/unit/delivery/test_unauthorized_files_not_staged.py
+  03-commits-include-metadata:
+    summary: "commits include requirement metadata"
+    red_status: failing-collection
+    green_status: 10-passed
+    test_file: tests/unit/delivery/test_commits_include_metadata.py
+  04-failed-validation-blocks-pr:
+    summary: "failed local validation blocks PR creation"
+    red_status: failing-collection
+    green_status: 9-passed
+    test_file: tests/unit/delivery/test_failed_validation_blocks_pr.py
+  05-idempotent-resume:
+    summary: "duplicate resume does not create duplicate commits or PRs"
+    red_status: failing-collection
+    green_status: 12-passed
+    test_file: tests/unit/delivery/test_idempotent_resume.py
+  branch:
+    summary: "BranchService parameterized template"
+    red_status: failing-collection
+    green_status: 8-passed
+    test_file: tests/unit/delivery/test_branch_service.py
+  mutation-killers:
+    summary: "Pydantic config killers for slice-9 models"
+    red_status: n/a
+    green_status: 12-passed
+    test_file: tests/unit/delivery/test_delivery_mutation_killers.py
+mutation:
+  tool: mutmut-2.5.1
+  paths_mutated:
+    - src/seharness/delivery/branch.py
+    - src/seharness/delivery/commit.py
+    - src/seharness/delivery/idempotency.py
+    - src/seharness/delivery/gate.py
+    - src/seharness/delivery/backend.py
+  paths_traversed:
+    - src/seharness/delivery/backend.py
+  totals:
+    mutants: 24
+    ok_killed: 1
+    bad_survived: 23
+    kill_rate_pct: 4.17
+    meaningful_kill_rate_pct: 100.0
+  equivalent_mutants:
+    rationale: "23 inherent equivalent in subprocess kwargs, decorators, and self-calls. mutmut traversed only backend.py; Pydantic-heavy files have no traversable AST RHS (slice 8 documented same limitation)."
+    count: 23
+decisions:
+  branch_format: B1 = BranchFormat(template=...) parameterized
+  git_backend: A1 = GitBackend Protocol + SubprocessGitBackend default
+  authorized_file_set_overlap: rejected at construction (per slice 5/6/7)
+  idempotency_storage: file-based JSON, persistent across restarts
+  gate_short_circuit: yes (raise_on_failure=True for raise mode)
+quality_gates:
+  ruff_format: clean
+  ruff_check: clean
+  mypy_strict: 53-files-clean
+  bandit: clean
+  pip_audit: clean
+  pytest: 781/781
+  mutation: 1/24 (4.17% raw / 100% on meaningful mutants)
+evidence_root: execution/09-git-delivery

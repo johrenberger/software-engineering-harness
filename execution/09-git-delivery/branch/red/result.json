@@ -1,0 +1,11 @@
+{
+  "behavior": "branch",
+  "test_file": "tests/unit/delivery/test_branch_service.py",
+  "phase": "red",
+  "status": "failing-collection",
+  "error_count": 3,
+  "command": "pytest tests/unit/delivery/test_branch_service.py --no-cov",
+  "exit_code": 2,
+  "stdout_summary": "===================== no tests collected, 1 error in 0.17s =====================",
+  "recorded_at": "2026-07-18T20:48:54.149239+00:00"
+}
