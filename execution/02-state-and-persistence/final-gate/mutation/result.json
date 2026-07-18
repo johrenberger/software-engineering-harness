@@ -1,0 +1,35 @@
+{
+  "slice": "02-state-and-persistence",
+  "gate": "final-gate/mutation",
+  "runner": ".venv/bin/python -m pytest tests/unit/state/ tests/unit/artifacts/ --no-cov -x -q",
+  "modules_mutated": [
+    "src/seharness/state_machine.py",
+    "src/seharness/artifacts/store.py",
+    "src/seharness/domain/enums.py"
+  ],
+  "totals": {
+    "mutants": 38,
+    "killed": 38,
+    "survived": 0,
+    "suspicious": 0,
+    "timeout": 0,
+    "skipped": 0,
+    "kill_rate_pct": 100.0
+  },
+  "per_module": {
+    "state_machine.py": {"mutants": 16, "killed": 16, "survived": 0},
+    "artifacts/store.py": {"mutants": 18, "killed": 18, "survived": 0},
+    "domain/enums.py": {"mutants": 4, "killed": 4, "survived": 0}
+  },
+  "command": "mutmut run --runner <pytest-path> --paths-to-mutate <3 files>",
+  "tool_versions": {
+    "mutmut": "2.0.x",
+    "python": "3.13.5",
+    "pytest": "9.1.1"
+  },
+  "tests_total": 239,
+  "tests_passed": 239,
+  "notes": [
+    "Renumbered mutants from earlier 3-file run; CPython peephole bug fixed; all 38 mutants killed in this run"
+  ]
+}

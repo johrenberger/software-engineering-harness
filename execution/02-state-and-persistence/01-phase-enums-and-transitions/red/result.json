@@ -1,0 +1,5 @@
+phase: red
+command: pytest tests/unit/state/test_phase_transitions.py --no-cov
+exit_code: 2
+reason: ModuleNotFoundError: No module named 'seharness.domain'
+notes: 14 tests across 5 classes; import failure at collection time

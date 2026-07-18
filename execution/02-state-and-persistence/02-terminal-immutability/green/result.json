@@ -1,0 +1,14 @@
+{
+  "behavior": "terminal-immutability",
+  "slice": "02-state-and-persistence",
+  "phase": "green",
+  "tests_total": 26,
+  "passed": 26,
+  "files_added": [
+    "tests/unit/state/test_terminal_immutability.py"
+  ],
+  "code_changes": [
+    "state_machine.py: TERMINAL_PHASES frozenset, is_terminal property on WorkflowState",
+    "state_machine.py: transition_to raises InvalidTransitionError when source is in TERMINAL_PHASES"
+  ]
+}

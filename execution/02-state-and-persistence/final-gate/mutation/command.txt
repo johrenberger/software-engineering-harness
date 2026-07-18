@@ -1,0 +1,5 @@
+.venv/bin/python -m mutmut run \
+    --runner ".venv/bin/python -m pytest tests/unit/state/ tests/unit/artifacts/ --no-cov -x -q" \
+    --paths-to-mutate src/seharness/state_machine.py \
+    --paths-to-mutate src/seharness/artifacts/store.py \
+    --paths-to-mutate src/seharness/domain/enums.py

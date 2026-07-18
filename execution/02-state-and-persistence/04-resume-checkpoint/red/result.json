@@ -1,0 +1,3 @@
+phase: red
+exit_code: 4
+reason: ImportError: cannot import name 'StateRepository' from 'seharness.artifacts.store'
