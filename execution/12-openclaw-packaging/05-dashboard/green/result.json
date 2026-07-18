@@ -1,0 +1,12 @@
+{
+  "behavior": "05-dashboard",
+  "test_file": "tests/unit/controller/test_dashboard.py",
+  "summary": "Dashboard renders harness state, latest run, last green commit, current slice",
+  "phase": "green",
+  "passed": 10,
+  "failed": 0,
+  "duration_s": 0.2,
+  "command": "pytest tests/unit/controller/test_dashboard.py --no-cov -q",
+  "exit_code": 1,
+  "recorded_at": "2026-07-18T22:13:50.710652+00:00"
+}

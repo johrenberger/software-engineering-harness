@@ -1,0 +1,12 @@
+{
+  "behavior": "04-pause-resume",
+  "test_file": "tests/unit/controller/test_pause_resume.py",
+  "summary": "Operator pause/resume via OpenClaw skills",
+  "phase": "green",
+  "passed": 11,
+  "failed": 0,
+  "duration_s": 0.16,
+  "command": "pytest tests/unit/controller/test_pause_resume.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T22:13:50.180476+00:00"
+}

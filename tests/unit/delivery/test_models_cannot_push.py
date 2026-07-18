@@ -23,9 +23,7 @@ def test_model_adapter_interface_has_no_push_method() -> None:
     forbidden = ("push", "force_push", "create_pr", "open_pr", "merge")
     members = set(dir(ModelAdapter))
     for method in forbidden:
-        assert method not in members, (
-            f"ModelAdapter exposes forbidden Git method: {method}"
-        )
+        assert method not in members, f"ModelAdapter exposes forbidden Git method: {method}"
 
 
 def test_fake_adapter_implementation_has_no_push_method() -> None:
@@ -43,9 +41,7 @@ def test_fake_adapter_invoke_signature_has_no_git_params() -> None:
     params = list(sig.parameters)
     forbidden = ("branch", "commit_message", "pr_body", "files")
     for f in forbidden:
-        assert f not in params, (
-            f"FakeModelAdapter.invoke accepts forbidden git param: {f}"
-        )
+        assert f not in params, f"FakeModelAdapter.invoke accepts forbidden git param: {f}"
 
 
 def test_pull_request_client_has_create_method() -> None:

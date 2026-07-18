@@ -71,6 +71,7 @@ __all__ = [
     "StubApplicationService",
     "StubTelegramTransport",
     "TelegramAuthorizer",
+    "TelegramBotTransport",
     "TelegramConfig",
     "TelegramTransport",
     "UnauthorizedChatError",

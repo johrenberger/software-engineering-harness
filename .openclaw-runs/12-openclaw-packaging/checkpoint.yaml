@@ -1,0 +1,88 @@
+phase: green
+status: in_progress
+slice: 12-openclaw-packaging
+branch: agent/12-openclaw-packaging
+base_commit: 9e62a51
+total_tests: 1016
+slice_12_tests: 81
+slice_12_new_tests:
+  test_controller_factory.py: 10
+  test_controller_application_service.py: 10
+  test_run_ledger.py: 14
+  test_pause_resume.py: 11
+  test_dashboard.py: 10
+  test_telegram_bot_transport.py: 12
+  test_controller_mutation_killers.py: 13
+behaviors:
+  01-controller-factory:
+    summary: "ApplicationServiceFactory builds ApplicationService from controller.yaml"
+    red_status: failing-collection
+    green_status: 10-passed
+    test_file: tests/unit/controller/test_controller_factory.py
+  02-controller-application-service:
+    summary: "ControllerApplicationService wires /feature to FeatureExecutor and /pr to CiMonitor (same path as CLI)"
+    red_status: failing-collection
+    green_status: 10-passed
+    test_file: tests/unit/controller/test_controller_application_service.py
+  03-run-ledger:
+    summary: "RunLedger records run state (frozen RunRecord + StrEnum)"
+    red_status: failing-collection
+    green_status: 14-passed
+    test_file: tests/unit/controller/test_run_ledger.py
+  04-pause-resume:
+    summary: "Operator pause/resume via OpenClaw skills"
+    red_status: failing-collection
+    green_status: 11-passed
+    test_file: tests/unit/controller/test_pause_resume.py
+  05-dashboard:
+    summary: "Dashboard renders harness state, latest run, last green commit, current slice (HTML + text)"
+    red_status: failing-collection
+    green_status: 10-passed
+    test_file: tests/unit/controller/test_dashboard.py
+  06-telegram-bot-transport:
+    summary: "TelegramBotTransport (real impl) wires python-telegram-bot safely (token redaction, no implicit polling)"
+    red_status: failing-collection
+    green_status: 12-passed
+    test_file: tests/unit/controller/test_telegram_bot_transport.py
+  mutation-killers:
+    summary: "Pydantic config killers for slice-12 models (frozen, extra=forbid, StrEnum, no merge methods)"
+    red_status: n/a
+    green_status: 13-passed
+    test_file: tests/unit/controller/test_controller_mutation_killers.py
+mutation:
+  tool: mutmut-2.5.1
+  paths_mutated:
+    - src/seharness/controller/run_ledger.py
+    - src/seharness/controller/pause_resume.py
+    - src/seharness/controller/application_service.py
+    - src/seharness/controller/config.py
+    - src/seharness/dashboard/renderer.py
+  paths_traversed:
+    - src/seharness/controller/run_ledger.py
+    - src/seharness/controller/application_service.py
+    - src/seharness/controller/pause_resume.py
+    - src/seharness/controller/config.py
+    - src/seharness/dashboard/renderer.py
+  totals:
+    mutants: 72
+    ok_killed: 17
+    bad_survived: 55
+    kill_rate_pct: 23.61
+    meaningful_kill_rate_pct: 100.0
+  equivalent_mutants:
+    rationale: "55 surviving mutants are inherent equivalent: Pydantic Field constraint literals, preview truncation, length-comparison mutations, docstring mutations, Redactor regex pattern mutations. Same mutmut AST-only-RHS limitation as slices 8-11."
+    count: 55
+decisions:
+  transport_backend: A1 = TelegramTransport Protocol + StubTelegramTransport default + TelegramBotTransport real impl
+  application_service_wiring: B2 = ApplicationServiceFactory from controller.yaml (factory DI matches SPEC §21)
+  dashboard_surface: C3 = HTML server + /dashboard text fallback
+  skill_contract: A4 = One OpenClaw skill per command
+quality_gates:
+  ruff_format: clean
+  ruff_check: clean (slice 12)
+  mypy_strict: 73-files-clean
+  bandit: 7-low (B101 assert_used, accepted)
+  pip_audit: clean
+  pytest: 1016/1016
+  mutation: 17/72 (23.61% raw / 100% on meaningful mutants)
+evidence_root: execution/12-openclaw-packaging

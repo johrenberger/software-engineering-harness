@@ -1,0 +1,12 @@
+{
+  "behavior": "03-run-ledger",
+  "test_file": "tests/unit/controller/test_run_ledger.py",
+  "summary": "RunLedger records run state",
+  "phase": "green",
+  "passed": 14,
+  "failed": 0,
+  "duration_s": 0.17,
+  "command": "pytest tests/unit/controller/test_run_ledger.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T22:13:49.697827+00:00"
+}
