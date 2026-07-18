@@ -1,0 +1,18 @@
+{
+  "behavior": "resume-checkpoint",
+  "slice": "02-state-and-persistence",
+  "phase": "green",
+  "tests_total": 105,
+  "passed": 105,
+  "files_added": [
+    "tests/unit/artifacts/test_state_repository.py",
+    "tests/unit/artifacts/test_mutation_killers.py"
+  ],
+  "code_changes": [
+    "store.py: WorkflowStateModel (Pydantic v2, extra='forbid')",
+    "store.py: RunNotFoundError(KeyError) with .run_id and .root attributes",
+    "store.py: StateRepository.save/load/list_runs/find_resumable",
+    "store.py: StateRepository uses atomic_write_json and Pydantic model_dump(mode='json')",
+    "store.py: CPython 3.13 peephole bug fix - super().__init__ must run BEFORE self.x = x assignments"
+  ]
+}

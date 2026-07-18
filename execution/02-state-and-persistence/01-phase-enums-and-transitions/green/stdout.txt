@@ -1,0 +1,29 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 19 items
+
+tests/unit/state/test_phase_transitions.py::TestRunStatusEnum::test_known_members_present PASSED [  5%]
+tests/unit/state/test_phase_transitions.py::TestRunStatusEnum::test_is_string_enum PASSED [ 10%]
+tests/unit/state/test_phase_transitions.py::TestPhaseNameEnum::test_known_phase_members_present PASSED [ 15%]
+tests/unit/state/test_phase_transitions.py::TestPhaseNameEnum::test_is_string_enum PASSED [ 21%]
+tests/unit/state/test_phase_transitions.py::TestAllowedTransitionsTable::test_intake_can_transition_to_discovery_blocked_or_failed PASSED [ 26%]
+tests/unit/state/test_phase_transitions.py::TestAllowedTransitionsTable::test_discovery_can_transition_to_specification_blocked_or_failed PASSED [ 31%]
+tests/unit/state/test_phase_transitions.py::TestAllowedTransitionsTable::test_specification_can_transition_to_impact_blocked_or_failed PASSED [ 36%]
+tests/unit/state/test_phase_transitions.py::TestAllowedTransitionsTable::test_planning_can_reenter_on_validation_failure PASSED [ 42%]
+tests/unit/state/test_phase_transitions.py::TestAllowedTransitionsTable::test_known_table_covers_every_normal_phase PASSED [ 47%]
+tests/unit/state/test_phase_transitions.py::TestInvalidTransitionRejection::test_invalid_transition_raises[intake-execution] PASSED [ 52%]
+tests/unit/state/test_phase_transitions.py::TestInvalidTransitionRejection::test_invalid_transition_raises[intake-completed] PASSED [ 57%]
+tests/unit/state/test_phase_transitions.py::TestInvalidTransitionRejection::test_invalid_transition_raises[discovery-execution] PASSED [ 63%]
+tests/unit/state/test_phase_transitions.py::TestInvalidTransitionRejection::test_invalid_transition_raises[planning-review] PASSED [ 68%]
+tests/unit/state/test_phase_transitions.py::TestInvalidTransitionRejection::test_invalid_transition_raises[execution-intake] PASSED [ 73%]
+tests/unit/state/test_phase_transitions.py::TestInvalidTransitionRejection::test_invalid_transition_raises[delivery-execution] PASSED [ 78%]
+tests/unit/state/test_phase_transitions.py::TestInvalidTransitionRejection::test_invalid_transition_raises[ci_monitoring-intake] PASSED [ 84%]
+tests/unit/state/test_phase_transitions.py::TestInvalidTransitionRejection::test_invalid_transition_raises[completed-execution] PASSED [ 89%]
+tests/unit/state/test_phase_transitions.py::TestInvalidTransitionRejection::test_invalid_transition_raises[failed-planning] PASSED [ 94%]
+tests/unit/state/test_phase_transitions.py::TestInvalidTransitionRejection::test_valid_transition_returns_new_state PASSED [100%]
+
+============================== 19 passed in 0.03s ==============================

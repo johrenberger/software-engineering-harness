@@ -1,0 +1,18 @@
+{
+  "behavior": "phase-enums-and-transitions",
+  "slice": "02-state-and-persistence",
+  "phase": "green",
+  "tests_total": 19,
+  "passed": 19,
+  "files_added": [
+    "src/seharness/domain/__init__.py",
+    "src/seharness/domain/enums.py",
+    "src/seharness/state_machine.py",
+    "tests/unit/state/test_phase_transitions.py"
+  ],
+  "code_changes": [
+    "domain/enums.py: PhaseName (StrEnum), RunStatus (StrEnum), ProviderName (StrEnum), ProviderKind (StrEnum), RoutingStrategy (StrEnum), RetryPolicy (StrEnum)",
+    "state_machine.py: ALLOWED_TRANSITIONS table, WorkflowState frozen dataclass, transition_to method, InvalidTransitionError",
+    "state_machine.py: WorkflowState.transition_to raises InvalidTransitionError for invalid transitions; returns a NEW WorkflowState for valid ones"
+  ]
+}

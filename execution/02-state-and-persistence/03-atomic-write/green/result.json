@@ -1,0 +1,15 @@
+{
+  "behavior": "atomic-write",
+  "slice": "02-state-and-persistence",
+  "phase": "green",
+  "tests_total": 8,
+  "passed": 8,
+  "files_added": [
+    "src/seharness/artifacts/__init__.py",
+    "src/seharness/artifacts/store.py",
+    "tests/unit/artifacts/test_atomic_write.py"
+  ],
+  "code_changes": [
+    "store.py: atomic_write_json(path, payload, *, indent=2) - tempfile.mkstemp + os.fsync + os.replace for crash-safe atomic JSON writes"
+  ]
+}

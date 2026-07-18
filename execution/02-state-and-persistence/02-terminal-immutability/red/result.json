@@ -1,0 +1,4 @@
+phase: red
+command: pytest tests/unit/state/test_terminal_immutability.py --no-cov
+exit_code: 2
+reason: ImportError: cannot import name 'TERMINAL_PHASES' from 'seharness.state_machine'

@@ -1,0 +1,18 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 8 items
+
+tests/unit/artifacts/test_atomic_write.py::TestAtomicWriteHappyPath::test_writes_valid_json_at_destination PASSED [ 12%]
+tests/unit/artifacts/test_atomic_write.py::TestAtomicWriteHappyPath::test_replaces_existing_file PASSED [ 25%]
+tests/unit/artifacts/test_atomic_write.py::TestAtomicWriteHappyPath::test_creates_parent_directories PASSED [ 37%]
+tests/unit/artifacts/test_atomic_write.py::TestAtomicWriteHappyPath::test_default_indent_is_two_spaces PASSED [ 50%]
+tests/unit/artifacts/test_atomic_write.py::TestAtomicWriteCrashSafety::test_partial_write_does_not_corrupt_destination PASSED [ 62%]
+tests/unit/artifacts/test_atomic_write.py::TestAtomicWriteCrashSafety::test_fsync_exception_leaves_destination_intact PASSED [ 75%]
+tests/unit/artifacts/test_atomic_write.py::TestAtomicWriteCrashSafety::test_atomic_write_uses_tempfile_in_same_directory PASSED [ 87%]
+tests/unit/artifacts/test_atomic_write.py::TestAtomicWriteDefaultIndent::test_json_ends_with_newline PASSED [100%]
+
+============================== 8 passed in 0.12s ===============================

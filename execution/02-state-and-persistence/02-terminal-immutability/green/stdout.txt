@@ -1,0 +1,36 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- /data/.openclaw/workspace/software-engineering-harness/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /data/.openclaw/workspace/software-engineering-harness
+configfile: pyproject.toml
+plugins: cov-5.0.0, bdd-7.3.0
+collecting ... collected 26 items
+
+tests/unit/state/test_terminal_immutability.py::TestTerminalPhasesSet::test_terminal_phases_set_exposes_completed_failed_blocked PASSED [  3%]
+tests/unit/state/test_terminal_immutability.py::TestTerminalPhasesSet::test_normal_phases_are_not_terminal PASSED [  7%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_completed_is_terminal PASSED [ 11%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_failed_is_terminal PASSED [ 15%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_blocked_is_terminal PASSED [ 19%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_normal_phases_are_not_terminal[intake] PASSED [ 23%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_normal_phases_are_not_terminal[discovery] PASSED [ 26%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_normal_phases_are_not_terminal[specification] PASSED [ 30%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_normal_phases_are_not_terminal[impact] PASSED [ 34%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_normal_phases_are_not_terminal[planning] PASSED [ 38%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_normal_phases_are_not_terminal[execution] PASSED [ 42%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_normal_phases_are_not_terminal[validation] PASSED [ 46%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_normal_phases_are_not_terminal[remediation] PASSED [ 50%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_normal_phases_are_not_terminal[review] PASSED [ 53%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_normal_phases_are_not_terminal[delivery] PASSED [ 57%]
+tests/unit/state/test_terminal_immutability.py::TestIsTerminalProperty::test_normal_phases_are_not_terminal[ci_monitoring] PASSED [ 61%]
+tests/unit/state/test_terminal_immutability.py::TestTerminalTransitionRefusal::test_completed_run_refuses_any_transition[execution] PASSED [ 65%]
+tests/unit/state/test_terminal_immutability.py::TestTerminalTransitionRefusal::test_completed_run_refuses_any_transition[planning] PASSED [ 69%]
+tests/unit/state/test_terminal_immutability.py::TestTerminalTransitionRefusal::test_completed_run_refuses_any_transition[remediation] PASSED [ 73%]
+tests/unit/state/test_terminal_immutability.py::TestTerminalTransitionRefusal::test_completed_run_refuses_any_transition[delivery] PASSED [ 76%]
+tests/unit/state/test_terminal_immutability.py::TestTerminalTransitionRefusal::test_completed_run_refuses_any_transition[intake] PASSED [ 80%]
+tests/unit/state/test_terminal_immutability.py::TestTerminalTransitionRefusal::test_failed_run_refuses_recovery_transition[execution] PASSED [ 84%]
+tests/unit/state/test_terminal_immutability.py::TestTerminalTransitionRefusal::test_failed_run_refuses_recovery_transition[review] PASSED [ 88%]
+tests/unit/state/test_terminal_immutability.py::TestTerminalTransitionRefusal::test_failed_run_refuses_recovery_transition[planning] PASSED [ 92%]
+tests/unit/state/test_terminal_immutability.py::TestTerminalTransitionRefusal::test_dataclass_is_frozen PASSED [ 96%]
+tests/unit/state/test_terminal_immutability.py::TestTerminalArtifactsNotRegenerated::test_no_method_regenerates_state PASSED [100%]
+
+============================== 26 passed in 0.03s ==============================

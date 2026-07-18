@@ -1,0 +1,35 @@
+slice: 02-state-and-persistence
+branch: agent/02-state-and-persistence
+pr_number: 2
+pr_url: https://github.com/johrenberger/software-engineering-harness/pull/2
+pr_state: open_draft
+base: main
+commits:
+  - sha: 52626e0
+    summary: "feat(state): slice 2 — phase enums, atomic write, state repository"
+  - sha: 924b5cb
+    summary: "docs(agent): record full slice 2 evidence"
+behaviors:
+  - id: 01-phase-enums-and-transitions
+    status: green
+    tests: 19
+  - id: 02-terminal-immutability
+    status: green
+    tests: 26
+  - id: 03-atomic-write
+    status: green
+    tests: 8
+  - id: 04-resume-checkpoint
+    status: green
+    tests: 105
+total_tests: 158
+final_gate:
+  ruff_format: pass
+  ruff_check: pass
+  mypy_strict: pass
+  bandit: pass
+  pip_audit: pass
+  pytest: 239/239
+  mutation: 38/38 killed
+notes:
+  - "CPython 3.13 peephole bug: self.x = x after def __init__ is optimized to LOAD_CONST None when x is only used in the next statement (super call). Fix in artifacts/store.py: call super first. See explanation comment in source."
