@@ -1,0 +1,12 @@
+{
+  "behavior": "01-unauthorized-chat-rejected",
+  "test_file": "tests/unit/telegram/test_unauthorized_chat_rejected.py",
+  "summary": "unauthorized chat IDs are rejected",
+  "phase": "green",
+  "passed": 10,
+  "failed": 0,
+  "duration_s": 0.08,
+  "command": "pytest tests/unit/telegram/test_unauthorized_chat_rejected.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T21:47:05.941356+00:00"
+}

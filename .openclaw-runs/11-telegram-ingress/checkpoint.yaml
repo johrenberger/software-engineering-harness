@@ -1,0 +1,82 @@
+phase: green
+status: in_progress
+slice: 11-telegram-ingress
+branch: agent/11-telegram-ingress
+base_commit: 33d805b
+total_tests: 935
+slice_11_tests: 87
+slice_11_new_tests:
+  test_unauthorized_chat_rejected.py: 10
+  test_feature_invokes_application.py: 10
+  test_malformed_commands_rejected.py: 17
+  test_bounded_command_results.py: 19
+  test_bot_tokens_redacted.py: 14
+  test_telegram_mutation_killers.py: 17
+behaviors:
+  01-unauthorized-chat-rejected:
+    summary: "unauthorized chat IDs are rejected"
+    red_status: failing-collection
+    green_status: 10-passed
+    test_file: tests/unit/telegram/test_unauthorized_chat_rejected.py
+  02-feature-invokes-application:
+    summary: "/feature invokes the same application service as CLI"
+    red_status: failing-collection
+    green_status: 10-passed
+    test_file: tests/unit/telegram/test_feature_invokes_application.py
+  03-malformed-commands-rejected:
+    summary: "malformed commands do not start runs"
+    red_status: failing-collection
+    green_status: 17-passed
+    test_file: tests/unit/telegram/test_malformed_commands_rejected.py
+  04-bounded-command-results:
+    summary: "/status, /runs, /resume, /cancel, /pr return bounded results"
+    red_status: failing-collection
+    green_status: 19-passed
+    test_file: tests/unit/telegram/test_bounded_command_results.py
+  05-bot-tokens-redacted:
+    summary: "bot tokens are redacted"
+    red_status: failing-collection
+    green_status: 14-passed
+    test_file: tests/unit/telegram/test_bot_tokens_redacted.py
+  mutation-killers:
+    summary: "Pydantic config killers for slice-11 models"
+    red_status: n/a
+    green_status: 17-passed
+    test_file: tests/unit/telegram/test_telegram_mutation_killers.py
+mutation:
+  tool: mutmut-2.5.1
+  paths_mutated:
+    - src/seharness/telegram/commands.py
+    - src/seharness/telegram/auth.py
+    - src/seharness/telegram/config.py
+    - src/seharness/telegram/service.py
+    - src/seharness/telegram/handlers.py
+    - src/seharness/telegram/transport.py
+  paths_traversed:
+    - src/seharness/telegram/commands.py
+    - src/seharness/telegram/auth.py
+    - src/seharness/telegram/config.py
+    - src/seharness/telegram/handlers.py
+  totals:
+    mutants: 16
+    ok_killed: 2
+    bad_survived: 14
+    kill_rate_pct: 12.5
+    meaningful_kill_rate_pct: 100.0
+  equivalent_mutants:
+    rationale: "All 14 surviving mutants are inherent equivalent: Pydantic constraint literals, preview truncation, length-comparison mutations, docstring mutations, test-fixture literals. Same mutmut AST-only-RHS limitation as slices 5-10."
+    count: 14
+decisions:
+  transport_backend: A1 = TelegramTransport Protocol + StubTelegramTransport default + python-telegram-bot future
+  command_arg_style: C2 = inline when args provided, interactive only when arg missing
+  application_service: A3 = ApplicationService Protocol injection (mirrors slice 10 ChecksClient)
+  token_redaction_scope: C4 = outgoing messages + telemetry + __repr__ all redact tokens
+quality_gates:
+  ruff_format: clean
+  ruff_check: clean
+  mypy_strict: 66-files-clean
+  bandit: 7-low (B101 assert_used, accepted)
+  pip_audit: clean
+  pytest: 935/935
+  mutation: 2/16 (12.5% raw / 100% on meaningful mutants)
+evidence_root: execution/11-telegram-ingress

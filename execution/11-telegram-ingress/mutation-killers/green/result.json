@@ -1,0 +1,12 @@
+{
+  "behavior": "mutation-killers",
+  "test_file": "tests/unit/telegram/test_telegram_mutation_killers.py",
+  "summary": "Pydantic config killers",
+  "phase": "green",
+  "passed": 17,
+  "failed": 0,
+  "duration_s": 0.1,
+  "command": "pytest tests/unit/telegram/test_telegram_mutation_killers.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T21:47:08.060203+00:00"
+}

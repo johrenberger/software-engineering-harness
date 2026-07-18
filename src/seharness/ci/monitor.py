@@ -80,12 +80,10 @@ class StubCiMonitor:
     def run(self, pr_number: str, branch: str, *, stop_early: int | None = None) -> PollResult:
         started = self._time_source()
         attempts_made = 0
-        last_view: RequiredChecksView | None = None
 
         for attempt in range(1, self._policy.max_attempts + 1):
             attempts_made = attempt
             view = self._fetch_view(pr_number, branch)
-            last_view = view
 
             # Check terminal conditions
             decision = ReadyEvaluator().evaluate(view)
@@ -131,9 +129,8 @@ class StubCiMonitor:
 
         # Exhausted
         final_elapsed = self._time_source() - started
-        outcome = PollOutcome.EXHAUSTED if last_view is not None else PollOutcome.EXHAUSTED
         return PollResult(
-            outcome=outcome,
+            outcome=PollOutcome.EXHAUSTED,
             attempts_made=attempts_made,
             elapsed_s=final_elapsed,
             final_state=PollState(

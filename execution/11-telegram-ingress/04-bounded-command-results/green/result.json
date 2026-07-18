@@ -1,0 +1,12 @@
+{
+  "behavior": "04-bounded-command-results",
+  "test_file": "tests/unit/telegram/test_bounded_command_results.py",
+  "summary": "/status, /runs, /resume, /cancel, /pr return bounded results",
+  "phase": "green",
+  "passed": 19,
+  "failed": 0,
+  "duration_s": 0.1,
+  "command": "pytest tests/unit/telegram/test_bounded_command_results.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T21:47:07.197591+00:00"
+}
