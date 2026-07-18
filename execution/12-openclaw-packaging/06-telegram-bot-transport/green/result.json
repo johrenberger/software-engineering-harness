@@ -1,0 +1,12 @@
+{
+  "behavior": "06-telegram-bot-transport",
+  "test_file": "tests/unit/controller/test_telegram_bot_transport.py",
+  "summary": "TelegramBotTransport (real impl) wires python-telegram-bot safely",
+  "phase": "green",
+  "passed": 12,
+  "failed": 0,
+  "duration_s": 0.12,
+  "command": "pytest tests/unit/controller/test_telegram_bot_transport.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T22:13:51.230641+00:00"
+}

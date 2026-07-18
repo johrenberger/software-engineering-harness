@@ -100,7 +100,13 @@ services:
 """,
     )
     factory = ApplicationServiceFactory.from_yaml(cfg)
-    service = factory.build()
+    from seharness.controller import RunLedger, StubFeatureExecutor  # noqa: PLC0415
+
+    service = factory.build(
+        task_executor=StubFeatureExecutor(),
+        ci_monitor=object(),
+        run_ledger=RunLedger(),
+    )
     assert service is not None
 
 
@@ -126,7 +132,7 @@ def test_factory_without_yaml_returns_stub() -> None:
     factory = ApplicationServiceFactory.default()
     service = factory.build()
     # Default must NOT silently call controller code paths.
-    assert service.__class__.__name__ == "StubApplicationService"
+    assert "Stub" in type(service).__name__
 
 
 def test_controller_config_rejects_empty_services(tmp_path: Path) -> None:

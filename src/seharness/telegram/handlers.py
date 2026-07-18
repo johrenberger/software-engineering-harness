@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
-from .commands import ParsedCommand
+from .commands import CommandKind, ParsedCommand
 from .service import ApplicationService, FeatureRequest
 
 _TELEGRAM_MAX = 4096
@@ -267,3 +267,14 @@ class HelpHandler:
                 "/help — show this message"
             ),
         )
+
+
+COMMAND_HANDLERS = {
+    CommandKind.FEATURE: FeatureHandler,
+    CommandKind.STATUS: StatusHandler,
+    CommandKind.RUNS: RunsHandler,
+    CommandKind.RESUME: ResumeHandler,
+    CommandKind.CANCEL: CancelHandler,
+    CommandKind.PR: PrHandler,
+    CommandKind.HELP: HelpHandler,
+}

@@ -1,0 +1,12 @@
+{
+  "behavior": "02-controller-application-service",
+  "test_file": "tests/unit/controller/test_controller_application_service.py",
+  "summary": "ControllerApplicationService wires /feature to TaskExecutionService and /pr to CiMonitor",
+  "phase": "green",
+  "passed": 10,
+  "failed": 0,
+  "duration_s": 0.12,
+  "command": "pytest tests/unit/controller/test_controller_application_service.py --no-cov -q",
+  "exit_code": 0,
+  "recorded_at": "2026-07-18T22:13:49.198792+00:00"
+}

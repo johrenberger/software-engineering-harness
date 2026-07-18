@@ -19,12 +19,12 @@ RED bullets covered:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from seharness.controller import RunLedger, RunState
+from seharness.controller import RunLedger
 from seharness.dashboard import (
     DashboardRenderer,
     DashboardSnapshot,
@@ -40,10 +40,10 @@ def _snapshot(**overrides) -> DashboardSnapshot:
         "last_green_commit": GitCommit(
             sha="abc1234",
             message="feat: ship dashboard",
-            committed_at=datetime(2026, 7, 18, tzinfo=timezone.utc),
+            committed_at=datetime(2026, 7, 18, tzinfo=UTC),
         ),
         "latest_run": None,
-        "generated_at": datetime(2026, 7, 18, 23, 0, tzinfo=timezone.utc),
+        "generated_at": datetime(2026, 7, 18, 23, 0, tzinfo=UTC),
     }
     base.update(overrides)
     return DashboardSnapshot(**base)
@@ -103,7 +103,7 @@ def test_dashboard_snapshot_rejects_unknown_field() -> None:
             current_slice_name="openclaw-packaging",
             last_green_commit=None,
             latest_run=None,
-            generated_at=datetime.now(tz=timezone.utc),
+            generated_at=datetime.now(tz=UTC),
             rogue_field="oops",
         )
 
