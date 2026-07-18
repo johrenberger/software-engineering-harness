@@ -3,6 +3,7 @@
 # Slice: 01-configuration-validation
 # Branch: agent/01-configuration-validation
 # Generated: 2026-07-18
+# Updated: 2026-07-18 (mutation-killers merged)
 
 slice: 01
 name: Configuration Validation

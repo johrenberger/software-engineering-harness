@@ -3,3 +3,4 @@ title: feat(config): slice 1 — configuration validation harness
 state: open (DRAFT)
 branch: agent/01-configuration-validation -> main
 opened: 2026-07-18
+updated: 2026-07-18 (mutation-killers merged: 17/17 surviving mutants killed)
