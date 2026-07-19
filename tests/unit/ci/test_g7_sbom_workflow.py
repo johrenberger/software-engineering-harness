@@ -188,23 +188,30 @@ def test_attest_uses_official_github_action(ci_workflow: dict) -> None:
     )
 
 
-def test_attest_subject_references_commit_sha(ci_workflow: dict) -> None:
-    """Attestation subject-name must include the commit SHA.
+def test_attest_subject_references_an_artifact_path(ci_workflow: dict) -> None:
+    """Attest action must point at a file to sign (subject-path).
 
-    This is the principal being attested. Anchoring it to `github.sha`
-    ties the attestation to a specific commit so consumers can verify
-    later.
+    An attestation with no subject is a no-op — actions/attest-build-provenance
+    requires either subject-path (a glob) or subject-digest. Without one,
+    the action errors with `One of subject-path or subject-digest must be
+    provided` (caught in CI run 29703712905 after the PR #29 merge).
     """
     step = _step_by_name(ci_workflow, "Attest build provenance")
     with_block = step.get("with", {})
-    subject = with_block.get("subject-name", "")
-    assert "github.sha" in subject, (
-        f"Attest subject-name must reference github.sha (got {subject!r})"
+    # Must have one of subject-path or subject-digest.
+    has_path = bool(with_block.get("subject-path"))
+    has_digest = bool(with_block.get("subject-digest"))
+    assert has_path or has_digest, (
+        f"Attest build provenance must declare `subject-path` (or `subject-digest`); "
+        f"an attestation without a subject is invalid. Got with={with_block!r}"
     )
-    # Should include the repo for a globally unique URL.
-    assert "github.repository" in subject or "github.server_url" in subject, (
-        f"Attest subject-name must include the repo URL (got {subject!r})"
-    )
+    if has_path:
+        # The path must point at a file that the workflow produces (or could produce).
+        # We just require it to be a non-empty string with a `.<ext>` suffix.
+        path = with_block["subject-path"]
+        assert isinstance(path, str) and "." in path, (
+            f"subject-path must be a non-empty string with a file extension (got {path!r})"
+        )
 
 
 def test_attest_runs_only_on_push_to_main(ci_workflow: dict) -> None:
