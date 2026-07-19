@@ -42,7 +42,7 @@ class TestBuildContainerKwargs:
         from seharness.sandbox.docker import _build_container_kwargs  # noqa: PLC0415
 
         profile = SandboxProfile(image="python:3.12-slim", cwd=str(tmp_path))
-        kwargs = _build_container_kwargs(
+        _build_container_kwargs(
             profile=profile,
             user="1000:1000",
             read_only_root=True,
