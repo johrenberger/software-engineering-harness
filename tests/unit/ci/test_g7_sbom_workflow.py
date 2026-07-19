@@ -140,25 +140,28 @@ def test_build_sbom_runs_only_on_push_to_main(ci_workflow: dict) -> None:
     )
 
 
-def test_sbom_artifact_is_uploaded(ci_workflow: dict) -> None:
-    """The SBOM file must be uploaded as a ci.yml artifact."""
-    step = _step_by_name(ci_workflow, "Upload SBOM artifact")
-    assert step, "ci.yml must include an 'Upload SBOM artifact' step"
-    assert step.get("uses") == "actions/upload-artifact@v4", (
-        "Upload SBOM artifact must use actions/upload-artifact@v4"
+def test_sbom_stage_step_exists(ci_workflow: dict) -> None:
+    """A 'Stage SBOM for attestation' step must exist.
+
+    anchore/sbom-action@v0 writes the SBOM to /tmp/sbom-action-XXX/, not
+    to the workspace root. We need to download the artifact it uploaded
+    to a known workspace path so the attest step can find it.
+
+    Caught in CI run 29703892749: the original 'Upload SBOM artifact'
+    step pointed at the workspace path that anchore's action never wrote
+    to, making the downstream attest step fail with "Could not find
+    subject at path sbom-cyclonedx.json".
+    """
+    step = _step_by_name(ci_workflow, "Stage SBOM for attestation")
+    assert step, "ci.yml must include a 'Stage SBOM for attestation' step"
+    assert step.get("uses") == "actions/download-artifact@v4", (
+        f"Stage SBOM step must use actions/download-artifact@v4. Got uses={step.get('uses')!r}"
     )
     with_block = step.get("with", {})
-    assert with_block.get("name") == "sbom", (
-        f"Upload SBOM artifact.name must be 'sbom'. Got {with_block.get('name')!r}"
-    )
-    assert "sbom-cyclonedx.json" in with_block.get("path", ""), (
-        f"Upload SBOM artifact.path must include sbom-cyclonedx.json. "
-        f"Got {with_block.get('path')!r}"
-    )
-    # Should be `if: always()` so SBOM is preserved even on test failure.
-    assert step.get("if") == "always()", (
-        f"Upload SBOM artifact must run on always() (got if={step.get('if')!r}); "
-        f"SBOMs are most useful when build fails"
+    assert with_block.get("name") == "sbom-cyclonedx.json", (
+        f"Stage SBOM step must download the artifact named "
+        f"'sbom-cyclonedx.json' (matches what anchore/sbom-action uploads). "
+        f"Got name={with_block.get('name')!r}"
     )
 
 

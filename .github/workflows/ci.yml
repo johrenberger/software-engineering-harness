@@ -176,35 +176,41 @@ jobs:
           # Scan only the workspace (no Docker images here).
           # syft scans: /github/workspace by default.
 
-      - name: Upload SBOM artifact
-        if: always()
-        uses: actions/upload-artifact@v4
+      # anchore/sbom-action@v0 already uploads the SBOM as an
+      # artifact named `sbom-cyclonedx.json`. The Upload SBOM artifact
+      # step in earlier iterations was redundant — and worse, it
+      # pointed at a workspace path that the SBOM action does NOT
+      # write to (it writes to /tmp/sbom-action-XXX/). That made
+      # the downstream Attest step fail with "Could not find subject
+      # at path sbom-cyclonedx.json" (caught in CI 29703892749,
+      # post-PR #30 merge).
+      #
+      # Fix: download the artifact that anchore/sbom-action uploaded,
+      # so the file is at a known workspace path. Then attest that
+      # path.
+      - name: Stage SBOM for attestation
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/download-artifact@v4
         with:
-          name: sbom
-          path: sbom-cyclonedx.json
-          if-no-files-found: ignore
-          retention-days: 30
+          name: sbom-cyclonedx.json
+          path: sbom-stage/
 
       # G7: Attest the build provenance (SLSA L1).
       #
       # `actions/attest-build-provenance@v1` produces a Sigstore-signed
       # attestation that cryptographically links the produced SBOM to
       # the source commit + workflow run. Downstream consumers can
-      # verify with: `gh attestation verify sbom-cyclonedx.json
+      # verify with: `gh attestation verify sbom-stage/sbom-cyclonedx.json
       # --repo johrenberger/software-engineering-harness`.
       #
-      # subject-path: glob pointing at the SBOM artifact to attest.
-      # Without subject-path (or subject-digest), the action has nothing
-      # to sign — caught in CI run 29703712905 (post-PR #29 merge).
-      #
-      # subject-name: the inferred-from-path identifier so the
-      # attestation log reads `…sbom-cyclonedx.json` instead of a bare
-      # digest — easier for humans grepping the run summary.
+      # subject-path: glob pointing at the SBOM file we just staged.
+      # subject-name is inferred from the path (printed in the run
+      # summary).
       - name: Attest build provenance
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: sbom-cyclonedx.json
+          subject-path: sbom-stage/sbom-cyclonedx.json
 
       # G1b: per-PR coverage delta. Fails CI if any line added or modified
       # by this PR is uncovered, or if the PR drops the diff coverage below
