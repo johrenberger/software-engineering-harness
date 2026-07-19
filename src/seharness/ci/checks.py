@@ -108,7 +108,7 @@ class ChecksClient(Protocol):
     violation at type-check time.
     """
 
-    def fetch_view(self, pr_number: str, branch: str) -> RequiredChecksView: ...
+    def fetch_view(self, pr_number: str, branch: str) -> RequiredChecksView: ...  # pragma: no cover
 
 
 class StubChecksClient:

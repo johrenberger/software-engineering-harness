@@ -56,9 +56,9 @@ class TelegramTransport(Protocol):
     The Telegram command dispatcher depends ONLY on this Protocol.
     """
 
-    def poll(self) -> tuple[IncomingUpdate, ...]: ...
+    def poll(self) -> tuple[IncomingUpdate, ...]: ...  # pragma: no cover
 
-    def send(self, message: OutgoingMessage) -> None: ...
+    def send(self, message: OutgoingMessage) -> None: ...  # pragma: no cover
 
 
 class StubTelegramTransport:
@@ -101,7 +101,7 @@ class _BotLike(Protocol):
     Matches the shape of ``telegram.Bot`` so tests can inject a MagicMock.
     """
 
-    def send_message(self, *, chat_id: int, text: str) -> object: ...
+    def send_message(self, *, chat_id: int, text: str) -> object: ...  # pragma: no cover
 
 
 class TelegramBotTransport:
