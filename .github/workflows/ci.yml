@@ -59,41 +59,56 @@ jobs:
       # Always succeeds on every event. flaky-tests.json is produced even
       # when pytest fails (the plugin writes from pytest_sessionfinish),
       # so failures also get a flaky report.
+      #
+      # Implementation: we materialize a Python script to /tmp at runtime
+      # rather than using a bash here-doc inside YAML block-scalar. The
+      # original here-doc approach collided with bash's << operator
+      # inside the action runner.
       - name: flaky-test-report
         if: always()
         run: |
+          # Write the report renderer.
+          cat > /tmp/render_flaky_report.py <<'RENDER_EOF'
+          import json
+          from pathlib import Path
+
+          p = Path("flaky-tests.json")
+          if not p.exists():
+              print("_No flaky-tests.json artifact produced._")
+              raise SystemExit(0)
+          payload = json.loads(p.read_text())
+          s = payload["summary"]
+          print(
+              f"Total flaky: **{s['total_flaky']}** | "
+              f"broken: **{s['total_broken']}** | "
+              f"reruns: **{s['total_reruns']}**"
+          )
+          if payload["flaky_tests"]:
+              print("")
+              print("### Flaky tests (passed after reruns)")
+              print("")
+              for n in payload["flaky_tests"]:
+                  rc = payload["rerun_counts"].get(n, 0)
+                  suffix = "s" if rc != 1 else ""
+                  print(f"- `{n}` ({rc} rerun{suffix})")
+          if payload["broken_tests"]:
+              print("")
+              print("### Broken tests (failed after exhausted retries)")
+              print("")
+              for n in payload["broken_tests"]:
+                  rc = payload["rerun_counts"].get(n, 0)
+                  suffix = "s" if rc != 1 else ""
+                  print(f"- `{n}` ({rc} rerun{suffix})")
+          if not payload["flaky_tests"] and not payload["broken_tests"]:
+              print("")
+              print("_No flaky or broken tests detected._")
+          RENDER_EOF
+          # Append header + body to the GH Actions job summary.
           {
             echo "## Flaky-test report"
             echo ""
             if [ -f junit.xml ]; then
-              python - <<'PYEOF'
-              import json
-              from pathlib import Path
-              p = Path("flaky-tests.json")
-              if not p.exists():
-                  print("_No flaky-tests.json artifact produced._")
-                  raise SystemExit(0)
-              payload = json.loads(p.read_text())
-              s = payload["summary"]
-              print(f"Total flaky: **{s['total_flaky']}** | broken: **{s['total_broken']}** | reruns: **{s['total_reruns']}**")
-              if payload["flaky_tests"]:
-                  print("")
-                  print("### Flaky tests (passed after reruns)")
-                  print("")
-                  for n in payload["flaky_tests"]:
-                      rc = payload["rerun_counts"].get(n, 0)
-                      print(f"- `{n}` ({rc} rerun{'s' if rc != 1 else ''})")
-              if payload["broken_tests"]:
-                  print("")
-                  print("### Broken tests (failed after exhausted retries)")
-                  print("")
-                  for n in payload["broken_tests"]:
-                      rc = payload["rerun_counts"].get(n, 0)
-                      print(f"- `{n}` ({rc} rerun{'s' if rc != 1 else ''})")
-              if not payload["flaky_tests"] and not payload["broken_tests"]:
-                  print("")
-                  print("_No flaky or broken tests detected._")
-              PYEOF
+              python /tmp/render_flaky_report.py
             else
               echo "_No junit.xml produced (pytest did not run)._"
             fi
