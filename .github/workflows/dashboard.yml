@@ -61,9 +61,12 @@ jobs:
           cache: pip
 
       - name: Install dependencies
+        # G10: install from pyproject.toml (which pins coverage to the
+        # version locked in uv.lock) rather than `pip install coverage`
+        # which would pull the latest (mutable) version.
         run: |
           python -m pip install --upgrade pip
-          pip install coverage
+          pip install -e ".[dev]"
 
       - name: Fetch previous dashboard history
         # G12b: download the deployed history.jsonl from the last

@@ -1,4 +1,11 @@
-FROM python:3.13-slim
+# Pinned via manifest-list digest for multi-arch reproducibility.
+# Digest was retrieved via:
+#   TOKEN=$(curl -fsS "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/python:pull" | jq -r .token)
+#   curl -fsS -I -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+#        -H "Authorization: Bearer $TOKEN" \
+#        "https://registry-1.docker.io/v2/library/python/manifests/3.13-slim" | grep -i docker-content-digest
+# Update via: `docker buildx imagetools inspect python:3.13-slim --raw`
+FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91
 
 LABEL maintainer="johrenberger"
 LABEL description="software-engineering-harness runtime (slice 13)"
