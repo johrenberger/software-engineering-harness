@@ -1,0 +1,10 @@
+{
+  "phase": "red",
+  "exit_code": 1,
+  "duration_s": 0.1,
+  "failure_kind": "expected_failure",
+  "failure_reason": "AttributeError: 'RunLedger' object has no attribute 'mark_blocked'",
+  "test_id": "tests/unit/orchestrator/test_orchestrator.py::test_orchestrator_routes_blocked_outcome_to_blocked_terminal",
+  "command": "pytest tests/unit/orchestrator/test_orchestrator.py::test_orchestrator_routes_blocked_outcome_to_blocked_terminal --no-cov -q",
+  "notes": "Pre-Cluster-A state — RunLedger had no BLOCKED state and no mark_blocked() method; any policy-halt outcome had no terminal-state mapping."
+}

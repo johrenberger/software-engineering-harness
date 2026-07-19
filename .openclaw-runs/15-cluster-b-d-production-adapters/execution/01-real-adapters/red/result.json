@@ -1,0 +1,10 @@
+{
+  "phase": "red",
+  "exit_code": 1,
+  "duration_s": 0.1,
+  "failure_kind": "expected_failure",
+  "failure_reason": "ImportError: cannot import name 'LocalTaskExecutor' from 'seharness.controller'",
+  "test_id": "tests/unit/controller/test_real_adapters.py::test_local_task_executor_produces_real_task_result",
+  "command": "pytest tests/unit/controller/test_real_adapters.py --no-cov -q",
+  "notes": "Pre-Cluster-B state — controller/__init__.py did not export the real adapters; controller.yaml defaulted all subsystems to 'stub'."
+}

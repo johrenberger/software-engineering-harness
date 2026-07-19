@@ -1,0 +1,28 @@
+{
+  "module": "src/seharness/orchestrator/{types,runner,phases,orchestrator}.py",
+  "mutator_version": "mutmut 2.5.1",
+  "date": "2026-07-19",
+  "ok_killed": 0,
+  "bad_survived": 0,
+  "no_mutants_generated": 47,
+  "raw_kill_rate": null,
+  "meaningful_kill_rate": "covered by test_orchestrator_mutation_killers.py",
+  "notes": [
+    "mutmut 2.5.1 generates 0 mutants from frozen dataclasses + Protocol dispatch closures.",
+    "Same characteristic as slice-13 skills/registry.py and slice-10 ci/monitor.py.",
+    "Structural invariants are covered manually by 13 dedicated mutation-killer tests in tests/unit/orchestrator/test_orchestrator_mutation_killers.py:",
+    "  - test_phase_sequence_has_exactly_twelve_entries",
+    "  - test_phase_sequence_matches_spec_phase_eight",
+    "  - test_every_phase_has_a_handler",
+    "  - test_completed_terminal_state_uses_spec_phrase",
+    "  - test_failed_terminal_state_uses_runstate_failed_value",
+    "  - test_blocked_terminal_state_routes_to_ledger_blocked",
+    "  - test_orchestrator_has_no_merge_method",
+    "  - test_orchestrator_pr_client_uses_draft",
+    "  - test_orchestrator_default_config_uses_draft_pr",
+    "  - test_orchestrator_max_remediation_attempts_default_is_positive",
+    "  - test_orchestrator_max_validation_attempts_default_is_positive",
+    "  - test_orchestrator_config_rejects_invalid_max_remediation",
+    "  - test_orchestrator_config_rejects_invalid_max_validation"
+  ]
+}

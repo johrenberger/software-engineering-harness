@@ -1,0 +1,10 @@
+{
+  "phase": "red",
+  "exit_code": 1,
+  "duration_s": 0.4,
+  "failure_kind": "expected_failure",
+  "failure_reason": "StubFeatureExecutor.execute returned {'ok': True, 'run_id': 'run-001', 'repository': '...'} without executing any phase",
+  "test_id": "tests/unit/controller/test_controller_application_service.py::test_feature_request_delegates_to_orchestrator",
+  "command": "pytest tests/unit/controller/ --no-cov -q",
+  "notes": "Pre-Cluster-A state — ControllerApplicationService.feature_request called StubFeatureExecutor which returned a deterministic run_id without doing any work."
+}

@@ -1,0 +1,24 @@
+{
+  "phase": "green",
+  "exit_code": 0,
+  "duration_s": 0.5,
+  "test_id": "tests/unit/orchestrator/test_orchestrator.py::test_orchestrator_routes_blocked_outcome_to_blocked_terminal",
+  "command": "pytest tests/unit/orchestrator/test_orchestrator.py --no-cov -q",
+  "covered_tests": [
+    "test_orchestrator_routes_fatal_phase_failure_to_failed",
+    "test_orchestrator_routes_nonfatal_phase_failure_to_failed_terminal",
+    "test_orchestrator_routes_blocked_outcome_to_blocked_terminal",
+    "test_orchestrator_routes_paused_outcome_to_paused_terminal",
+    "test_orchestrator_aborts_run_after_failed_phase_no_further_events",
+    "test_orchestrator_cancel_run_marks_ledger_cancelled",
+    "test_orchestrator_cannot_cancel_completed_run",
+    "test_orchestrator_resume_run_re_executes_phases"
+  ],
+  "required_tests": [
+    "test_orchestrator_routes_blocked_outcome_to_blocked_terminal"
+  ],
+  "files": [
+    "src/seharness/orchestrator/orchestrator.py",
+    "src/seharness/controller/run_ledger.py"
+  ]
+}

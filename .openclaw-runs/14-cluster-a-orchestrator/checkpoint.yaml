@@ -1,0 +1,60 @@
+run: 14-cluster-a-orchestrator
+title: Cluster A — Canonical orchestrator + failed/blocked/paused routing
+status: ci-passing
+branch: agent/cluster-a-orchestrator
+pr: https://github.com/johrenberger/software-engineering-harness/pull/14
+sha: d162eee
+started: 2026-07-19T03:30:00Z
+
+stories:
+  A1: design orchestrator API
+  A2: replace simulation with real service composition
+  A3: wire /feature, CLI, Telegram, E2E to orchestrator
+  A4: failed/blocked/paused terminal states
+  A5: document orchestrator + deprecate simulation
+
+analysis:
+  source: docs/analysis/2026-07-19-external-llm-analysis.md
+  stories: docs/analysis/2026-07-19-priority-stories.md
+
+quality_gates:
+  ruff_format: clean
+  ruff_check: 0 errors
+  mypy_strict: 86 files clean
+  bandit: 0 issues
+  pip_audit: clean
+  pytest: 1129 passed
+  mutation: 0 mutants (covered manually)
+  ci: green (run 29668924521)
+
+files_added:
+  - src/seharness/orchestrator/__init__.py
+  - src/seharness/orchestrator/types.py
+  - src/seharness/orchestrator/runner.py
+  - src/seharness/orchestrator/phases.py
+  - src/seharness/orchestrator/orchestrator.py
+  - tests/unit/orchestrator/__init__.py
+  - tests/unit/orchestrator/test_orchestrator.py
+  - tests/unit/orchestrator/test_orchestrator_mutation_killers.py
+  - docs/architecture.md
+
+files_modified:
+  - src/seharness/pipeline/vertical_slice.py
+  - src/seharness/controller/application_service.py
+  - src/seharness/controller/run_ledger.py
+  - src/seharness/cli.py
+  - tests/e2e/test_vertical_slice.py
+  - CHANGELOG.md
+  - .gitignore
+
+closes:
+  - G1: real orchestrator
+  - G2: single canonical entry point
+  - G6: failed/blocked/paused terminal states
+  - auto-merge prevention layer 6 (Orchestrator exposes no merge* methods)
+
+deferred:
+  - G3 real production adapters → cluster B
+  - G4 sandbox → cluster C
+  - G5 honest E2E test → cluster D
+  - G7-G11 durable orchestration + traces → cluster E

@@ -1,0 +1,10 @@
+{
+  "phase": "red",
+  "exit_code": 1,
+  "duration_s": 0.15,
+  "failure_kind": "expected_failure",
+  "failure_reason": "AssertionError: assert 'complete' == 'completed' — terminal_state mismatch with SPEC §line 587",
+  "test_id": "tests/e2e/test_vertical_slice.py::test_pipeline_runs_to_completed",
+  "command": "pytest tests/e2e/ --no-cov -q",
+  "notes": "Pre-Cluster-A state — VerticalSlicePipeline emitted terminal_state='complete' (RunState legacy value) but the SPEC and E2E test expect 'completed'."
+}

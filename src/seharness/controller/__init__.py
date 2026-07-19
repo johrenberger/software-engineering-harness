@@ -22,14 +22,24 @@ from .application_service import (
 )
 from .config import ApplicationServiceFactory, ControllerConfig, ControllerConfigError
 from .pause_resume import Pauser, Resumer, StubPauser, StubResumer
+from .real_adapters import (
+    AdapterUnavailable,
+    FileRunLedger,
+    GitHubChecksClient,
+    LocalTaskExecutor,
+)
 from .run_ledger import RunLedger, RunRecord, RunState
 
 __all__ = [
+    "AdapterUnavailable",
     "ApplicationServiceFactory",
     "ControllerApplicationService",
     "ControllerConfig",
     "ControllerConfigError",
     "FeatureExecutor",
+    "FileRunLedger",
+    "GitHubChecksClient",
+    "LocalTaskExecutor",
     "Pauser",
     "Resumer",
     "RunLedger",

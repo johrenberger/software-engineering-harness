@@ -1,0 +1,35 @@
+{
+  "phase": "green",
+  "exit_code": 0,
+  "duration_s": 0.4,
+  "test_id": "tests/unit/controller/test_real_adapters.py",
+  "command": "pytest tests/unit/controller/test_real_adapters.py --no-cov -q",
+  "covered_tests": [
+    "test_local_task_executor_produces_real_task_result",
+    "test_local_task_executor_resume_returns_ok",
+    "test_local_task_executor_cancel_returns_ok",
+    "test_local_task_executor_satisfies_feature_executor_protocol",
+    "test_local_task_executor_has_no_merge_method",
+    "test_github_checks_client_unavailable_without_gh",
+    "test_github_checks_client_unavailable_without_token",
+    "test_github_checks_client_translates_api_response",
+    "test_github_checks_client_handles_non_json_response",
+    "test_github_checks_client_handles_nonzero_exit",
+    "test_github_checks_client_handles_unknown_enum_values",
+    "test_file_run_ledger_records_start",
+    "test_file_run_ledger_persists_across_instances",
+    "test_file_run_ledger_writes_jsonl",
+    "test_file_run_ledger_truncates_partial_last_line",
+    "test_file_run_ledger_mark_all_terminal_states",
+    "test_file_run_ledger_runs_returns_sorted_by_started_at",
+    "test_file_run_ledger_bounds_to_max_records",
+    "test_file_run_ledger_update_unknown_run_returns_none",
+    "test_file_run_ledger_contains_dunder"
+  ],
+  "required_tests": [
+    "test_local_task_executor_produces_real_task_result"
+  ],
+  "files": [
+    "src/seharness/controller/real_adapters.py"
+  ]
+}

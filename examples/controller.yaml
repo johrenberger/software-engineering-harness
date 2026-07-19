@@ -1,14 +1,51 @@
-# Slice 12/13 — controller service wiring.
+# Cluster A + B default controller.yaml — real production adapters.
 #
-# Consumed by `ApplicationServiceFactory` (slice 12).
-# Each slot accepts either "stub" (default, used in tests) or a fully
-# qualified Python path to a production implementation.
+# Schema:
+#   services:
+#     feature:   "controller" | "stub"   # /feature command impl
+#     status:    "controller" | "stub"   # /status command impl
+#     runs:      "controller" | "stub"   # /runs command impl
+#     resume:    "controller" | "stub"   # /resume command impl
+#     cancel:    "controller" | "stub"   # /cancel command impl
+#     pr:        "controller" | "stub"   # /pr command impl
+#
+# Cluster B: this example uses the real production adapters
+# (`controller`) by default. Stub versions are still available for
+# tests and `controller.factory.default()` returns the stub factory.
+services:
+  feature: controller
+  status:  controller
+  runs:    controller
+  resume:  controller
+  cancel:  controller
+  pr:      controller
 
-ci_monitor: stub          # seharness.ci.monitor.CiMonitor (real impl)
-task_executor: stub       # controller FeatureExecutor (real impl)
-run_ledger: stub          # controller RunLedger (always in-process)
+# Cluster B production adapter configuration.
+#
+# The factory injects concrete adapters at startup:
+#   task_executor: LocalTaskExecutor — wraps slice-7 TaskExecutionService.
+#   run_ledger:    FileRunLedger — durable JSONL at OPENCLAW_HOME/ledger.jsonl.
+#   ci_monitor:    CiMonitor — GitHub-backed ChecksClient.
+#
+# Env vars used:
+#   OPENCLAW_HOME — root for ledger + repos (default: ~/.openclaw).
+#   GITHUB_TOKEN  — required by GitHubChecksClient (gh auth).
+#   GITHUB_REPO   — owner/repo for CI checks (e.g. "octocat/hello-world").
+adapters:
+  task_executor:
+    kind: local
+    repo_root: "${OPENCLAW_HOME}/repos/${GITHUB_REPO##*/}"
+    execution_root: "${OPENCLAW_HOME}/runs"
+  run_ledger:
+    kind: file
+    path: "${OPENCLAW_HOME}/ledger.jsonl"
+    max_records: 100
+  ci_monitor:
+    kind: github
+    repo: "${GITHUB_REPO}"
+    timeout_s: 30
 
-# Optional: workspace + repository layout.
+# Workspace + repository layout.
 workspace_root: ~/.openclaw
 repository_root: ./repos
 
