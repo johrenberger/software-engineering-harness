@@ -159,8 +159,10 @@ def test_workflow_pip_installs_are_pinned() -> None:
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue
-            # `python -m pip install --upgrade pip` is allowed (pinned via setup-python).
-            if "pip install --upgrade pip" in line or "pip install -U pip" in line:
+            # `python -m pip install --upgrade "pip==<version>"` is pinned.
+            # (Scorecard rejects bare `--upgrade pip` because it can't pin
+            # the version; we pin to the version in uv.lock.)
+            if "pip install" in line and "pip==" in line:
                 continue
             # `pip install --require-hashes -r <file>` is the gold standard.
             if "--require-hashes" in line and "-r" in line:
