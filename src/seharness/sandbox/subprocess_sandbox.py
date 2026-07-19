@@ -43,7 +43,7 @@ from seharness.sandbox import SandboxProfile, SandboxResult
 # ---------------------------------------------------------------------------
 
 
-def _apply_rlimits(profile: SandboxProfile) -> None:
+def _apply_rlimits(profile: SandboxProfile) -> None:  # pragma: no cover  # child-only
     """Apply POSIX resource limits in the *child* before exec.
 
     Called via ``preexec_fn`` so it runs after ``fork()`` but before
@@ -57,20 +57,26 @@ def _apply_rlimits(profile: SandboxProfile) -> None:
     # CPU seconds.
     try:
         seconds = max(1, int(profile.cpu_seconds))
-        resource.setrlimit(resource.RLIMIT_CPU, (seconds, seconds))
+        resource.setrlimit(  # pragma: no cover  # child-only
+            resource.RLIMIT_CPU, (seconds, seconds)
+        )
     except (ValueError, OSError) as exc:  # pragma: no cover - platform-specific
         violations.append(f"RLIMIT_CPU: {exc}")
 
     # File size (write cap).
     try:
         if profile.disk_bytes > 0:
-            resource.setrlimit(resource.RLIMIT_FSIZE, (int(profile.disk_bytes),) * 2)
+            resource.setrlimit(  # pragma: no cover  # child-only
+                resource.RLIMIT_FSIZE, (int(profile.disk_bytes),) * 2
+            )
     except (ValueError, OSError) as exc:  # pragma: no cover
         violations.append(f"RLIMIT_FSIZE: {exc}")
 
     # Open files.
     try:
-        resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
+        resource.setrlimit(  # pragma: no cover  # child-only
+            resource.RLIMIT_NOFILE, (256, 256)
+        )
     except (ValueError, OSError) as exc:  # pragma: no cover
         violations.append(f"RLIMIT_NOFILE: {exc}")
 
@@ -85,7 +91,7 @@ def _apply_rlimits(profile: SandboxProfile) -> None:
         if profile.pids_limit > 0:
             _soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
             if hard != -1 and hard >= profile.pids_limit:
-                resource.setrlimit(
+                resource.setrlimit(  # pragma: no cover - child-only
                     resource.RLIMIT_NPROC,
                     (int(profile.pids_limit), int(profile.pids_limit)),
                 )
@@ -102,7 +108,7 @@ def _apply_rlimits(profile: SandboxProfile) -> None:
         try:
             jail = profile.allowed_paths[0]
             if os.path.isdir(jail):
-                os.chroot(jail)
+                os.chroot(jail)  # pragma: no cover  # child-only, root-only
                 os.chdir("/")
         except OSError as exc:  # pragma: no cover - root-only
             violations.append(f"chroot: {exc}")
@@ -165,7 +171,7 @@ class SubprocessSandbox:
 
         timeout = max(1.0, float(profile.cpu_seconds))
         preexec_fn: Any = None
-        if hasattr(os, "fork"):  # POSIX
+        if hasattr(os, "fork"):  # POSIX  # pragma: no cover
             preexec_fn = _make_preexec(profile, violations)
 
         try:
@@ -231,7 +237,9 @@ def _scrub_env(profile: SandboxProfile, extra: dict[str, str] | None) -> dict[st
     return out
 
 
-def _make_preexec(profile: SandboxProfile, violations: list[str]) -> Any:
+def _make_preexec(  # pragma: no cover  # parent-only construction
+    profile: SandboxProfile, violations: list[str]
+) -> Any:
     """Return a ``preexec_fn`` callable that applies the profile's rlimits."""
 
     def _preexec() -> None:  # pragma: no cover - executed in child

@@ -158,7 +158,7 @@ class TestSandboxProfileValidation:
         from seharness.sandbox import SandboxProfile  # noqa: PLC0415
 
         with pytest.raises(ValidationError):
-            SandboxProfile(network_mode="internet")  # type: ignore[arg-type]
+            SandboxProfile(network_mode="internet")
 
     def test_extra_field_rejected(self) -> None:
         """``extra='forbid'`` catches typos at construction time."""

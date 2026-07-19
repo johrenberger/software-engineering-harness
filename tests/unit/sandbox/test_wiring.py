@@ -71,8 +71,8 @@ class TestSubprocessRunnerWiring:
         from seharness.validation.runner import SubprocessRunner  # noqa: PLC0415
 
         runner = SubprocessRunner()
-        assert runner._sandbox is not None  # type: ignore[attr-defined]
-        assert isinstance(runner._sandbox, NoopSandbox)  # type: ignore[attr-defined]
+        assert runner._sandbox is not None
+        assert isinstance(runner._sandbox, NoopSandbox)
 
     def test_custom_sandbox_is_stored(self, tmp_path: Path) -> None:
         from seharness.sandbox import SandboxProfile, SubprocessSandbox  # noqa: PLC0415
@@ -81,8 +81,8 @@ class TestSubprocessRunnerWiring:
         sandbox = SubprocessSandbox()
         profile = SandboxProfile(cwd=str(tmp_path))
         runner = SubprocessRunner(sandbox=sandbox, sandbox_profile=profile)
-        assert runner._sandbox is sandbox  # type: ignore[attr-defined]
-        assert runner._sandbox_profile is profile  # type: ignore[attr-defined]
+        assert runner._sandbox is sandbox
+        assert runner._sandbox_profile is profile
 
     def test_runner_with_sandbox_uses_profile_cwd(self, tmp_path: Path) -> None:
         """Runner.run() invokes the sandbox with profile.cwd."""
