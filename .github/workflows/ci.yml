@@ -1,5 +1,19 @@
 name: ci
 
+# G7: permissions block enforces minimum-privilege token. Combined
+# with G4 (SHA-pinning) and G6 (Dependabot), this is the third
+# leg of the supply-chain hardening posture.
+#
+# - `contents: read`: checkout needs it (default).
+# - `attestations: write`: required by actions/attest-build-provenance
+#   so it can publish the SLSA provenance attestation.
+# - `id-token: write`: required for OIDC token exchange (some
+#   attestation flows use this; default `none` breaks them).
+permissions:
+  contents: read
+  attestations: write
+  id-token: write
+
 on:
   push:
     branches: [main]
@@ -132,6 +146,60 @@ jobs:
             coverage.xml
           if-no-files-found: ignore
           retention-days: 30
+
+      # G7: Generate a CycloneDX SBOM for every ci.yml run.
+      #
+      # `anchore/sbom-action@v0` uses syft internally to produce
+      # the SBOM directly from the workflow's filesystem (i.e. the
+      # checked-out src tree). The output format is the industry-
+      # standard CycloneDX JSON; it lists every direct + transitive
+      # Python dep picked out of pyproject.toml + uv.lock.
+      #
+      # Output: sbom-cyclonedx.json in the workspace, uploaded as
+      # the `sbom` artifact below. The dashboard doesn't read this
+      # yet (G12d); for now it's a downstream-consumable artifact
+      # for security auditing + future release tooling.
+      #
+      # Why not `cyclonedx/cyclonedx-py` directly? It supports
+      # Python deps only; syft captures any local install (e.g.
+      # `pip install .` would not normally exist in this CI, but
+      # syft is more future-proof if the project grows).
+      - name: Build SBOM (CycloneDX)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # Only on push to main — PRs produce transient SBOMs that
+        # no one audits. Cheap optimization; the action takes a few
+        # seconds but does not need to run on every PR.
+        uses: anchore/sbom-action@v0
+        with:
+          format: cyclonedx-json
+          artifact-name: sbom-cyclonedx.json
+          # Scan only the workspace (no Docker images here).
+          # syft scans: /github/workspace by default.
+
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom-cyclonedx.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # G7: Attest the build provenance (SLSA L1).
+      #
+      # `actions/attest-build-provenance` produces a Sigstore-signed
+      # attestation that links the produced artifacts (test-results,
+      # mutation-results, sbom) to the source commit + workflow run.
+      # Downstream consumers can verify that the artifacts really
+      # came from this commit using the GH API.
+      #
+      # subject-name: the workflow run, e.g.
+      # `https://github.com/johrenberger/software-engineering-harness/sha/<sha>`
+      - name: Attest build provenance
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ github.server_url }}/${{ github.repository }}/sha/${{ github.sha }}
 
       # G1b: per-PR coverage delta. Fails CI if any line added or modified
       # by this PR is uncovered, or if the PR drops the diff coverage below
