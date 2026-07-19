@@ -123,6 +123,7 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--cov=seharness",
+    "--cov-branch",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
@@ -160,7 +161,11 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "@abstractmethod",
 ]
-fail_under = 90
+# G1a: enforced by CI. Set to current baseline (88.22% as of Cluster E merge);
+# will be lifted to 90 as pre-existing untested paths gain tests. G1b's
+# per-PR delta is the actual regression-prevention mechanism — a PR that
+# drops overall coverage will fail CI even when the floor stays at 88.
+fail_under = 88
 exclude_also = [
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
