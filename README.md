@@ -54,6 +54,14 @@ docker compose -f docker/docker-compose.yml up
 - [Configure](docs/user/configure.md)
 - [Run](docs/user/run.md)
 - [Extend](docs/user/extend.md)
+- [Sandbox threat model](docs/user/sandbox.md)
+
+## Security
+
+To report a vulnerability, **do not file a public issue** &mdash; use
+[GitHub Security Advisories](https://github.com/johrenberger/software-engineering-harness/security/advisories/new)
+or email `security@openclaw.eu`. See [SECURITY.md](SECURITY.md) for
+the response timeline and supported versions.
 
 ## License
 
