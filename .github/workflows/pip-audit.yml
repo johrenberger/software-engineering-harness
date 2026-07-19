@@ -37,13 +37,15 @@ on:
 
 permissions:
   contents: read
-  # Required to upload SARIF to the code-scanning dashboard.
-  security-events: write
 
 jobs:
   pip-audit:
     name: pip-audit (locked deps)
     runs-on: ubuntu-latest
+    # security-events: write moved to job scope per G5 Scorecard contract.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
