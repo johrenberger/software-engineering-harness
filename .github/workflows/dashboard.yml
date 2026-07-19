@@ -2,14 +2,30 @@ name: dashboard
 
 # G12 — Engineering dashboard via GitHub Pages.
 #
-# Triggers on push to main only. PRs do NOT redeploy the live site
-# (would thrash the public dashboard on every PR). The rendered
-# snapshot still appears in the ci.yml job summary on every run.
+# Triggers:
+#   - `workflow_run` for ci.yml completion on main (the canonical path
+#     — runs after tests/coverage/mutation produce all the artifacts).
+#   - `push` to main (manual fallback for testing; runs without
+#     ci.yml's artifacts and renders a placeholder snapshot).
+#   - `workflow_dispatch` (manual trigger from the Actions tab).
+#
+# PRs do NOT redeploy the live site (would thrash the public dashboard
+# on every PR). The rendered snapshot still appears in the ci.yml job
+# summary on every PR.
+#
+# G12c cross-workflow artifact sharing: when triggered by ci.yml's
+# completion, this workflow uses `actions/download-artifact@v4` with
+# `run-id` to grab test-results + mutation-results from ci.yml's run,
+# so the rendered dashboard has real coverage / mutation / flaky / tests
+# data instead of placeholder zeros.
 #
 # Per design choice (Option A): single-page dashboard at
 # dashboard/index.html, with Chart.js vendored locally.
 
 on:
+  workflow_run:
+    workflows: ["ci"]
+    types: [completed]
   push:
     branches: [main]
   workflow_dispatch:
@@ -18,6 +34,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: read   # G12c: needed to download ci.yml artifacts via run-id
 
 concurrency:
   group: pages
@@ -56,13 +73,69 @@ jobs:
         #
         # Pages source is "GitHub Actions" so the dashboard.yml
         # artifact is the source of truth — no commit needed.
+        # The deployed URL is the site root (no /dashboard/ prefix)
+        # because actions/upload-pages-artifact@v3 strips the source
+        # directory when uploading.
         env:
-          DASHBOARD_HISTORY_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/dashboard/assets/history.jsonl
+          DASHBOARD_HISTORY_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/assets/history.jsonl
         run: |
           mkdir -p dashboard/assets
           curl -fsSL --max-time 30 "$DASHBOARD_HISTORY_URL" \
             -o dashboard/assets/history.jsonl || \
             echo "(no prior history; starting fresh)"
+
+      # G12c: consume ci.yml's artifacts when this workflow was
+      # triggered by a workflow_run event. Falls back gracefully on
+      # push/workflow_dispatch triggers (no run-id available) — those
+      # renders a placeholder snapshot, which is the right test/UX
+      # behavior for manual triggers.
+      - name: Fetch ci.yml test artifacts
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+          path: dashboard/build-artifacts/test-results
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch ci.yml mutation artifacts
+        if: github.event_name == 'workflow_run'
+        continue-on-error: true
+        # continue-on-error: mutmut-junit.xml may be missing when ci.yml
+        # ran on a push with no src/ changes (mutmut step is skipped).
+        # render_dashboard.py handles missing mutation XML as "no
+        # mutation data" (the mutation block shows skipped=true).
+        uses: actions/download-artifact@v4
+        with:
+          name: mutation-results
+          path: dashboard/build-artifacts/mutation-results
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Stage artifacts for render
+        # G12c: on workflow_run triggers, copy ci.yml's artifacts from
+        # the download-path to the path render_dashboard.py expects
+        # (repo root, per its tests/env defaults). On push/dispatch,
+        # skip — render_dashboard.py will use whatever files happen
+        # to be in the working tree (placeholder behavior).
+        if: github.event_name == 'workflow_run'
+        run: |
+          mkdir -p dashboard/build-artifacts
+          set -e
+          if [ -f dashboard/build-artifacts/test-results/junit.xml ]; then
+            cp dashboard/build-artifacts/test-results/junit.xml junit.xml
+          fi
+          if [ -f dashboard/build-artifacts/test-results/flaky-tests.json ]; then
+            cp dashboard/build-artifacts/test-results/flaky-tests.json flaky-tests.json
+          fi
+          if [ -f dashboard/build-artifacts/test-results/coverage.xml ]; then
+            cp dashboard/build-artifacts/test-results/coverage.xml coverage.xml
+          fi
+          if [ -f dashboard/build-artifacts/mutation-results/mutmut-junit.xml ]; then
+            cp dashboard/build-artifacts/mutation-results/mutmut-junit.xml mutmut-junit.xml
+          fi
+          echo "staged artifacts for render:"
+          ls -la junit.xml flaky-tests.json coverage.xml mutmut-junit.xml 2>&1 | grep -v "No such" || true
 
       - name: Re-render dashboard snapshot
         # ci.yml already wrote dashboard/assets/data.js when it ran;
