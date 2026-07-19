@@ -30,6 +30,10 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_DATA = REPO_ROOT / "dashboard" / "assets" / "data.js"
+HISTORY_JSONL = REPO_ROOT / "dashboard" / "assets" / "history.jsonl"
+
+# G12b: trend window size. Show the last N rows in sparkline charts.
+TREND_WINDOW = 30
 
 
 def _safe_load(path: Path, *, loader: Any) -> Any:
@@ -203,10 +207,95 @@ def parse_mutmut_junit(path: Path) -> dict[str, Any]:
     }
 
 
+# ----------------------------------------------------------------------
+# G12b — trendline history
+# ----------------------------------------------------------------------
+
+
+def parse_history(path: Path) -> list[dict[str, Any]]:
+    """Read history.jsonl and return a list of metric rows.
+
+    Defensive: a missing file returns []. Malformed lines are skipped
+    (the dashboard should never crash on a typo in the history file).
+    """
+    if not path.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    except Exception as exc:
+        print(f"  warn: could not read {path}: {exc}", file=sys.stderr)
+        return []
+    return rows
+
+
+def compute_trends(
+    history: list[dict[str, Any]], window: int = TREND_WINDOW
+) -> dict[str, list[float]]:
+    """Reduce history rows into per-metric trend arrays.
+
+    Returns a dict mapping metric name → list of floats (last N rows,
+    oldest first). Each row in `history` must have numeric values for
+    `tests`, `passRate`, `coverage`, `mutation`. Rows missing a metric
+    are skipped for that metric only.
+    """
+    tail = history[-window:] if window > 0 else history
+    out: dict[str, list[float]] = {
+        "tests": [],
+        "passRate": [],
+        "coverage": [],
+        "mutation": [],
+    }
+    for row in tail:
+        for key, default in out.items():
+            value = row.get(key, default)
+            if isinstance(value, (int, float)):
+                default.append(float(value))
+    return out
+
+
+def append_history(path: Path, row: dict[str, Any]) -> int:
+    """Append a single row to history.jsonl. Returns the new total row count."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, sort_keys=True) + "\n")
+    return sum(1 for _ in path.open("r", encoding="utf-8")) if path.is_file() else 1
+
+
+def build_history_row(
+    junit: dict[str, Any],
+    coverage: dict[str, Any],
+    mutation: dict[str, Any],
+    meta: dict[str, str],
+) -> dict[str, Any]:
+    """Construct one history row from the current render's parsed metrics."""
+    return {
+        "ts": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "commitSha": meta.get("commitSha", ""),
+        "runId": meta.get("runId", ""),
+        "tests": junit.get("testCount", 0) or 0,
+        "passRate": junit.get("passRate", 0.0) or 0.0,
+        "coverage": coverage.get("percent", 0.0) or 0.0,
+        "mutation": mutation.get("killRate", 0.0) or 0.0,
+    }
+
+
 def build_data_js(
-    junit: dict[str, Any], flaky: dict[str, Any], coverage: dict[str, Any], mutation: dict[str, Any]
+    junit: dict[str, Any],
+    flaky: dict[str, Any],
+    coverage: dict[str, Any],
+    mutation: dict[str, Any],
+    trends: dict[str, list[float]],
 ) -> str:
-    """Render the data.js content with the snapshot."""
+    """Render the data.js content with the snapshot + trendlines."""
     snapshot: dict[str, Any] = {
         "generatedAt": os.environ.get("DASHBOARD_GENERATED_AT")
         or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -223,6 +312,7 @@ def build_data_js(
         "slowest": junit["slowest"],
         "flaky": flaky,
         "mutation": mutation,
+        "trends": trends,
         # buildHistory is populated client-side via the GH Actions API.
         "buildHistory": [],
         "meta": {
@@ -246,16 +336,44 @@ def main() -> int:
     flaky_path = REPO_ROOT / "flaky-tests.json"
     coverage_path = REPO_ROOT / "coverage.xml"
     mutmut_path = REPO_ROOT / "mutmut-junit.xml"
+    # Allow tests to redirect inputs via env (otherwise the defaults point
+    # into the repo workspace, which is what CI and local both want).
+    if "DASHBOARD_DATA_OUT" in os.environ:
+        out_path = Path(os.environ["DASHBOARD_DATA_OUT"])
+    else:
+        out_path = DASHBOARD_DATA
+    if "HISTORY_JSONL" in os.environ:
+        history_path = Path(os.environ["HISTORY_JSONL"])
+    else:
+        history_path = HISTORY_JSONL
 
     junit = parse_junit_totals(junit_path)
     flaky = parse_flaky(flaky_path)
     coverage = parse_coverage(coverage_path)
     mutation = parse_mutmut_junit(mutmut_path)
 
-    DASHBOARD_DATA.parent.mkdir(parents=True, exist_ok=True)
-    DASHBOARD_DATA.write_text(build_data_js(junit, flaky, coverage, mutation))
+    # G12b: read existing history, compute trends, append current row.
+    history = parse_history(history_path)
+    trends = compute_trends(history)
+    row = build_history_row(
+        junit,
+        coverage,
+        mutation,
+        {
+            "commitSha": os.environ.get("DASHBOARD_COMMIT_SHA", ""),
+            "runId": os.environ.get("DASHBOARD_RUN_ID", ""),
+        },
+    )
+    append_history(history_path, row)
+    # Refresh trends to include the row we just appended.
+    history = parse_history(history_path)
+    trends = compute_trends(history)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(build_data_js(junit, flaky, coverage, mutation, trends))
     print(
-        f"  wrote {DASHBOARD_DATA.relative_to(REPO_ROOT)} ({DASHBOARD_DATA.stat().st_size} bytes)"
+        f"  wrote {out_path} ({out_path.stat().st_size} bytes); "
+        f"history rows={len(history)}; trends keys={sorted(trends)}"
     )
     return 0
 

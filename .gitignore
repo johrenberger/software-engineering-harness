@@ -28,6 +28,13 @@ mutmut-report/
 
 # Type checking
 .mypy_cache/
+
+# Dashboard rendered artifacts (regenerated each CI run by render_dashboard.py).
+# data.js IS tracked as a safe-default placeholder (forces-rerender if missing
+# on fresh clones); it's overwritten by dashboard.yml each CI run.
+dashboard/assets/data.js
+!dashboard/assets/data.js
+dashboard/assets/history.jsonl
 .ruff_cache/
 
 # Bandit

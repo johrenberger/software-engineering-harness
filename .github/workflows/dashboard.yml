@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -48,6 +48,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install coverage
 
+      - name: Fetch previous dashboard history
+        # G12b: download the deployed history.jsonl from the last
+        # Pages deploy so we can append a new row. Defensive: 404
+        # on first deploy (no history yet) is fine; render_dashboard.py
+        # handles a missing file as "no history, start fresh".
+        #
+        # Pages source is "GitHub Actions" so the dashboard.yml
+        # artifact is the source of truth — no commit needed.
+        env:
+          DASHBOARD_HISTORY_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/dashboard/assets/history.jsonl
+        run: |
+          mkdir -p dashboard/assets
+          curl -fsSL --max-time 30 "$DASHBOARD_HISTORY_URL" \
+            -o dashboard/assets/history.jsonl || \
+            echo "(no prior history; starting fresh)"
+
       - name: Re-render dashboard snapshot
         # ci.yml already wrote dashboard/assets/data.js when it ran;
         # we re-render here from the committed artifacts so the Pages
@@ -70,32 +86,6 @@ jobs:
           DASHBOARD_BRANCH: ${{ github.ref_name }}
         run: |
           python scripts/render_dashboard.py
-
-      - name: Commit rendered snapshot back to main
-        # Pages source is currently "Build from a branch" (legacy
-        # Jekyll), so the auto-generated pages-build-deployment
-        # workflow clobbers this dashboard.yml's Pages artifact
-        # (it runs Jekyll on the entire repo HEAD, including the
-        # committed placeholder data.js).
-        #
-        # To make the rendered snapshot actually public, commit
-        # it back to main. The `[skip dashboard]` directive in the
-        # commit message prevents this workflow from re-triggering;
-        # `[skip ci]` skips the ci.yml re-trigger too.
-        #
-        # When the user changes Pages source to "GitHub Actions"
-        # (Settings → Pages → Source), this commit step can be
-        # removed.
-        run: |
-          if git diff --quiet dashboard/assets/data.js; then
-            echo "data.js unchanged; skipping commit"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add dashboard/assets/data.js
-          git commit -m "chore(dashboard): publish rendered snapshot [skip dashboard] [skip ci]"
-          git push
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

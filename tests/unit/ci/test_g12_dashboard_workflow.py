@@ -405,46 +405,45 @@ def test_dashboard_workflow_uploads_dashboard_directory() -> None:
     ), "upload-pages-artifact must set path: dashboard"
 
 
-def test_dashboard_workflow_commits_rendered_snapshot_back_to_main() -> None:
-    """The dashboard.yml must push the rendered data.js back to main.
+def test_dashboard_workflow_no_self_publish_with_workflow_pages_source() -> None:
+    """With Pages source = 'GitHub Actions', the dashboard.yml artifact is the source of truth.
 
-    Pages is currently configured with `build_type: legacy` (Build from
-    a branch / Jekyll), so the auto-generated pages-build-deployment
-    workflow clobbers our dashboard.yml Pages artifact with its Jekyll
-    output (which serves the committed placeholder, not the rendered
-    snapshot).
+    PR #24 added a self-publish commit step (data.js back to main) to work
+    around the legacy Jekyll `pages-build-deployment` clobbering our
+    dashboard.yml artifact. After the user changed Pages source to
+    'GitHub Actions' (Settings → Pages → Source), the clobbering
+    workflow stopped running and the self-publish commits are no longer
+    needed (and would cause an infinite loop).
 
-    To make the rendered snapshot actually public, dashboard.yml must
-    commit the freshly-rendered data.js back to main with `[skip dashboard]`
-    + `[skip ci]` to break the workflow loop. The next push (or the
-    Jekyll build of the same push) will then include the rendered file.
+    This test asserts the self-publish pattern is gone: dashboard.yml
+    must NOT contain `git commit` or `git push`.
     """
     text = DASHBOARD_WORKFLOW.read_text()
-    # Must include the commit-back step.
-    assert "Commit rendered snapshot" in text, (
-        "dashboard.yml must include a 'Commit rendered snapshot back to main' step"
+    assert "git commit" not in text, (
+        "dashboard.yml must NOT contain `git commit` (self-publish pattern "
+        "removed when Pages source changed to 'GitHub Actions')"
     )
-    # Must use skip directives to break the workflow loop.
-    assert "[skip dashboard]" in text, (
-        "dashboard.yml's self-commit message must include '[skip dashboard]' "
-        "to prevent re-triggering itself"
-    )
-    assert "[skip ci]" in text, (
-        "dashboard.yml's self-commit message must include '[skip ci]' "
-        "to prevent ci.yml from re-triggering"
-    )
-    # Must git push to actually publish the commit.
-    assert re.search(r"^\s*git push\s*$", text, re.MULTILINE), (
-        "dashboard.yml's commit step must include `git push`"
-    )
+    assert "git push" not in text, "dashboard.yml must NOT contain `git push` (same reason)"
 
 
-def test_dashboard_workflow_has_write_permission_for_self_commit() -> None:
-    """dashboard.yml needs `contents: write` to commit back to main."""
+def test_dashboard_workflow_only_reads_contents() -> None:
+    """dashboard.yml only needs read permission (no self-commit anymore)."""
     text = DASHBOARD_WORKFLOW.read_text()
-    assert "contents: write" in text, (
-        "dashboard.yml must declare `contents: write` permission "
-        "(needed for the self-publish commit)"
+    permissions_block = re.search(
+        r"^permissions:\s*\n((?:\s+\w+:\s*\w+\s*\n)+)",
+        text,
+        re.MULTILINE,
+    )
+    assert permissions_block is not None, "dashboard.yml must declare a permissions: block"
+    block = permissions_block.group(0)
+    # contents: write should NOT be present (no commits anymore).
+    assert "contents: write" not in block, (
+        "dashboard.yml must NOT declare `contents: write` "
+        "(no self-publish commits; Pages deploys artifact directly)"
+    )
+    # contents: read IS expected (for the checkout action).
+    assert "contents: read" in block, (
+        "dashboard.yml must declare `contents: read` (checkout needs it)"
     )
 
 

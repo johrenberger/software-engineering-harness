@@ -63,6 +63,24 @@
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 16px;
     }
+    .trend-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 8px;
+    }
+    .trend-card {
+      background: rgba(255,255,255,0.5);
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .trend-card canvas {
+      height: 70px !important;
+      width: 100% !important;
+    }
+    @media (prefers-color-scheme: dark) {
+      .trend-card { background: rgba(255,255,255,0.05); }
+    }
     section {
       background: var(--bg-card);
       border: 1px solid var(--border);
@@ -163,6 +181,28 @@
         <h2>Recent CI runs</h2>
         <canvas id="build-history-chart"></canvas>
         <div class="metric-sub" id="build-history-status"></div>
+      </section>
+
+      <section id="trends">
+        <h2>Trends <span class="metric-sub" id="trends-window"></span></h2>
+        <div class="trend-grid">
+          <div class="trend-card">
+            <div class="metric-sub">Tests</div>
+            <canvas id="tests-trend"></canvas>
+          </div>
+          <div class="trend-card">
+            <div class="metric-sub">Pass rate</div>
+            <canvas id="passrate-trend"></canvas>
+          </div>
+          <div class="trend-card">
+            <div class="metric-sub">Coverage</div>
+            <canvas id="coverage-trend"></canvas>
+          </div>
+          <div class="trend-card">
+            <div class="metric-sub">Mutation</div>
+            <canvas id="mutation-trend"></canvas>
+          </div>
+        </div>
       </section>
     </div>
   </main>
@@ -398,6 +438,95 @@
           });
         }
       }
+
+      // --- trends (G12b) ---
+      function renderTrendSparkline(canvasId, values, opts) {
+        var canvas = document.getElementById(canvasId);
+        if (!canvas || !window.Chart) return;
+        if (!values || values.length < 2) {
+          // Need at least 2 points to draw a line; show "—" otherwise.
+          var ctx2d = canvas.getContext("2d");
+          if (ctx2d) {
+            ctx2d.font = "12px system-ui";
+            ctx2d.fillStyle = "#888";
+            ctx2d.fillText("—", 8, 18);
+          }
+          return;
+        }
+        var labels = values.map(function (_, i) { return String(i); });
+        var yMin = Math.min.apply(null, values);
+        var yMax = Math.max.apply(null, values);
+        // Pad y-axis slightly so the line doesn't hug the edges.
+        var pad = (yMax - yMin) * 0.1 || 0.01;
+        new Chart(canvas, {
+          type: "line",
+          data: {
+            labels: labels,
+            datasets: [{
+              data: values,
+              borderColor: (opts && opts.color) || "#1976d2",
+              backgroundColor: (opts && opts.bg) || "rgba(25,118,210,0.10)",
+              borderWidth: 2,
+              pointRadius: 1.5,
+              pointHoverRadius: 3,
+              fill: true,
+              tension: 0.25,
+            }],
+          },
+          options: {
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales: {
+              x: { display: false },
+              y: {
+                display: true,
+                beginAtZero: false,
+                suggestedMin: yMin - pad,
+                suggestedMax: yMax + pad,
+                ticks: {
+                  font: { size: 9 },
+                  callback: function (v) {
+                    return (opts && opts.fmt) ? opts.fmt(v) : String(v);
+                  },
+                },
+              },
+            },
+            maintainAspectRatio: false,
+            animation: false,
+          },
+        });
+      }
+
+      (function renderTrends() {
+        var t = d.trends || {};
+        var totalRows = Math.max(
+          (t.tests || []).length,
+          (t.passRate || []).length,
+          (t.coverage || []).length,
+          (t.mutation || []).length
+        );
+        var winEl = document.getElementById("trends-window");
+        if (winEl) {
+          winEl.textContent = totalRows > 0
+            ? "(" + totalRows + " run" + (totalRows === 1 ? "" : "s") + ")"
+            : "(no history yet)";
+        }
+        renderTrendSparkline("tests-trend", t.tests, {
+          color: "#1976d2", bg: "rgba(25,118,210,0.10)",
+          fmt: function (v) { return v.toFixed(0); },
+        });
+        renderTrendSparkline("passrate-trend", t.passRate, {
+          color: "#2e7d32", bg: "rgba(46,125,50,0.10)",
+          fmt: function (v) { return (v * 100).toFixed(0) + "%"; },
+        });
+        renderTrendSparkline("coverage-trend", t.coverage, {
+          color: "#f57c00", bg: "rgba(245,124,0,0.10)",
+          fmt: function (v) { return (v * 100).toFixed(0) + "%"; },
+        });
+        renderTrendSparkline("mutation-trend", t.mutation, {
+          color: "#7b1fa2", bg: "rgba(123,31,162,0.10)",
+          fmt: function (v) { return (v * 100).toFixed(0) + "%"; },
+        });
+      })();
 
       function escapeHtml(s) {
         return String(s)

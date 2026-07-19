@@ -26,6 +26,7 @@ The dashboard reads four CI artifacts already produced by our pipeline
 | `coverage.xml` | pytest --cov (G1a) | `coverage` |
 | `mutmut-junit.xml` | mutation-test (G2) | `mutation` |
 | live `actions/runs` API | GH Actions API | `buildHistory` |
+| `dashboard/assets/history.jsonl` | G12b (this slice) | `trends` |
 
 All four artifacts are uploaded by `ci.yml` (30-day retention; see
 `.github/workflows/ci.yml` `upload-test-artifacts` and
@@ -111,6 +112,56 @@ is present.
 - **Offline viewing** still works (e.g., for local mirror).
 - **Auditability** — a pinned sha256 in the test guards against a
   compromised CDN push.
+
+## G12b: trendlines (this slice)
+
+The dashboard shows **point-in-time** metrics. G12b adds per-metric
+trendlines (last 30 runs) so you can spot regressions before they ship.
+
+### How it works
+
+* Every dashboard.yml run on `main` curls the currently-deployed
+  `dashboard/assets/history.jsonl` from the live Pages URL.
+* `scripts/render_dashboard.py` parses the JSONL history (one row per
+  past run), appends a new row with the current metrics, computes
+  trend arrays for each metric, and writes the updated `data.js` + the
+  updated `history.jsonl` to disk.
+* The dashboard.yml artifact upload (path: `dashboard/`) bundles both
+  files together; the new Pages deploy serves the updated bundle.
+
+### Schema additions to `window.DASHBOARD_DATA`
+
+```json
+{
+  "trends": {
+    "tests":     [1400, 1420, 1432, 1450],
+    "passRate":  [0.98, 0.99, 1.00, 0.99],
+    "coverage":  [0.85, 0.86, 0.88, 0.88],
+    "mutation":  [0.80, 0.82, 0.89, 0.89]
+  }
+}
+```
+
+### History row schema (JSONL, one line per run)
+
+```json
+{"ts":"2026-07-19T20:00:00Z","commitSha":"abc123...","runId":"12345","tests":1450,"passRate":0.99,"coverage":0.88,"mutation":0.89}
+```
+
+### Defensive behavior
+
+* Missing `history.jsonl` (first deploy after a fresh repo) → start
+  with empty trends; charts show "—" until 2+ rows accumulate.
+* Malformed JSONL lines are skipped (not crash).
+* Concurrent runs may interleave rows — tolerated; trends are sorted
+  by `ts` if present, otherwise by insertion order.
+
+### Why not commit history.jsonl to main?
+
+Pages source is "GitHub Actions" (set in repo Settings → Pages →
+Source). The dashboard.yml artifact IS the source of truth. Committing
+to main would re-trigger ci.yml + dashboard.yml in a loop. The
+fetch-from-live-URL pattern breaks the loop and keeps `main` clean.
 
 ## Future slices
 
