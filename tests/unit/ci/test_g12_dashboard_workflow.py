@@ -405,6 +405,49 @@ def test_dashboard_workflow_uploads_dashboard_directory() -> None:
     ), "upload-pages-artifact must set path: dashboard"
 
 
+def test_dashboard_workflow_commits_rendered_snapshot_back_to_main() -> None:
+    """The dashboard.yml must push the rendered data.js back to main.
+
+    Pages is currently configured with `build_type: legacy` (Build from
+    a branch / Jekyll), so the auto-generated pages-build-deployment
+    workflow clobbers our dashboard.yml Pages artifact with its Jekyll
+    output (which serves the committed placeholder, not the rendered
+    snapshot).
+
+    To make the rendered snapshot actually public, dashboard.yml must
+    commit the freshly-rendered data.js back to main with `[skip dashboard]`
+    + `[skip ci]` to break the workflow loop. The next push (or the
+    Jekyll build of the same push) will then include the rendered file.
+    """
+    text = DASHBOARD_WORKFLOW.read_text()
+    # Must include the commit-back step.
+    assert "Commit rendered snapshot" in text, (
+        "dashboard.yml must include a 'Commit rendered snapshot back to main' step"
+    )
+    # Must use skip directives to break the workflow loop.
+    assert "[skip dashboard]" in text, (
+        "dashboard.yml's self-commit message must include '[skip dashboard]' "
+        "to prevent re-triggering itself"
+    )
+    assert "[skip ci]" in text, (
+        "dashboard.yml's self-commit message must include '[skip ci]' "
+        "to prevent ci.yml from re-triggering"
+    )
+    # Must git push to actually publish the commit.
+    assert re.search(r"^\s*git push\s*$", text, re.MULTILINE), (
+        "dashboard.yml's commit step must include `git push`"
+    )
+
+
+def test_dashboard_workflow_has_write_permission_for_self_commit() -> None:
+    """dashboard.yml needs `contents: write` to commit back to main."""
+    text = DASHBOARD_WORKFLOW.read_text()
+    assert "contents: write" in text, (
+        "dashboard.yml must declare `contents: write` permission "
+        "(needed for the self-publish commit)"
+    )
+
+
 # ----------------------------------------------------------------------
 # 6. docs/engineering-dashboard.md
 # ----------------------------------------------------------------------

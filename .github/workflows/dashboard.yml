@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -70,6 +70,32 @@ jobs:
           DASHBOARD_BRANCH: ${{ github.ref_name }}
         run: |
           python scripts/render_dashboard.py
+
+      - name: Commit rendered snapshot back to main
+        # Pages source is currently "Build from a branch" (legacy
+        # Jekyll), so the auto-generated pages-build-deployment
+        # workflow clobbers this dashboard.yml's Pages artifact
+        # (it runs Jekyll on the entire repo HEAD, including the
+        # committed placeholder data.js).
+        #
+        # To make the rendered snapshot actually public, commit
+        # it back to main. The `[skip dashboard]` directive in the
+        # commit message prevents this workflow from re-triggering;
+        # `[skip ci]` skips the ci.yml re-trigger too.
+        #
+        # When the user changes Pages source to "GitHub Actions"
+        # (Settings → Pages → Source), this commit step can be
+        # removed.
+        run: |
+          if git diff --quiet dashboard/assets/data.js; then
+            echo "data.js unchanged; skipping commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dashboard/assets/data.js
+          git commit -m "chore(dashboard): publish rendered snapshot [skip dashboard] [skip ci]"
+          git push
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
