@@ -1,0 +1,56 @@
+name: codeql
+
+# G5 — CodeQL static analysis workflow.
+#
+# GitHub-official CodeQL scanning for Python. Runs on every push to
+# main + weekly + on PRs that touch Python source. Results land in
+# the repository's "Code scanning" tab and as PR annotations.
+#
+# CodeQL queries are bundled inside github/codeql-action; we don't
+# need to install the CLI separately.
+#
+# G4 — all `uses:` are SHA-pinned.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Wednesdays 03:00 UTC — offsets Dependabot (Mon) and pip-audit
+    # (Mon) so vuln signals don't pile up on the same day.
+    - cron: "0 3 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Required to upload SARIF + manage code-scanning alerts.
+  security-events: write
+  # Required to read actions/checkout contents when init runs.
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["python"]
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # Initializes the CodeQL CLI for the chosen language. The
+      # `queries: security-extended` set covers the standard security
+      # queries plus additional precision queries.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@b7351df727350dca84cb9d725d57dcf5bc82ba26 # v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@b7351df727350dca84cb9d725d57dcf5bc82ba26 # v3
+        with:
+          category: "/language:${{ matrix.language }}"

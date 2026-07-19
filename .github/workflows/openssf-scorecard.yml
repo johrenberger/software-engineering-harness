@@ -1,0 +1,58 @@
+name: openssf-scorecard
+
+# G5 — OpenSSF Scorecard workflow.
+#
+# Scorecard is an OSSF-maintained security health check that scores
+# the repo on 18 supply-chain + maintenance practices (dependency
+# update tooling, branch protection, dangerous workflows, binary
+# artifacts, etc.). The action posts the score as a step summary
+# + uploads the SARIF to the code-scanning dashboard.
+#
+# Workflow follows the upstream "Scorecard GitHub Action" template:
+#   https://github.com/ossf/scorecard-action#workflow-template
+#
+# G4 — all `uses:` are SHA-pinned.
+
+on:
+  # Branch protection pushes only (not PRs) — Scorecard needs the
+  # full repo + branch state and is not actionable as a PR check.
+  push:
+    branches: [main]
+  schedule:
+    # Fridays 06:00 UTC — late-week health check.
+    - cron: "0 6 * * 5"
+  workflow_dispatch:
+
+# Default to minimum-privilege; Scorecard needs write to publish
+# the SARIF, and read for the rest.
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+  id-token: write  # OIDC for upstream Scorecard API
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    # Scorecard's SARIF upload step needs the default GITHUB_TOKEN;
+    # don't override with PAT.
+    steps:
+      - name: Run Scorecard
+        id: scorecard
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        with:
+          # Only scan the default branch on a push; all commits on PR.
+          results_file: results.sarif
+          results_format: sarif
+          # Default public repo token (no PAT needed for public).
+          publish_results: true
+
+      # Upload the SARIF artifact for downstream tooling.
+      - name: Upload SARIF
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          if-no-files-found: ignore

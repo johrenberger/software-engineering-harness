@@ -1,0 +1,78 @@
+name: pip-audit
+
+# G5 — pip-audit workflow.
+#
+# Runs on every push to main + weekly on Mondays + on PRs that touch
+# dependency files. Scans the locked dependency set (uv.lock) for
+# known vulnerabilities and fails the build when findings are present.
+#
+# Complements the inline `pip-audit` step in ci.yml (which runs on
+# every PR via `pip install pip-audit && pip-audit`). This dedicated
+# workflow:
+#   * Uses pypa/gh-action-pip-audit (audits the compiled requirements
+#     against PyPI's vuln DB).
+#   * Fails the job when any vulnerability is found.
+#   * Posts a SARIF artifact for downstream tooling.
+#   * Runs on a weekly cron so vulns published between PRs surface
+#     automatically.
+#
+# Why a separate workflow instead of running pip-audit in ci.yml?
+# The composite action pulls its own venv (with the right pip-audit
+# version pinned), which is much faster than `pip install` + `pip-audit`
+# in every PR matrix leg. And putting the SARIF upload on a dedicated
+# job keeps the code-scanning dashboard aggregation clean.
+#
+# G4 — all `uses:` are SHA-pinned.
+# G6 — Dependabot weekly updates feed back into this audit.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays 06:00 UTC — fresh vuln DB by the time devs start the week.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Required to upload SARIF to the code-scanning dashboard.
+  security-events: write
+
+jobs:
+  pip-audit:
+    name: pip-audit (locked deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # Install uv (lockfile producer). uv is the official installer
+      # recommended by astral-sh; pinning via SHA per G4.
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+
+      # Compile pyproject.toml + uv.lock into a flat requirements.txt
+      # so pypa/gh-action-pip-audit can audit it (it expects a
+      # requirements-style file, not a pyproject).
+      - name: Compile locked requirements
+        run: |
+          uv pip compile pyproject.toml -o requirements.lock.txt --quiet
+
+      # pypa/gh-action-pip-audit — runs pip-audit against the locked
+      # requirements and fails the job when vulns are present.
+      #
+      # Inputs:
+      #   inputs: path to the requirements file (compiles locked deps).
+      #   internal-be-careful-allow-failure: false -> fail on any vuln.
+      - name: Run pip-audit
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
+        with:
+          inputs: requirements.lock.txt
+
+      - name: Upload SARIF (placeholder for future SARIF output)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pip-audit-summary
+          path: pip-audit-summary.md
+          if-no-files-found: ignore

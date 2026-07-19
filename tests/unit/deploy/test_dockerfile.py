@@ -115,7 +115,17 @@ def test_ci_workflow_runs_on_push_to_main_and_prs() -> None:
 
 
 def test_ci_workflow_runs_required_gates() -> None:
-    files = list(_workflows().glob("*.yml")) + list(_workflows().glob("*.yaml"))
-    workflow = files[0].read_text()
+    """The canonical CI workflow (``ci.yml``) must run the required gates.
+
+    Note: as of G5 (PR #36), there are multiple workflows in
+    ``.github/workflows/`` (ci.yml, dashboard.yml, pip-audit.yml,
+    codeql.yml, openssf-scorecard.yml). We specifically look at
+    ``ci.yml`` because that's where the quality gates live; the
+    security-scanning workflows have their own dedicated contract
+    tests in ``tests/unit/ci/test_g5_security_scanning.py``.
+    """
+    ci_yml = _workflows() / "ci.yml"
+    assert ci_yml.exists(), "ci.yml must exist (the canonical quality-gate workflow)"
+    workflow = ci_yml.read_text(encoding="utf-8")
     for gate in ("ruff", "mypy", "pytest", "bandit"):
         assert gate in workflow, f"{gate} missing from CI workflow"

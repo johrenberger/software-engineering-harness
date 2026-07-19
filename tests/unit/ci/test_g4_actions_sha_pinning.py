@@ -50,6 +50,12 @@ EXPECTED_PINS: dict[str, str] = {
     "actions/deploy-pages@v4": "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
     "actions/attest-build-provenance@v1": "ef244123eb79f2f7a7e75d99086184180e6d0018",
     "anchore/sbom-action@v0": "e22c389904149dbc22b58101806040fa8d37a610",
+    # G5: pip-audit, CodeQL, OpenSSF Scorecard (PR #36).
+    "pypa/gh-action-pip-audit@v1.1.0": "1220774d901786e6f652ae159f7b6bc8fea6d266",
+    "github/codeql-action/init@v3": "b7351df727350dca84cb9d725d57dcf5bc82ba26",
+    "github/codeql-action/analyze@v3": "b7351df727350dca84cb9d725d57dcf5bc82ba26",
+    "ossf/scorecard-action@v2.4.3": "4eaacf0543bb3f2c246792bd56e8cdeffafb205a",
+    "astral-sh/setup-uv@v6": "d0cc045d04ccac9d8b7881df0226f9e82c39688e",
 }
 
 # Reverse map: (owner/repo, sha) -> version tag. Used to translate a pinned
@@ -61,7 +67,7 @@ _SHA_TO_KEY: dict[str, str] = {sha: key for key, sha in EXPECTED_PINS.items()}
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 # usage: owner/repo@<sha or tag>
-USES_RE = re.compile(r"uses:\s+([\w\-]+/[\w\-]+)@(\S+)(.*)$")
+USES_RE = re.compile(r"uses:\s+([\w\-]+(?:/[\w\-]+)+)@(\S+)(.*)$")
 
 
 # ----------------------------------------------------------------------
@@ -129,14 +135,19 @@ def test_all_pins_match_expected_map(workflow: Path) -> None:
     unknown = []
     for owner_repo, ref, _ in _iter_uses(text):
         ref_clean = ref.split("#", 1)[0].strip()
-        # Resolve a SHA back to its key (e.g. "actions/checkout@34e114..." -> "actions/checkout@v4")
-        key = _SHA_TO_KEY.get(ref_clean)
-        if key and key.startswith(f"{owner_repo}@"):
-            # Pin matches a known entry — verify it points at the expected SHA.
-            if ref_clean != EXPECTED_PINS[key]:
-                mismatches.append(
-                    f"{owner_repo}@{ref_clean[:12]} (expected {EXPECTED_PINS[key][:12]})"
-                )
+        # Find every key in EXPECTED_PINS whose owner/repo matches AND
+        # whose SHA matches ref_clean. Multiple keys may share a SHA
+        # (e.g. github/codeql-action/init and .../analyze both pin to
+        # the same bundle SHA), so iterate the map instead of using
+        # a single-value reverse map.
+        candidate_keys = [
+            k
+            for k, sha in EXPECTED_PINS.items()
+            if k.startswith(f"{owner_repo}@") and sha == ref_clean
+        ]
+        if candidate_keys:
+            # Pin matches at least one expected entry.
+            assert len(candidate_keys) >= 1
         elif SHA_RE.match(ref_clean):
             # SHA-pinned but not in our map — surface it.
             unknown.append(f"{owner_repo}@{ref_clean[:12]}")
