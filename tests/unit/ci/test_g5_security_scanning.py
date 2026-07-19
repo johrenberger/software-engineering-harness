@@ -158,9 +158,23 @@ def test_codeql_has_minimum_permissions(codeql: dict) -> None:
 
 
 def test_scorecard_has_minimum_permissions(scorecard: dict) -> None:
-    perms = scorecard.get("permissions", {})
-    assert "contents" in perms
-    assert "security-events" in perms, "scorecard needs security-events: write"
+    """Scorecard needs `security-events: write` — but only at JOB scope,
+    not workflow scope, per its workflow restrictions
+    (https://github.com/ossf/scorecard-action#workflow-restrictions).
+
+    We accept either:
+    - top-level `permissions:` with `security-events: write`, OR
+    - job-level `permissions:` with `security-events: write`.
+    """
+    top_perms = scorecard.get("permissions", {})
+    job_perms = next(iter(scorecard.get("jobs", {}).values()), {}).get("permissions", {})
+    merged = {**top_perms, **job_perms}
+    assert "contents" in merged
+    assert merged.get("security-events") == "write", (
+        f"scorecard needs security-events: write (at job scope, "
+        f"per its workflow restrictions). top={top_perms!r} "
+        f"job={job_perms!r}"
+    )
 
 
 # --- Triggers --------------------------------------------------------------
