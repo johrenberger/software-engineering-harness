@@ -144,11 +144,11 @@ def test_workflow_pip_installs_are_pinned() -> None:
 
     Scorecard's Pinned-Dependencies category flags unpinned `pip install`
     commands as a regression. The recommended pattern is
-    `pip install pkg==1.2.3` or use of `requirements.txt` / `uv.lock`.
+    `pip install pkg==1.2.3` or `pip install --require-hashes -r <file>`.
 
-    `pip install -e ".[dev]"` is also flagged as unpinned by Scorecard
+    `pip install -e ".[dev]"` is flagged as unpinned by Scorecard
     (it can't statically resolve the [dev] extra version), so we forbid
-    it in favour of `pip install -r requirements.txt`.
+    it in favour of `pip install --require-hashes -r requirements-ci.txt`.
     """
     offenders: list[tuple[str, int, str]] = []
     for wf in _all_workflow_files():
@@ -159,16 +159,16 @@ def test_workflow_pip_installs_are_pinned() -> None:
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue
-            if "requirements" in line or "pyproject.toml" in line:
-                continue
             # `python -m pip install --upgrade pip` is allowed (pinned via setup-python).
             if "pip install --upgrade pip" in line or "pip install -U pip" in line:
                 continue
-            # `pip install -r requirements.txt` is allowed.
-            if "-r" in line:
+            # `pip install --require-hashes -r <file>` is the gold standard.
+            if "--require-hashes" in line and "-r" in line:
                 continue
-            # `pip install uv` (one-time bootstrap for uv export) is allowed.
-            if "pip install uv" in line:
+            # `pip install -r <file>` (without --require-hashes) is sub-optimal
+            # but we don't reject it here yet — the strict version is enforced
+            # by the test below.
+            if "-r" in line and "requirements" in line:
                 continue
             # `pip install -e ".[dev]"` is NOT allowed (Scorecard can't pin it).
             if "-e" in line or "--editable" in line:
@@ -179,9 +179,52 @@ def test_workflow_pip_installs_are_pinned() -> None:
                 offenders.append((wf.name, lineno, line.strip()))
     assert not offenders, (
         "Unpinned `pip install <pkg>` in workflow (must pin version or "
-        "use `pip install -r requirements.txt`):\n"
+        "use `pip install --require-hashes -r requirements-ci.txt`):\n"
         + "\n".join(f"  {name}:{ln}: {text}" for name, ln, text in offenders)
     )
+
+
+def test_pip_install_uses_require_hashes() -> None:
+    """Every workflow `pip install -r` must also pass --require-hashes.
+
+    Without --require-hashes, Scorecard considers the requirements.txt
+    not hash-pinned (so Pinned-Dependencies stays at 5/10).
+    """
+    offenders: list[tuple[str, int, str]] = []
+    for wf in _all_workflow_files():
+        text = wf.read_text(encoding="utf-8")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if "pip install" not in line:
+                continue
+            if "requirements" not in line and "-r" not in line:
+                continue
+            if "pip install --upgrade" in line:
+                continue
+            if "--require-hashes" not in line:
+                offenders.append((wf.name, lineno, line.strip()))
+    assert not offenders, (
+        "pip install -r <file> without --require-hashes (must pin hashes "
+        "to lift Scorecard Pinned-Dependencies):\n"
+        + "\n".join(f"  {name}:{ln}: {text}" for name, ln, text in offenders)
+    )
+
+
+def test_requirements_files_have_hashes() -> None:
+    """The committed requirements files must contain --hash= lines for
+    every package. Scorecard checks for hash presence.
+    """
+    req_files = list(REPO_ROOT.glob("requirements-*.txt"))
+    assert req_files, "Expected at least one requirements-*.txt at repo root"
+    for rf in req_files:
+        text = rf.read_text(encoding="utf-8")
+        assert "--hash=sha256:" in text, (
+            f"{rf.name} missing --hash=sha256: lines; regenerate via "
+            f"uv export --format requirements-txt --hashes --extra dev "
+            f"--no-emit-project > {rf.name}"
+        )
+        # Count hashes per package; should be at least one per non-comment line
+        hash_count = text.count("--hash=sha256:")
+        assert hash_count >= 100, f"{rf.name} has only {hash_count} hashes; expected at least 100"
 
 
 # ---------------------------------------------------------------------------

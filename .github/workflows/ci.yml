@@ -54,15 +54,15 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        # G10: install via `pip install -r requirements.txt` (pinned via
-        # uv.lock-generated requirements) rather than `pip install -e .[dev]`
-        # which Scorecard cannot verify as pinned. `uv export` reads
-        # uv.lock and emits requirements.txt with pinned versions.
+        # G10: install via `pip install --require-hashes -r requirements-ci.txt`
+        # (pinned via uv.lock-generated requirements with sha256 hashes)
+        # rather than `pip install -e .[dev]` which Scorecard cannot
+        # verify as pinned. requirements-ci.txt is committed alongside
+        # uv.lock and regenerated via:
+        #   uv export --format requirements-txt --hashes --extra dev --no-emit-project > requirements-ci.txt
         run: |
           python -m pip install --upgrade pip
-          pip install uv
-          uv export --format requirements-txt --no-hashes --extra dev > requirements.txt
-          pip install -r requirements.txt
+          pip install --require-hashes -r requirements-ci.txt
 
       - name: ruff format check
         run: ruff format --check src tests

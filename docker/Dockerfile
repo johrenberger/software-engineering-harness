@@ -23,9 +23,14 @@ RUN apt-get update \
 # Python deps first (cache-friendly)
 COPY pyproject.toml /app/
 COPY src/ /app/src/
+# G10: requirements-runtime.txt is generated from uv.lock via
+# `uv export --format requirements-txt --hashes --extra dev --no-emit-project`
+# and committed alongside this Dockerfile so the install is fully
+# reproducible + Scorecard Pinned-Dependencies gives full credit.
+COPY requirements-runtime.txt /app/
 
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir .
+ && pip install --no-cache-dir --require-hashes -r /app/requirements-runtime.txt
 
 # Bundle skills + docs
 COPY docs/ /app/docs/

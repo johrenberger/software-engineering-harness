@@ -61,14 +61,11 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        # G10: install via `pip install -r requirements.txt` (pinned via
-        # uv.lock-generated requirements) rather than `pip install -e .[dev]`
-        # which Scorecard cannot verify as pinned.
+        # G10: install via `pip install --require-hashes -r requirements-ci.txt`
+        # (pinned via uv.lock-generated requirements with sha256 hashes).
         run: |
           python -m pip install --upgrade pip
-          pip install uv
-          uv export --format requirements-txt --no-hashes --extra dev > requirements.txt
-          pip install -r requirements.txt
+          pip install --require-hashes -r requirements-ci.txt
 
       - name: Fetch previous dashboard history
         # G12b: download the deployed history.jsonl from the last
