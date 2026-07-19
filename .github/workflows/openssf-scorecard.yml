@@ -24,22 +24,21 @@ on:
   workflow_dispatch:
 
 # Default to minimum-privilege. Scorecard's REST API rejects
-# workflow-scoped `security-events: write` per upstream restrictions
+# workflow-scoped write permissions per upstream restrictions
 # (https://github.com/ossf/scorecard-action#workflow-restrictions) —
-# the permission MUST be scoped to the job. We therefore omit
-# `security-events` from the top-level `permissions:` block and set
-# it on the job via `permissions:` instead.
+# `security-events: write` AND `id-token: write` MUST both be scoped
+# to the job. We therefore omit both from the top-level
+# `permissions:` block and set them on the job instead.
 permissions:
   contents: read
   actions: read
-  id-token: write  # OIDC for upstream Scorecard API
 
 jobs:
   analysis:
     name: Scorecard analysis
     runs-on: ubuntu-latest
-    # Scorecard requires `security-events: write` at the JOB level
-    # (not workflow-level) per its workflow restrictions.
+    # Scorecard requires `security-events: write` and `id-token: write`
+    # at the JOB level (not workflow-level) per its workflow restrictions.
     permissions:
       contents: read
       actions: read
