@@ -23,6 +23,7 @@ to unconditional ``completed`` (Cluster A, story A4).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 from dataclasses import dataclass
@@ -37,6 +38,15 @@ from seharness.artifacts.traceability import (
 from seharness.controller.run_ledger import RunLedger, RunState
 from seharness.delivery.pr import PullRequestClient, StubPullRequestClient
 from seharness.domain.requirements import FunctionalRequirementId, ScenarioId
+from seharness.observability.trace import (
+    ArtifactProduced,
+    PhaseCompleted,
+    PhaseFailed,
+    PhaseStarted,
+    Trace,
+    TraceEvent,
+    TraceWriter,
+)
 from seharness.orchestrator.phases import PHASE_SEQUENCE, phase_info
 from seharness.orchestrator.runner import LocalCommandRunner, StubRunner
 from seharness.orchestrator.types import (
@@ -196,12 +206,18 @@ class Orchestrator:
         config: OrchestratorConfig | None = None,
         pr_client: PullRequestClient | None = None,
         ci_monitor: object | None = None,
+        trace_writer: TraceWriter | None | str = "auto",
     ) -> None:
         self._run_ledger = run_ledger
         self._config = config or OrchestratorConfig()
         self._pr_client = pr_client or StubPullRequestClient()
         self._ci_monitor = ci_monitor  # typed lazily to avoid cycles
         self._runner = LocalCommandRunner() if self._config.use_real_subprocess else StubRunner()
+        # Trace writer: ``"auto"`` defers to per-run creation at
+        # ``<execution_root>/<run_id>/trace.jsonl``; ``None`` disables
+        # tracing entirely; an explicit instance is used as-is.
+        self._trace_writer_default = trace_writer
+        self._trace_writer_active: TraceWriter | None = None
         # Per-run state — the orchestrator supports at most one
         # in-flight run id at a time. Multi-run parallelism lands in
         # Cluster E (story E2).
@@ -209,7 +225,7 @@ class Orchestrator:
 
     # ----- public API ----------------------------------------------------
 
-    def start_run(
+    def start_run(  # noqa: PLR0912,PLR0915  # start_run is a workflow driver with many branches
         self,
         *,
         feature_description: str,
@@ -230,6 +246,24 @@ class Orchestrator:
         run_dir = Path(self._config.execution_root) / str(rid)
         run_dir.mkdir(parents=True, exist_ok=True)
 
+        # Resolve trace writer (Cluster E stories E5+E6). ``"auto"``
+        # creates a per-run JSONL file; ``None`` disables tracing;
+        # an explicit instance is used as-is and never closed by us.
+        tw_default = self._trace_writer_default
+        trace_writer: TraceWriter | None
+        owns_writer: bool
+        if tw_default == "auto":
+            trace_writer = Trace.for_run(run_id=str(rid), run_dir=run_dir)
+            owns_writer = True
+        elif tw_default is None:
+            trace_writer = None
+            owns_writer = False
+        else:
+            assert isinstance(tw_default, TraceWriter)
+            trace_writer = tw_default
+            owns_writer = False
+        self._trace_writer_active = trace_writer
+
         ctx = RunContext(
             run_id=rid,
             feature_description=feature_description,
@@ -245,9 +279,16 @@ class Orchestrator:
         # internal enum matches the SPEC). The pipeline returns the
         # SPEC phrase; the ledger records the same phrase.
         terminal_state = PhaseName.COMPLETED.value
+        # Track the set of files already present in ``run_dir`` so we
+        # can emit ``artifact_produced`` events for new ones after
+        # each phase (Cluster E story E5).
+        seen_artifacts: set[str] = set()
         try:
             for phase in PHASE_SEQUENCE:
                 spec = PhaseSpec(run_id=rid, phase=phase)
+                self._emit_trace(
+                    PhaseStarted(run_id=str(rid), phase=phase.value, attempt=spec.attempt)
+                )
                 outcome, ctx, detail = self._run_phase(spec=spec, ctx=ctx, run_dir=run_dir)
                 events.append(
                     PipelineEvent(
@@ -255,6 +296,18 @@ class Orchestrator:
                         timestamp=time.time(),
                         detail=detail or f"{phase.value} {outcome.value}",
                     )
+                )
+                self._emit_trace_outcome(
+                    rid=str(rid),
+                    phase=phase.value,
+                    outcome=outcome,
+                    detail=detail,
+                )
+                self._emit_artifacts(
+                    rid=str(rid),
+                    phase=phase.value,
+                    run_dir=run_dir,
+                    seen=seen_artifacts,
                 )
                 if outcome in {PhaseOutcome.FAILED, PhaseOutcome.BLOCKED}:
                     terminal_state = (
@@ -287,6 +340,14 @@ class Orchestrator:
                     detail=f"fatal phase failure: {exc}",
                 )
             )
+            self._emit_trace(
+                PhaseFailed(
+                    run_id=str(rid),
+                    phase="orchestrator",
+                    outcome="error",
+                    error=str(exc),
+                )
+            )
             terminal_state = RunState.FAILED.value
         except Exception as exc:
             events.append(
@@ -297,6 +358,14 @@ class Orchestrator:
                 )
             )
             self._run_ledger.mark_failed(str(rid))
+            self._emit_trace(
+                PhaseFailed(
+                    run_id=str(rid),
+                    phase="orchestrator",
+                    outcome="error",
+                    error=repr(exc),
+                )
+            )
             terminal_state = RunState.FAILED.value
 
         result = PipelineResult(
@@ -305,6 +374,9 @@ class Orchestrator:
             events=tuple(events),
         )
         self._events[str(rid)] = result.events
+        if owns_writer and trace_writer is not None:
+            trace_writer.close()
+            self._trace_writer_active = None
         return result
 
     def resume_run(self, run_id: str) -> PipelineResult:
@@ -339,6 +411,102 @@ class Orchestrator:
         if rec.state == RunState.COMPLETE:
             raise OrchestratorError(f"run {run_id} already complete; cannot cancel")
         self._run_ledger.mark_cancelled(run_id)
+
+    # ----- trace helpers (Cluster E, stories E5+E6) ----------------------
+
+    def _emit_trace(self, event: TraceEvent) -> None:
+        """Emit a single trace event to the active writer (no-op if disabled)."""
+        tw = self._trace_writer_active
+        if tw is None:
+            return
+        with contextlib.suppress(Exception):
+            # Trace emission must never break the run; swallow.
+            tw.emit(event)
+
+    def _emit_trace_outcome(
+        self,
+        *,
+        rid: str,
+        phase: str,
+        outcome: PhaseOutcome,
+        detail: str,
+    ) -> None:
+        """Emit the appropriate trace event for a phase outcome."""
+        if outcome in {PhaseOutcome.OK, PhaseOutcome.SKIPPED}:
+            self._emit_trace(
+                PhaseCompleted(
+                    run_id=rid,
+                    phase=phase,
+                    outcome="ok" if outcome == PhaseOutcome.OK else "skipped",
+                    detail=detail or "",
+                )
+            )
+            return
+        # FAILED / BLOCKED / PAUSED — emit a phase_failed event with the
+        # matching outcome string.
+        outcome_str: str
+        if outcome == PhaseOutcome.FAILED:
+            outcome_str = "failed"
+        elif outcome == PhaseOutcome.BLOCKED:
+            outcome_str = "blocked"
+        elif outcome == PhaseOutcome.PAUSED:
+            outcome_str = "paused"
+        else:
+            outcome_str = "failed"  # fallback
+        self._emit_trace(
+            PhaseFailed(
+                run_id=rid,
+                phase=phase,
+                outcome=outcome_str,
+                error=detail or "",
+            )
+        )
+
+    def _emit_artifacts(
+        self,
+        *,
+        rid: str,
+        phase: str,
+        run_dir: Path,
+        seen: set[str],
+    ) -> None:
+        """Emit ``artifact_produced`` events for new files under ``run_dir``.
+
+        Skips subdirectories beyond ``execution/`` so we don't spam
+        the trace with per-task files. The ``execution/<task_id>/``
+        subtree is summarised by emitting its top-level task marker
+        instead.
+        """
+        if not run_dir.exists():
+            return
+        for child in run_dir.iterdir():
+            name = child.name
+            if name == "trace.jsonl":
+                continue
+            full = str(child.relative_to(run_dir))
+            if full in seen:
+                continue
+            seen.add(full)
+            if child.is_file():
+                self._emit_trace(
+                    ArtifactProduced(
+                        run_id=rid,
+                        phase=phase,
+                        path=full,
+                        artifact_kind=_classify_artifact(name),
+                    )
+                )
+            elif child.is_dir() and name != "execution":
+                # Treat the directory itself as one logical artefact
+                # (e.g. ``execution/<task_id>/red``).
+                self._emit_trace(
+                    ArtifactProduced(
+                        run_id=rid,
+                        phase=phase,
+                        path=full,
+                        artifact_kind="directory",
+                    )
+                )
 
     # ----- phase dispatch ------------------------------------------------
 
@@ -383,6 +551,25 @@ class _PhaseHandler(Protocol):
         ctx: RunContext,
         run_dir: Path,
     ) -> tuple[PhaseOutcome, RunContext, str]: ...
+
+
+_ARTIFACT_KIND_BY_NAME: dict[str, str] = {
+    "specification.json": "spec",
+    "plan.json": "plan",
+    "repo-profile.json": "profile",
+    "review-verdict.json": "review",
+    "result.json": "task_result",
+    "diff.patch": "diff",
+}
+
+
+def _classify_artifact(filename: str) -> str:
+    """Map an artifact filename to a stable ``artifact_kind`` string.
+
+    Unknown names fall through to ``"file"`` so the trace still
+    records them; downstream consumers can refine later.
+    """
+    return _ARTIFACT_KIND_BY_NAME.get(filename, "file")
 
 
 def _phase_feature_request(
