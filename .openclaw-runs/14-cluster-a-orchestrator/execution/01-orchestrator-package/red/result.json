@@ -1,0 +1,10 @@
+{
+  "phase": "red",
+  "exit_code": 1,
+  "duration_s": 0.2,
+  "failure_kind": "expected_failure",
+  "failure_reason": "ModuleNotFoundError: No module named 'seharness.orchestrator'",
+  "test_id": "tests/unit/orchestrator/test_orchestrator.py::test_orchestrator_runs_to_completed_terminal_state",
+  "command": "pytest tests/unit/orchestrator/ --no-cov -q",
+  "notes": "Pre-Cluster-A state — orchestrator package did not exist; VerticalSlicePipeline was a phase-name loop simulation."
+}

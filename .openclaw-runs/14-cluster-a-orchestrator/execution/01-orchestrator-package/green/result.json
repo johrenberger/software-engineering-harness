@@ -1,0 +1,22 @@
+{
+  "phase": "green",
+  "exit_code": 0,
+  "duration_s": 1.5,
+  "test_id": "tests/unit/orchestrator/test_orchestrator.py::test_orchestrator_runs_to_completed_terminal_state",
+  "command": "pytest tests/unit/orchestrator/ --no-cov -q",
+  "covered_tests": [
+    "tests/unit/orchestrator/test_orchestrator.py",
+    "tests/unit/orchestrator/test_orchestrator_mutation_killers.py"
+  ],
+  "required_tests": [
+    "tests/unit/orchestrator/test_orchestrator.py",
+    "tests/unit/orchestrator/test_orchestrator_mutation_killers.py"
+  ],
+  "files": [
+    "src/seharness/orchestrator/__init__.py",
+    "src/seharness/orchestrator/types.py",
+    "src/seharness/orchestrator/runner.py",
+    "src/seharness/orchestrator/phases.py",
+    "src/seharness/orchestrator/orchestrator.py"
+  ]
+}

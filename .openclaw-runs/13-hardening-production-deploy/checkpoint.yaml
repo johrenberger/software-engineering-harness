@@ -1,5 +1,5 @@
 phase: green
-status: in_progress
+status: merged
 slice: 13-hardening-production-deploy
 branch: agent/13-hardening-production-deploy
 base_commit: 9cd4831
@@ -17,43 +17,43 @@ slice_13_new_tests:
 behaviors:
   01-telegram-runtime:
     summary: "Production python-telegram-bot runtime with env-driven config + graceful SIGINT"
-    red_status: 10-failing
-    green_status: 10-passed
+    red_status: merged
+    green_status: merged
     test_file: tests/unit/telegram_runtime/test_bot_runtime.py
   02-command-handlers:
     summary: "CommandDispatcher routes 9 commands to ApplicationService"
-    red_status: 12-failing
-    green_status: 12-passed
+    red_status: merged
+    green_status: merged
     test_file: tests/unit/telegram_runtime/test_command_handlers.py
   03-dashboard-server:
     summary: "aiohttp DashboardServer on 127.0.0.1:8765 with / + /api/state + /healthz"
-    red_status: 10-failing
-    green_status: 10-passed
+    red_status: merged
+    green_status: merged
     test_file: tests/unit/dashboard/test_dashboard_server.py
   04-skill-registry:
     summary: "OpenClaw SkillRegistry with 8 skills"
-    red_status: 8-failing
-    green_status: 8-passed
+    red_status: merged
+    green_status: merged
     test_file: tests/unit/skills/test_skill_manifests.py
   05-deploy-artifacts:
     summary: "Dockerfile + docker-compose.yml + CI workflow"
-    red_status: 16-failing
-    green_status: 16-passed
+    red_status: merged
+    green_status: merged
     test_file: tests/unit/deploy/test_dockerfile.py
   06-packaging:
     summary: "pyproject.toml + CHANGELOG + README + docs + .env.example + controller.yaml"
-    red_status: 13-failing + 1-pre-existing-pass
-    green_status: 14-passed
+    red_status: merged
+    green_status: merged
     test_file: tests/unit/deploy/test_packaging.py
   07-e2e-vertical-slice:
     summary: "Full Phase-8 E2E pipeline runs to completed"
-    red_status: 4-failing
-    green_status: 4-passed
+    red_status: merged
+    green_status: merged
     test_file: tests/e2e/test_vertical_slice.py
   08-mutation-killers:
     summary: "Pydantic frozen + no-merge-methods + tuple-immutability killers"
-    red_status: 9-failing
-    green_status: 9-passed
+    red_status: merged
+    green_status: merged
     test_file: tests/unit/telegram_runtime/test_runtime_mutation_killers.py
 mutation:
   tool: mutmut-2.5.1

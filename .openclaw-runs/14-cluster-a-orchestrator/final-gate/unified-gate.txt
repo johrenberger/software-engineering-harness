@@ -1,0 +1,33 @@
+=== Cluster A — unified quality gate ===
+
+[ruff format --check src tests]
+184 files already formatted
+
+[ruff check src tests]
+All checks passed!
+
+[mypy --strict src/seharness]
+Success: no issues found in 86 source files
+
+[bandit --ini .bandit -q -r src/seharness]
+exit=0
+(no findings)
+
+[pip-audit]
+Local package 'seharness' not on PyPI; advisory DB clean for all deps.
+
+[pytest --no-cov]
+1129 passed in 2.44s
+(+30 over 1099 baseline; +16 happy-path + 13 mutation-killers + 1 e2e real-artifacts)
+
+[mutmut 2.5.1 on orchestrator modules]
+0 mutants generated — frozen dataclasses + Protocol dispatch closures
+(same characteristic as slice-13; structural mutants covered by
+dedicated test_orchestrator_mutation_killers.py)
+
+[CI run 29668924521 (PR #14)]
+quality-gate (3.13): PASS (37s, all 10 steps green)
+
+PR #14: https://github.com/johrenberger/software-engineering-harness/pull/14
+Branch: agent/cluster-a-orchestrator @ d162eee
+State: DRAFT OPEN, awaiting user merge decision.

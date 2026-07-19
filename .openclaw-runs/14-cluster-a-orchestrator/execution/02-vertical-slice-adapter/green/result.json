@@ -1,0 +1,24 @@
+{
+  "phase": "green",
+  "exit_code": 0,
+  "duration_s": 0.3,
+  "test_id": "tests/e2e/test_vertical_slice.py::test_pipeline_runs_to_completed",
+  "command": "pytest tests/e2e/ --no-cov -q",
+  "covered_tests": [
+    "test_pipeline_runs_to_completed",
+    "test_pipeline_emits_all_phase_events_in_order",
+    "test_pipeline_terminal_state_immutable",
+    "test_pipeline_runs_under_90_seconds",
+    "test_pipeline_produces_real_artifacts"
+  ],
+  "required_tests": [
+    "test_pipeline_runs_to_completed",
+    "test_pipeline_emits_all_phase_events_in_order",
+    "test_pipeline_terminal_state_immutable",
+    "test_pipeline_runs_under_90_seconds",
+    "test_pipeline_produces_real_artifacts"
+  ],
+  "files": [
+    "src/seharness/pipeline/vertical_slice.py"
+  ]
+}

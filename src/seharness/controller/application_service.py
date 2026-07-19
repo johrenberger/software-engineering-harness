@@ -22,11 +22,14 @@ Protocol's ``object`` return type. Slice 12 contract.
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ..orchestrator import Orchestrator
 from ..telegram.service import FeatureRequest
 from .run_ledger import RunLedger
+
+if TYPE_CHECKING:
+    pass
 
 _RUNS_LIMIT = 50
 

@@ -5,6 +5,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - Cluster B (production adapters) + Cluster D (honest E2E)
+
+### Added
+- `seharness.controller.real_adapters`: production implementations
+  of the slice-12 wiring slots.
+  - `LocalTaskExecutor` — wraps slice-7 `TaskExecutionService`.
+  - `GitHubChecksClient` — backs `ChecksClient` via `gh api`.
+  - `FileRunLedger` — durable JSONL ledger with crash-safe replay.
+- `examples/controller.yaml` defaults to the real adapters
+  (`controller` instead of `stub`).
+- `tests/e2e/test_real_vertical_slice.py` — 10 honest E2E tests
+  asserting real artifacts, RED+GREEN evidence, draft PR, and
+  durable ledger state. Proves the slice-13 simulation is gone.
+
+### Auto-merge prevention
+- Layer 7 added: `LocalTaskExecutor` exposes no `merge*` methods
+  (enforced by mutation-killer).
+
+
 ## [Unreleased] - Cluster A (canonical orchestrator)
 
 ### Added

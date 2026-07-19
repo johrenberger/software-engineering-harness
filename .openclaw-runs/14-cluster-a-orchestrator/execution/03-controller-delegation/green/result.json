@@ -1,0 +1,22 @@
+{
+  "phase": "green",
+  "exit_code": 0,
+  "duration_s": 0.6,
+  "test_id": "tests/unit/controller/test_controller_application_service.py",
+  "command": "pytest tests/unit/controller/ --no-cov -q",
+  "covered_tests": [
+    "test_controller_application_service.py",
+    "test_controller_factory.py",
+    "test_controller_mutation_killers.py",
+    "test_dashboard.py",
+    "test_pause_resume.py",
+    "test_run_ledger.py",
+    "test_telegram_bot_transport.py"
+  ],
+  "required_tests": [
+    "test_controller_application_service.py"
+  ],
+  "files": [
+    "src/seharness/controller/application_service.py"
+  ]
+}
