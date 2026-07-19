@@ -48,6 +48,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install coverage
 
+      - name: Fetch previous dashboard history
+        # G12b: download the deployed history.jsonl from the last
+        # Pages deploy so we can append a new row. Defensive: 404
+        # on first deploy (no history yet) is fine; render_dashboard.py
+        # handles a missing file as "no history, start fresh".
+        #
+        # Pages source is "GitHub Actions" so the dashboard.yml
+        # artifact is the source of truth — no commit needed.
+        env:
+          DASHBOARD_HISTORY_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/dashboard/assets/history.jsonl
+        run: |
+          mkdir -p dashboard/assets
+          curl -fsSL --max-time 30 "$DASHBOARD_HISTORY_URL" \
+            -o dashboard/assets/history.jsonl || \
+            echo "(no prior history; starting fresh)"
+
       - name: Re-render dashboard snapshot
         # ci.yml already wrote dashboard/assets/data.js when it ran;
         # we re-render here from the committed artifacts so the Pages
