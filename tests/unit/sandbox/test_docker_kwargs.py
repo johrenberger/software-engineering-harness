@@ -85,9 +85,7 @@ class TestBuildContainerKwargs:
         keys = list(kw["volumes"].keys())
         assert any(str(tmp_path / "relative_dir") in k for k in keys)
 
-    def test_scrubbed_env_omits_denied_default(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_scrubbed_env_omits_denied_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "leaked")
         monkeypatch.setenv("MY_PLAIN_VAR", "kept")
         kw = _build_kwargs()

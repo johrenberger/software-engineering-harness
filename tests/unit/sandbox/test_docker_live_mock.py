@@ -37,9 +37,7 @@ class _FakeException:
 class _FakeContainers:
     """In-memory ``client.containers`` replacement."""
 
-    def __init__(
-        self, *, raises: Exception | None = None, output: bytes = b""
-    ) -> None:
+    def __init__(self, *, raises: Exception | None = None, output: bytes = b"") -> None:
         self.raises = raises
         self.output = output
         self.calls: list[dict[str, object]] = []
@@ -54,9 +52,7 @@ class _FakeContainers:
 class _FakeClient:
     """In-memory ``docker.from_env()`` replacement."""
 
-    def __init__(
-        self, *, raises: Exception | None = None, output: bytes = b""
-    ) -> None:
+    def __init__(self, *, raises: Exception | None = None, output: bytes = b"") -> None:
         self._containers = _FakeContainers(raises=raises, output=output)
         self.ping_count = 0
 
@@ -79,7 +75,7 @@ class TestDockerSandboxRunSuccess:
     def test_run_returns_sandbox_result_on_success(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from docker.errors import DockerException   # noqa: PLC0415
+        from docker.errors import DockerException  # noqa: PLC0415
 
         from seharness.sandbox import DockerSandbox, SandboxProfile  # noqa: PLC0415
 
@@ -120,7 +116,7 @@ class TestDockerSandboxRunFailure:
     def test_run_returns_error_result_when_container_run_raises(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from docker.errors import DockerException   # noqa: PLC0415
+        from docker.errors import DockerException  # noqa: PLC0415
 
         from seharness.sandbox import DockerSandbox, SandboxProfile  # noqa: PLC0415
 

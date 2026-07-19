@@ -250,9 +250,7 @@ class TestEchoSmoke:
         assert "c5-sub" in result.stdout
         assert result.duration_s >= 0.0
 
-    def test_default_executor_in_task_execution_service_is_noop(
-        self, tmp_path: Path
-    ) -> None:
+    def test_default_executor_in_task_execution_service_is_noop(self, tmp_path: Path) -> None:
         """Story C4 specifies that without a configured sandbox,
         TaskExecutionService behaves as before (NoopSandbox default)."""
         from seharness.execution.service import TaskExecutionService  # noqa: PLC0415
@@ -265,9 +263,7 @@ class TestEchoSmoke:
 
         assert isinstance(service.sandbox, NoopSandbox)
 
-    def test_default_executor_in_subprocess_runner_is_noop(
-        self, tmp_path: Path
-    ) -> None:
+    def test_default_executor_in_subprocess_runner_is_noop(self, tmp_path: Path) -> None:
         from seharness.validation.runner import SubprocessRunner  # noqa: PLC0415
 
         runner = SubprocessRunner()
@@ -284,9 +280,7 @@ class TestEchoSmoke:
 class TestConfigCombinations:
     """Configuration combinations the executor must accept or reject."""
 
-    def test_empty_allowed_network_blocks_docker_egress_intent(
-        self, tmp_path: Path
-    ) -> None:
+    def test_empty_allowed_network_blocks_docker_egress_intent(self, tmp_path: Path) -> None:
         """Empty network allowlist is the fail-closed default."""
         from seharness.sandbox import SandboxProfile  # noqa: PLC0415
 
