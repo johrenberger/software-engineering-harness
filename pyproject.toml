@@ -172,11 +172,23 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "@abstractmethod",
 ]
-# G1a: enforced by CI. Set to current baseline (88.22% as of Cluster E merge);
-# will be lifted to 90 as pre-existing untested paths gain tests. G1b's
-# per-PR delta is the actual regression-prevention mechanism — a PR that
-# drops overall coverage will fail CI even when the floor stays at 88.
-fail_under = 88
+# G1: enforced by CI. Lifted from 88 to 89 in the G1 PR (lift-coverage
+# slice) by adding:
+#   - dispatch error-path tests for telegram/transport.py (72% -> 97%)
+#   - StubTelegramTransport coverage (100%)
+#   - StubChecksClient coverage (79% -> 97%)
+#   - Protocol-body pragma:no-cover exclusions (telegram/service.py,
+#     ci/checks.py)
+#   - LocalCommandRunner + StubRunner coverage (76% -> 100%)
+#
+# Measured combined statements+branches coverage: 89.17% (CI run before PR).
+#
+# Long-term goal is 90% (the original SPEC value); each subsequent slice
+# that surfaces new error paths should add tests and lift the floor by 1%.
+#
+# G1b's per-PR diff-cover is the actual regression-prevention mechanism — a
+# PR that drops overall coverage fails CI even when the floor stays where it is.
+fail_under = 89
 exclude_also = [
     "raise NotImplementedError",
     "if TYPE_CHECKING:",

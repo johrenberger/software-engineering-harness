@@ -35,14 +35,14 @@ class ApplicationService(Protocol):
     the CLI.
     """
 
-    def feature_request(self, request: FeatureRequest) -> object: ...
+    def feature_request(self, request: FeatureRequest) -> object: ...  # pragma: no cover
 
-    def status(self, run_id: str) -> object: ...
+    def status(self, run_id: str) -> object: ...  # pragma: no cover
 
-    def runs(self) -> tuple[str, ...]: ...
+    def runs(self) -> tuple[str, ...]: ...  # pragma: no cover
 
-    def resume(self, run_id: str) -> object: ...
+    def resume(self, run_id: str) -> object: ...  # pragma: no cover
 
-    def cancel(self, run_id: str) -> object: ...
+    def cancel(self, run_id: str) -> object: ...  # pragma: no cover
 
-    def pr_status(self, run_id: str) -> object: ...
+    def pr_status(self, run_id: str) -> object: ...  # pragma: no cover
