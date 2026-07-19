@@ -46,15 +46,12 @@ def pyproject_text() -> str:
 
 @pytest.fixture(scope="module")
 def pyproject_data() -> dict:
-    # Use tomllib (3.11+) — falls back to manual parsing otherwise.
-    import sys
+    # tomllib is stdlib since 3.11; pyproject.toml's `requires-python = ">=3.12"`
+    # guarantees it's always available here (UP036 compliant).
+    import tomllib
 
-    if sys.version_info >= (3, 11):
-        import tomllib
-
-        with PYPROJECT.open("rb") as fh:
-            return tomllib.load(fh)
-    pytest.skip("requires Python 3.11+ tomllib")
+    with PYPROJECT.open("rb") as fh:
+        return tomllib.load(fh)
 
 
 def _matrix_python_versions(ci: dict) -> list[str]:
