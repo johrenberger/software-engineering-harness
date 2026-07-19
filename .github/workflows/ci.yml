@@ -31,12 +31,12 @@ jobs:
     steps:
       # G1b: fetch-depth: 0 so diff-cover can compute the PR diff against
       # origin/main. Default depth (1) only fetches the PR head.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -137,7 +137,7 @@ jobs:
       # block (was always 0 before this slice).
       - name: upload-test-artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: test-results
           path: |
@@ -169,7 +169,7 @@ jobs:
         # Only on push to main — PRs produce transient SBOMs that
         # no one audits. Cheap optimization; the action takes a few
         # seconds but does not need to run on every PR.
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           format: cyclonedx-json
           artifact-name: sbom-cyclonedx.json
@@ -190,7 +190,7 @@ jobs:
       # path.
       - name: Stage SBOM for attestation
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: sbom-cyclonedx.json
           path: sbom-stage/
@@ -208,7 +208,7 @@ jobs:
       # summary).
       - name: Attest build provenance
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
         with:
           subject-path: sbom-stage/sbom-cyclonedx.json
 
@@ -318,7 +318,7 @@ jobs:
 
       - name: upload-mutation-artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mutation-results
           path: |

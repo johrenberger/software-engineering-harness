@@ -99,8 +99,8 @@ def test_upload_test_artifacts_uses_actions_upload_artifact() -> None:
     )
     assert m
     body = m.group(0)
-    assert "actions/upload-artifact@v4" in body, (
-        "upload-test-artifacts must use actions/upload-artifact@v4"
+    assert "actions/upload-artifact@" in body, (
+        "upload-test-artifacts must use actions/upload-artifact@<sha> # v4"
     )
 
 

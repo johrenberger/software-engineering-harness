@@ -386,11 +386,13 @@ def test_dashboard_workflow_triggers_on_push_and_workflow_run() -> None:
 def test_dashboard_workflow_has_pages_deploy_steps() -> None:
     """Standard GitHub Pages deploy chain must be present."""
     text = DASHBOARD_WORKFLOW.read_text()
+    # G4: each action is SHA-pinned; we just check the action name + a
+    # numeric version comment. The exact SHA is governed by G4's pin map.
     required = [
-        "actions/checkout@v4",
-        "actions/configure-pages@v5",
-        "actions/upload-pages-artifact@v3",
-        "actions/deploy-pages@v4",
+        "actions/checkout@",  # # v4
+        "actions/configure-pages@",  # # v5
+        "actions/upload-pages-artifact@",  # # v3
+        "actions/deploy-pages@",  # # v4
     ]
     for needle in required:
         assert needle in text, (

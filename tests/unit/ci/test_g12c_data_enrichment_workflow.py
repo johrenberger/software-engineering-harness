@@ -96,14 +96,16 @@ def test_dashboard_workflow_has_actions_read_permission() -> None:
 def test_dashboard_workflow_downloads_test_results_artifact() -> None:
     """dashboard.yml must download test-results from ci.yml via run-id."""
     text = DASHBOARD_WORKFLOW.read_text()
-    # Must use actions/download-artifact@v4 with name: test-results.
+    # G4: actions are SHA-pinned. The action is `actions/download-artifact`
+    # at any version; G4 contract tests pin the exact SHA.
     download_block = re.search(
-        r"uses:\s*actions/download-artifact@v4\s*\n\s*with:\s*\n"
+        r"uses:\s*actions/download-artifact@\S+.*?\n\s*with:\s*\n"
         r"((?:\s+\w+:[^\n]*\n)+)",
         text,
     )
     assert download_block is not None, (
-        "dashboard.yml must use actions/download-artifact@v4 to fetch ci.yml's artifacts"
+        "dashboard.yml must use actions/download-artifact@<sha> (G4 pinned) "
+        "to fetch ci.yml's artifacts"
     )
     # At least one download must reference test-results.
     assert re.search(
