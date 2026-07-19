@@ -25,8 +25,20 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # G3: matrix covers every supported Python version. Matches
+      # pyproject.toml's `requires-python = ">=3.12"` and the
+      # `Programming Language :: Python :: 3.12 / 3.13` classifiers.
+      #
+      # Why both versions? `requires-python = ">=3.12"` is a floor, not
+      # a maximum; new contributors using the latest stable (3.13)
+      # should be able to land code without surprise 3.14-only syntax.
+      # Catching a 3.13-only idiom at PR time is cheaper than catching
+      # it in a downstream user's env.
+      #
+      # fail-fast: false — if 3.12 fails, 3.13 still runs so we get
+      # the full signal in one PR cycle instead of two.
       matrix:
-        python-version: ["3.13"]
+        python-version: ["3.12", "3.13"]
 
     steps:
       # G1b: fetch-depth: 0 so diff-cover can compute the PR diff against
