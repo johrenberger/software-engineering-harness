@@ -178,3 +178,79 @@ jobs:
               cat /tmp/diff-cover.md
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # G2 (Slice 1, report-only): run mutmut on changed files only.
+      # Uses --use-patch-file against ``git diff origin/main...HEAD`` so
+      # mutmut scopes to PR-added/modified lines (fast + relevant). The
+      # disable_mutation_types config in pyproject.toml skips expensive
+      # low-signal operators (dictionary_item, complex_call).
+      #
+      # NOTE: mutmut 2.5.1 forbids combining --use-coverage with
+      # --use-patch-file. Since the changed lines are presumed covered
+      # (the G1a coverage floor rejects PRs that drop overall coverage),
+      # we don't need --use-coverage pruning here.
+      #
+      # Slice 1 is **continue-on-error: true** so we observe the
+      # baseline kill rate before flipping to enforcement. Slice 2
+      # (separate PR) introduces the threshold gate.
+      #
+      # PR-only (mirrors coverage-diff-check): push-to-main has no diff
+      # to evaluate against origin/main.
+      - name: mutation-test
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          git fetch --no-tags --depth=50 origin main
+          # Three-dot diff: only commits unique to this PR branch.
+          git diff origin/main...HEAD -- 'src/**/*.py' > /tmp/pr.patch || true
+          if [ ! -s /tmp/pr.patch ]; then
+            echo "No src/ changes in this PR; skipping mutation testing."
+            {
+              echo "## Mutation test"
+              echo ""
+              echo "_No src/ files modified by this PR; nothing to mutate._"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          mutmut run \
+            --use-patch-file /tmp/pr.patch \
+            --CI \
+            --simple-output \
+            --no-progress \
+            2>&1 | tee /tmp/mutmut.log
+          # Emit a JUnit XML report even on non-zero exit. The --CI flag
+          # already collapses exit codes to "any-survivor = 0/1 only",
+          # so we capture survivors while we have them.
+          mutmut junitxml > mutmut-junit.xml 2>/dev/null || true
+
+      - name: upload-mutation-artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-results
+          path: |
+            mutmut-junit.xml
+            /tmp/mutmut.log
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # G2: append a kill-rate summary to the job summary when the step
+      # actually ran (PR with src/ changes).
+      - name: mutation-summary
+        if: github.event_name == 'pull_request' && always()
+        run: |
+          if [ ! -f /tmp/mutmut.log ]; then
+            echo "## Mutation test: skipped (no src/ changes)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## Mutation test (changed files only)"
+            echo ""
+            echo "<details><summary>mutmut log (last 60 lines)</summary>"
+            echo ""
+            echo '```'
+            tail -60 /tmp/mutmut.log || true
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"

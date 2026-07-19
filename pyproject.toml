@@ -189,3 +189,32 @@ skips = []
 [tool.pip-audit]
 # Use PyPI's advisory database
 require-hashes = false
+
+# G2: mutation testing configuration.
+#
+# Slice 1 is **report-only** (no enforcement). The CI workflow step
+# (see ``.github/workflows/ci.yml``) runs mutmut against the PR diff
+# using ``--use-patch-file`` so the runtime stays bounded.
+#
+# We disable one AST mutation class with low signal/cost ratio:
+#   * ``argument`` replaces every function-call argument with ``None``,
+#     producing a flood of ``AttributeError: 'NoneType' has no attribute
+#     X`` survivors that signal nothing actionable about test quality.
+#
+# NOTE: ``disable_mutation_types`` is a comma-separated string per
+# mutmut's config_from_file wrapper (it does ``.split(",")`` at runtime;
+# a TOML list crashes with ``AttributeError: 'list' object has no
+# attribute 'split'``). Valid mutation types in mutmut 2.5.1 are:
+# operator, keyword, number, name, string, fstring, argument, or_test,
+# and_test, lambdef, expr_stmt, decorator, annassign.
+#
+# NOTE: mutmut 2.5.1 forbids combining ``--use-coverage`` with
+# ``--use-patch-file``; we omit --use-coverage because the changed lines
+# are presumed covered (the G1a coverage floor rejects drops).
+#
+# Slice 2 (separate PR) will add the threshold gate on top of this
+# baseline once we have evidence on the actual kill rate.
+[tool.mutmut]
+runner = "pytest -x --no-cov -q -p no:cacheprovider --no-header"
+tests_dir = "tests"
+disable_mutation_types = "argument"
