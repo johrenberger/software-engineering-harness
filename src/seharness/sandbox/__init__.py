@@ -144,4 +144,4 @@ class NoopSandbox:
 
 # Late imports so docker / subprocess sandbox code is only loaded when used.
 from seharness.sandbox.docker import DockerSandbox  # noqa: E402
-from seharness.sandbox.subprocess import SubprocessSandbox  # noqa: E402
+from seharness.sandbox.subprocess_sandbox import SubprocessSandbox  # noqa: E402

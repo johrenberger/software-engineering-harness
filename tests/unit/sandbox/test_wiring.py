@@ -21,8 +21,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 
 class TestTaskExecutionServiceWiring:
     """TaskExecutionService accepts an optional sandbox executor."""
@@ -32,10 +30,10 @@ class TestTaskExecutionServiceWiring:
 
         svc = TaskExecutionService(repo_root=tmp_path, execution_root=tmp_path / "exec")
         # Default behaviour: NoopSandbox.
-        assert svc._sandbox is not None  # type: ignore[attr-defined]
+        assert svc.sandbox is not None
         from seharness.sandbox import NoopSandbox  # noqa: PLC0415
 
-        assert isinstance(svc._sandbox, NoopSandbox)  # type: ignore[attr-defined]
+        assert isinstance(svc.sandbox, NoopSandbox)
 
     def test_custom_sandbox_is_stored(self, tmp_path: Path) -> None:
         from seharness.execution.service import TaskExecutionService  # noqa: PLC0415
@@ -49,8 +47,8 @@ class TestTaskExecutionServiceWiring:
             sandbox=sandbox,
             sandbox_profile=profile,
         )
-        assert svc._sandbox is sandbox  # type: ignore[attr-defined]
-        assert svc._sandbox_profile is profile  # type: ignore[attr-defined]
+        assert svc.sandbox is sandbox
+        assert svc.sandbox_profile is profile
 
     def test_existing_callers_unchanged(
         self,

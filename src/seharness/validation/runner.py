@@ -23,16 +23,21 @@ Design notes:
 - ``FailureKind`` is a closed ``StrEnum`` (5 buckets: ASSERTION,
   COLLECTION_ERROR, TIMEOUT, INFRASTRUCTURE, GENERIC_NONZERO).
 - ``ValidationRunner`` is a ``Protocol`` so callers can inject stubs.
+- Cluster C, story C4: ``SubprocessRunner`` accepts an optional
+  ``sandbox`` (``SandboxExecutor``) and ``sandbox_profile``
+  (``SandboxProfile``). Default ``NoopSandbox()`` preserves the
+  pre-cluster-C behaviour.
 """
 
 from __future__ import annotations
 
-import subprocess  # nosec B404 - we invoke callers' commands intentionally
-import time
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from seharness.sandbox import SandboxExecutor, SandboxProfile
 
 
 class FailureKind(StrEnum):
@@ -103,24 +108,62 @@ class SubprocessRunner:
     Captures stdout/stderr, exit code, and wall-clock duration. Does
     NOT raise on non-zero exit \u2014 it surfaces the exit code in
     ``CommandResult.exit_code`` for the classifier to consume.
+
+    Cluster C, story C4: optionally accepts a ``sandbox`` and
+    ``sandbox_profile``. When supplied, every command runs through the
+    sandbox executor (translating the returned ``SandboxResult`` back
+    to a ``CommandResult`` so existing callers see no API change).
+    Default ``sandbox=NoopSandbox()`` preserves pre-cluster-C
+    behaviour.
     """
 
-    def run(self, command: str) -> CommandResult:
-        start = time.monotonic()
-        proc = subprocess.run(  # nosec B602 - callers control the command; shell needed for pipelines/redirection
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            check=False,
+    def __init__(
+        self,
+        *,
+        sandbox: SandboxExecutor | None = None,
+        sandbox_profile: SandboxProfile | None = None,
+    ) -> None:
+        from seharness.sandbox import (  # noqa: PLC0415
+            NoopSandbox,
+            SandboxExecutor,
+            SandboxProfile,
         )
-        elapsed = time.monotonic() - start
-        return CommandResult(
+
+        if sandbox is None:
+            sandbox = NoopSandbox()
+        if not isinstance(sandbox, SandboxExecutor):
+            raise TypeError(
+                f"sandbox must be a SandboxExecutor, got {type(sandbox).__name__}"
+            )
+        if sandbox_profile is None:
+            sandbox_profile = SandboxProfile()
+        if not isinstance(sandbox_profile, SandboxProfile):
+            raise TypeError(
+                "sandbox_profile must be a SandboxProfile or None, "
+                f"got {type(sandbox_profile).__name__}"
+            )
+        self._sandbox: SandboxExecutor = sandbox
+        self._sandbox_profile: SandboxProfile = sandbox_profile
+
+    def run(self, command: str) -> CommandResult:
+        from seharness.sandbox import SandboxResult  # noqa: PLC0415
+
+        result = self._sandbox.run(command, profile=self._sandbox_profile)
+        if isinstance(result, SandboxResult):
+            return CommandResult(
+                command=command,
+                exit_code=result.exit_code,
+                stdout=result.stdout,
+                stderr=result.stderr,
+                duration_s=result.duration_s,
+            )
+        # Allow test doubles that already return CommandResult-shaped objects.
+        return CommandResult(  # type: ignore[unreachable]
             command=command,
-            exit_code=proc.returncode,
-            stdout=proc.stdout or "",
-            stderr=proc.stderr or "",
-            duration_s=elapsed,
+            exit_code=result.exit_code,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            duration_s=result.duration_s,
         )
 
 
