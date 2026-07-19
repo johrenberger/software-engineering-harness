@@ -44,4 +44,4 @@ jobs:
         run: pip-audit
 
       - name: pytest
-        run: pytest --no-cov
+        run: pytest
