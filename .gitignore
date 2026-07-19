@@ -52,6 +52,7 @@ mutmut-report/
 .harness-runs/
 .openclaw-runs/*.log
 .openclaw-runs/.cache/
+.openclaw-runs/orchestrator/
 *.log
 # Local config overrides — operators copy this to a real location
 examples/harness.local.yaml

@@ -22,11 +22,19 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class RunState(StrEnum):
-    """State of a feature run in the ledger."""
+    """State of a feature run in the ledger.
+
+    Cluster A adds ``BLOCKED = "blocked"`` for runs that hit a policy
+    violation requiring human intervention (e.g. unauthorized file
+    changes detected after remediation). ``PAUSED`` is awaiting an
+    external signal (resume / approval); ``BLOCKED`` is a permanent
+    policy halt that cannot be auto-resumed.
+    """
 
     PENDING = "pending"
     RUNNING = "running"
     PAUSED = "paused"
+    BLOCKED = "blocked"
     COMPLETE = "complete"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -114,6 +122,10 @@ class RunLedger:
 
     def mark_paused(self, run_id: str) -> RunRecord | None:
         return self._update_state(run_id, RunState.PAUSED)
+
+    def mark_blocked(self, run_id: str) -> RunRecord | None:
+        """Cluster A: transition a run to ``BLOCKED`` (policy halt)."""
+        return self._update_state(run_id, RunState.BLOCKED)
 
     def _update_state(self, run_id: str, state: RunState) -> RunRecord | None:
         rec = self._records.get(run_id)

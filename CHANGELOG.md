@@ -5,6 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - Cluster A (canonical orchestrator)
+
+### Added
+- `seharness.orchestrator` package: canonical workflow engine that
+  composes the existing slice-3..slice-10 services in the SPEC §"Phase 8"
+  sequence. Single entry point for `/feature`, `seharness run`, Telegram,
+  dashboard, and the E2E test.
+- `Orchestrator.start_run(feature_description, repo_path)` — runs the 12
+  phases end-to-end, writes real artifacts under
+  `<execution_root>/<run_id>/`, persists state in the shared `RunLedger`.
+- `Orchestrator.resume_run` / `Orchestrator.cancel_run` — lifecycle API.
+- `StubRunner` (default) and `LocalCommandRunner` (subprocess-gated by
+  `OrchestratorConfig.use_real_subprocess`).
+- `RunState.BLOCKED` and `RunLedger.mark_blocked()` for policy-halt runs.
+- CLI `seharness run` now invokes the orchestrator (was: "not implemented").
+- `docs/architecture.md` describing the orchestrator topology.
+
+### Changed
+- `VerticalSlicePipeline` is now a thin adapter over `Orchestrator.start_run`
+  instead of a phase-name loop. PipelineEvent/PipelineResult shapes
+  preserved; E2E test continues to pass.
+- `ControllerApplicationService.feature_request` / `resume` / `cancel`
+  delegate to the orchestrator when an `Orchestrator` instance is wired
+  in (Cluster A story A3). `StubFeatureExecutor` retained for unit tests.
+- Terminal-state phrasing aligned with SPEC §line 587 (`"completed"`).
+
+### Auto-merge prevention
+- Layer 6 added: `Orchestrator` exposes no `merge*` methods, enforced by
+  `tests/unit/orchestrator/test_orchestrator_mutation_killers.py`.
+
 ## [0.1.0] - 2026-07-19
 
 ### Added — Slice 13 (hardening + production wiring + production deploy)

@@ -2,17 +2,17 @@
 
 Per SPEC §'21. OpenClaw packaging' — the wiring layer that
 dispatches to:
-- ``FeatureExecutor`` for ``/feature`` (slice 12 adapter wrapping
-  slice 7's ``TaskExecutionService`` or a stub)
+- ``Orchestrator`` (Cluster A) for ``/feature`` — the canonical
+  workflow engine that composes slice-3..slice-10 services
 - ``CiMonitor`` (slice 10) for ``/pr``
 - ``RunLedger`` for ``/status`` and ``/runs``
 
-The ``FeatureExecutor`` is its own Protocol (not slice 7's
-``TaskExecutionService`` directly) because the CLI entry point is
-``Plan → task_id`` while ``/feature`` is a high-level
-``FeatureRequest``. The CLI wiring layer translates Plan → feature
-request; for slice 12, we ship a ``StubFeatureExecutor`` that
-returns a deterministic run_id.
+**Cluster A (story A3):** the controller now delegates ``/feature``
+to the canonical ``Orchestrator`` instead of ``StubFeatureExecutor``.
+The orchestrator is the single workflow engine — there is no other
+path from a feature request to a draft PR. ``StubFeatureExecutor``
+is retained for tests that don't want the full orchestrator
+machinery.
 
 **Returns dicts** (not Pydantic models) to satisfy the slice 11
 Protocol's ``object`` return type. Slice 12 contract.
@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from ..orchestrator import Orchestrator
 from ..telegram.service import FeatureRequest
 from .run_ledger import RunLedger
 
@@ -33,9 +34,8 @@ _RUNS_LIMIT = 50
 class FeatureExecutor(Protocol):
     """Protocol for the ``/feature`` executor.
 
-    The slice 12 wiring layer implements this with a stub that
-    returns deterministic run_ids; slice 12+ may swap in a real
-    controller that calls the same code path as the CLI.
+    The canonical implementation is ``Orchestrator`` (Cluster A); the
+    slice-12 ``StubFeatureExecutor`` is retained for unit tests.
     """
 
     def execute(self, request: FeatureRequest) -> dict[str, Any]: ...
@@ -94,6 +94,10 @@ class ControllerApplicationService:
 
     Implements the ``ApplicationService`` Protocol via structural
     conformance. NO merge methods.
+
+    **Cluster A:** ``task_executor`` should be an ``Orchestrator``;
+    ``StubFeatureExecutor`` remains available for tests that don't
+    need the full orchestrator.
     """
 
     def __init__(
@@ -110,15 +114,48 @@ class ControllerApplicationService:
     # --- /feature --------------------------------------------------------
 
     def feature_request(self, request: FeatureRequest) -> dict[str, Any]:
-        result = self._task_executor.execute(request)
-        coerced = _coerce_result(result)
-        run_id = coerced.get("run_id") or "unknown"
-        self._run_ledger.record_start(run_id, repository=request.repository_url)
+        # Cluster A: delegate to the canonical orchestrator when wired.
+        # ``Orchestrator`` satisfies the FeatureExecutor Protocol via
+        # duck typing (start_run/resume_run/cancel_run methods).
+        if isinstance(self._task_executor, Orchestrator):
+            pipeline = self._task_executor.start_run(
+                feature_description=request.description,
+                repo_path=request.repository_url,
+            )
+            run_id: str = pipeline.run_id
+        else:
+            raw = self._task_executor.execute(request)
+            coerced = _coerce_result(raw)
+            run_id = coerced.get("run_id") or "unknown"
         return {
             "ok": True,
             "run_id": run_id,
             "repository": request.repository_url,
         }
+
+    # --- /resume ---------------------------------------------------------
+
+    def resume(self, run_id: str) -> dict[str, Any]:
+        if isinstance(self._task_executor, Orchestrator):
+            pipeline = self._task_executor.resume_run(run_id)
+            return {"ok": True, "run_id": run_id, "result": {"events": len(pipeline.events)}}
+        raw = self._task_executor.resume(run_id)
+        coerced = _coerce_result(raw)
+        self._run_ledger.mark_resume(run_id)
+        ok = bool(coerced.get("ok", True))
+        return {"ok": ok, "run_id": run_id, "result": coerced}
+
+    # --- /cancel ---------------------------------------------------------
+
+    def cancel(self, run_id: str) -> dict[str, Any]:
+        if isinstance(self._task_executor, Orchestrator):
+            self._task_executor.cancel_run(run_id)
+            return {"ok": True, "run_id": run_id}
+        raw = self._task_executor.cancel(run_id)
+        coerced = _coerce_result(raw)
+        self._run_ledger.mark_cancelled(run_id)
+        ok = bool(coerced.get("ok", True))
+        return {"ok": ok, "run_id": run_id, "result": coerced}
 
     # --- /status ---------------------------------------------------------
 
@@ -146,24 +183,6 @@ class ControllerApplicationService:
         all_runs = self._run_ledger.runs
         ordered = tuple(reversed(all_runs))[:_RUNS_LIMIT]
         return tuple(r.run_id for r in ordered)
-
-    # --- /resume ---------------------------------------------------------
-
-    def resume(self, run_id: str) -> dict[str, Any]:
-        result = self._task_executor.resume(run_id)
-        coerced = _coerce_result(result)
-        self._run_ledger.mark_resume(run_id)
-        ok = bool(coerced.get("ok", True))
-        return {"ok": ok, "run_id": run_id, "result": coerced}
-
-    # --- /cancel ---------------------------------------------------------
-
-    def cancel(self, run_id: str) -> dict[str, Any]:
-        result = self._task_executor.cancel(run_id)
-        coerced = _coerce_result(result)
-        self._run_ledger.mark_cancelled(run_id)
-        ok = bool(coerced.get("ok", True))
-        return {"ok": ok, "run_id": run_id, "result": coerced}
 
     # --- /pr -------------------------------------------------------------
 
