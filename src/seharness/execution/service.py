@@ -126,8 +126,8 @@ class TaskExecutionService:
 
     repo_root: Path
     execution_root: Path
-    sandbox: "SandboxExecutor | None" = None
-    sandbox_profile: "SandboxProfile | None" = None
+    sandbox: SandboxExecutor | None = None
+    sandbox_profile: SandboxProfile | None = None
 
     def __post_init__(self) -> None:
         # Late import keeps the module importable even when the
@@ -137,9 +137,7 @@ class TaskExecutionService:
         if self.sandbox is None:
             object.__setattr__(self, "sandbox", NoopSandbox())
         if not isinstance(self.sandbox, SandboxExecutor):
-            raise TypeError(
-                f"sandbox must be a SandboxExecutor, got {type(self.sandbox).__name__}"
-            )
+            raise TypeError(f"sandbox must be a SandboxExecutor, got {type(self.sandbox).__name__}")
         if self.sandbox_profile is not None and not isinstance(
             self.sandbox_profile, SandboxProfile
         ):

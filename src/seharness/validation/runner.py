@@ -132,9 +132,7 @@ class SubprocessRunner:
         if sandbox is None:
             sandbox = NoopSandbox()
         if not isinstance(sandbox, SandboxExecutor):
-            raise TypeError(
-                f"sandbox must be a SandboxExecutor, got {type(sandbox).__name__}"
-            )
+            raise TypeError(f"sandbox must be a SandboxExecutor, got {type(sandbox).__name__}")
         if sandbox_profile is None:
             sandbox_profile = SandboxProfile()
         if not isinstance(sandbox_profile, SandboxProfile):
