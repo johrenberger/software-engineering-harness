@@ -29,7 +29,7 @@ COPY src/ /app/src/
 # reproducible + Scorecard Pinned-Dependencies gives full credit.
 COPY requirements-runtime.txt /app/
 
-RUN pip install --no-cache-dir --upgrade pip \
+RUN pip install --no-cache-dir --upgrade "pip==26.1.2" \
  && pip install --no-cache-dir --require-hashes -r /app/requirements-runtime.txt
 
 # Bundle skills + docs
