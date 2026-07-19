@@ -405,6 +405,48 @@ def test_dashboard_workflow_uploads_dashboard_directory() -> None:
     ), "upload-pages-artifact must set path: dashboard"
 
 
+def test_dashboard_workflow_no_self_publish_with_workflow_pages_source() -> None:
+    """With Pages source = 'GitHub Actions', the dashboard.yml artifact is the source of truth.
+
+    PR #24 added a self-publish commit step (data.js back to main) to work
+    around the legacy Jekyll `pages-build-deployment` clobbering our
+    dashboard.yml artifact. After the user changed Pages source to
+    'GitHub Actions' (Settings → Pages → Source), the clobbering
+    workflow stopped running and the self-publish commits are no longer
+    needed (and would cause an infinite loop).
+
+    This test asserts the self-publish pattern is gone: dashboard.yml
+    must NOT contain `git commit` or `git push`.
+    """
+    text = DASHBOARD_WORKFLOW.read_text()
+    assert "git commit" not in text, (
+        "dashboard.yml must NOT contain `git commit` (self-publish pattern "
+        "removed when Pages source changed to 'GitHub Actions')"
+    )
+    assert "git push" not in text, "dashboard.yml must NOT contain `git push` (same reason)"
+
+
+def test_dashboard_workflow_only_reads_contents() -> None:
+    """dashboard.yml only needs read permission (no self-commit anymore)."""
+    text = DASHBOARD_WORKFLOW.read_text()
+    permissions_block = re.search(
+        r"^permissions:\s*\n((?:\s+\w+:\s*\w+\s*\n)+)",
+        text,
+        re.MULTILINE,
+    )
+    assert permissions_block is not None, "dashboard.yml must declare a permissions: block"
+    block = permissions_block.group(0)
+    # contents: write should NOT be present (no commits anymore).
+    assert "contents: write" not in block, (
+        "dashboard.yml must NOT declare `contents: write` "
+        "(no self-publish commits; Pages deploys artifact directly)"
+    )
+    # contents: read IS expected (for the checkout action).
+    assert "contents: read" in block, (
+        "dashboard.yml must declare `contents: read` (checkout needs it)"
+    )
+
+
 # ----------------------------------------------------------------------
 # 6. docs/engineering-dashboard.md
 # ----------------------------------------------------------------------
