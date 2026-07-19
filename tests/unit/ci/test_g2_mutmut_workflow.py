@@ -142,13 +142,13 @@ def test_mutation_test_step_does_not_use_coverage_with_patch_file() -> None:
     )
 
 
-def test_mutation_test_step_is_continue_on_error_for_first_slice() -> None:
-    """Per design Q3a: first slice is measurement-only.
+def test_mutation_test_step_is_NOT_continue_on_error_after_slice_2() -> None:
+    """Slice 2 (PR #23) flipped the gate to enforced.
 
-    ``continue-on-error: true`` means a non-zero mutmut exit code does
-    not fail the CI job; instead the artifact + GH Actions summary
-    surface the kill rate and survivors. Slice 2 will flip this to
-    ``false`` once the baseline is understood.
+    The mutation-test step must NOT be marked ``continue-on-error: true``
+    — a non-zero mutmut exit (or a gate failure) must fail the CI job.
+    Slice 1 used continue-on-error: true for report-only mode; that
+    was removed when the threshold gate was added.
     """
     text = WORKFLOW.read_text()
     m = re.search(
@@ -158,8 +158,9 @@ def test_mutation_test_step_is_continue_on_error_for_first_slice() -> None:
     )
     assert m is not None
     body = m.group(0)
-    assert "continue-on-error: true" in body, (
-        "Slice 1 mutation-test must be continue-on-error: true (report-only)"
+    assert "continue-on-error: true" not in body, (
+        "Slice 2: mutation-test must NOT have continue-on-error: true "
+        "(the gate is enforced; a non-zero exit must fail CI)"
     )
 
 

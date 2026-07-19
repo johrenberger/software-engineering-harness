@@ -190,15 +190,23 @@ jobs:
       # (the G1a coverage floor rejects PRs that drop overall coverage),
       # we don't need --use-coverage pruning here.
       #
-      # Slice 1 is **continue-on-error: true** so we observe the
-      # baseline kill rate before flipping to enforcement. Slice 2
-      # (separate PR) introduces the threshold gate.
+      # Slice 2 (this PR): the gate is ENFORCED. The mutation-test step
+      # runs mutmut + the threshold gate; a non-zero exit fails CI.
+      #
+      # `continue-on-error: true` was removed — the whole point of
+      # Slice 2 is to make survivors count block PRs. The threshold
+      # (max_survivors) is configured in [tool.mutation_gate] of
+      # pyproject.toml and passed via env to scripts/mutation_gate.py.
       #
       # PR-only (mirrors coverage-diff-check): push-to-main has no diff
       # to evaluate against origin/main.
       - name: mutation-test
         if: github.event_name == 'pull_request'
-        continue-on-error: true
+        env:
+          # Source the threshold from [tool.mutation_gate] in
+          # pyproject.toml (default: 5). Override with the workflow
+          # env if you need a different value.
+          MAX_SURVIVORS: "5"
         run: |
           git fetch --no-tags --depth=50 origin main
           # Three-dot diff: only commits unique to this PR branch.
@@ -218,10 +226,11 @@ jobs:
             --simple-output \
             --no-progress \
             2>&1 | tee /tmp/mutmut.log
-          # Emit a JUnit XML report even on non-zero exit. The --CI flag
-          # already collapses exit codes to "any-survivor = 0/1 only",
-          # so we capture survivors while we have them.
+          # Emit a JUnit XML report even on non-zero mutmut exit; the
+          # gate reads this file to decide pass/fail.
           mutmut junitxml > mutmut-junit.xml 2>/dev/null || true
+          # Run the threshold gate. Exits 1 if survivors > threshold.
+          python scripts/mutation_gate.py
 
       - name: upload-mutation-artifacts
         if: always()

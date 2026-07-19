@@ -218,3 +218,15 @@ require-hashes = false
 runner = "pytest -x --no-cov -q -p no:cacheprovider --no-header"
 tests_dir = "tests"
 disable_mutation_types = "argument"
+
+# G2 Slice 2: the threshold gate. ``max_survivors`` is the maximum
+# number of mutants that may SURVIVE in a PR's mutmut run before CI
+# fails. The default (5) matches the baseline observed on
+# ``main @ 0423f95``: 41 killed / 5 survived out of ~110 mutants
+# (≈89% kill rate). Tighten this in a follow-up PR once we have
+# per-PR survivor-delta evidence.
+#
+# The gate is enforced by ``scripts/mutation_gate.py`` (chained after
+# mutmut in ``.github/workflows/ci.yml``).
+[tool.mutation_gate]
+max_survivors = 5

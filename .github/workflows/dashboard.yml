@@ -52,12 +52,23 @@ jobs:
         # ci.yml already wrote dashboard/assets/data.js when it ran;
         # we re-render here from the committed artifacts so the Pages
         # deploy is independent of ci.yml's job state.
+        #
+        # `env:` block at step scope is evaluated BEFORE the run
+        # block executes, so render_dashboard.py sees these values
+        # immediately. (Writing to $GITHUB_ENV inside the run block
+        # would only affect SUBSEQUENT steps, not subsequent commands
+        # in the same run block — that was the Slice 1 bug.)
+        #
+        # DASHBOARD_GENERATED_AT is left empty on purpose; the render
+        # script defaults it to datetime.now(UTC) when the env var is
+        # unset, which is what we want (timestamps per-render, not
+        # per-workflow-start).
+        env:
+          DASHBOARD_COMMIT_SHA: ${{ github.sha }}
+          DASHBOARD_RUN_ID: ${{ github.run_id }}
+          DASHBOARD_WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DASHBOARD_BRANCH: ${{ github.ref_name }}
         run: |
-          python scripts/render_dashboard.py
-          echo "DASHBOARD_GENERATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
-          echo "DASHBOARD_COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
-          echo "DASHBOARD_RUN_ID=${{ github.run_id }}" >> $GITHUB_ENV
-          echo "DASHBOARD_WORKFLOW_URL=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
           python scripts/render_dashboard.py
 
       - name: Configure Pages
