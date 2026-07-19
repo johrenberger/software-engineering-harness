@@ -89,11 +89,13 @@ class SandboxResult(BaseModel):
     validation pipeline can consume sandbox output without translation.
     ``sandbox_violations`` records any pre-execution rejections
     (e.g. empty allowlist, denied env var references) for telemetry.
+    ``command`` may be empty (used to signal "command rejected before
+    launch") — unlike ``CommandResult.command`` which is min_length=1.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    command: str = Field(min_length=1)
+    command: str = ""
     exit_code: int = Field(ge=-1)
     stdout: str
     stderr: str

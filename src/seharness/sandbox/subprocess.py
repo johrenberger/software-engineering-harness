@@ -74,10 +74,21 @@ def _apply_rlimits(profile: SandboxProfile) -> None:
     except (ValueError, OSError) as exc:  # pragma: no cover
         violations.append(f"RLIMIT_NOFILE: {exc}")
 
-    # Processes (fork-bomb guard).
+    # Processes (fork-bomb guard). Only enforced when the kernel
+    # exposes a real hard limit (containers often report -1, in which
+    # case setting the limit can break benign subprocesses — the shell
+    # in a pipeline needs to fork for each component). Best-effort
+    # only: if the kernel refuses, record a violation rather than
+    # silently failing. The Docker path is the recommended executor
+    # when fork-bomb protection is required.
     try:
         if profile.pids_limit > 0:
-            resource.setrlimit(resource.RLIMIT_NPROC, (int(profile.pids_limit),) * 2)
+            _soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+            if hard != -1 and hard >= profile.pids_limit:
+                resource.setrlimit(
+                    resource.RLIMIT_NPROC,
+                    (int(profile.pids_limit), int(profile.pids_limit)),
+                )
     except (ValueError, OSError) as exc:  # pragma: no cover
         violations.append(f"RLIMIT_NPROC: {exc}")
 
