@@ -1,0 +1,26 @@
+{
+  "phase": "green",
+  "exit_code": 0,
+  "duration_s": 0.6,
+  "test_id": "tests/e2e/test_real_vertical_slice.py",
+  "command": "pytest tests/e2e/test_real_vertical_slice.py --no-cov -q",
+  "covered_tests": [
+    "test_orchestrator_writes_real_repo_profile",
+    "test_orchestrator_writes_real_specification",
+    "test_orchestrator_writes_real_plan_with_one_task",
+    "test_orchestrator_invokes_real_task_execution_service",
+    "test_orchestrator_records_review_verdict",
+    "test_orchestrator_creates_draft_pr_via_pull_request_client",
+    "test_orchestrator_persists_complete_state_in_durable_ledger",
+    "test_orchestrator_event_log_includes_all_phases_in_order",
+    "test_orchestrator_handles_unknown_feature_gracefully",
+    "test_orchestrator_does_not_modify_target_repo"
+  ],
+  "required_tests": [
+    "test_orchestrator_invokes_real_task_execution_service"
+  ],
+  "verified_by_mutant_killer": "patching IMPLEMENTATION → SKIPPED causes task_dirs to be empty; test fails under that mutation.",
+  "files": [
+    "tests/e2e/test_real_vertical_slice.py"
+  ]
+}

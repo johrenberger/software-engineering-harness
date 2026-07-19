@@ -1,0 +1,10 @@
+{
+  "phase": "red",
+  "exit_code": 1,
+  "duration_s": 0.1,
+  "failure_kind": "expected_failure",
+  "failure_reason": "FileNotFoundError: no execution/task-* directory under run_dir",
+  "test_id": "tests/e2e/test_real_vertical_slice.py::test_orchestrator_invokes_real_task_execution_service",
+  "command": "pytest tests/e2e/test_real_vertical_slice.py --no-cov -q",
+  "notes": "Pre-Cluster-B+D state — the orchestrator's implementation phase was not calling TaskExecutionService (slice-13 simulation); no RED+GREEN evidence was produced. This is exactly what gap G5 in the analysis called out: 'deleting any real phase implementation must fail this test.'"
+}

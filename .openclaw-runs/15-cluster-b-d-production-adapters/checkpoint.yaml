@@ -1,0 +1,53 @@
+run: 15-cluster-b-d-production-adapters
+title: Cluster B + D — Production adapters + honest E2E test
+status: ci-passing
+branch: agent/cluster-b-production-adapters
+pr: https://github.com/johrenberger/software-engineering-harness/pull/15
+sha: 0537e01
+started: 2026-07-19T04:00:00Z
+
+stories:
+  B1: real LocalTaskExecutor backed by TaskExecutionService
+  B2: real GitHubChecksClient (gh api) backing CiMonitor
+  B3: real FileRunLedger (durable JSONL on disk)
+  B4: wire real adapters into controller.yaml example
+  B5: mutation-killers + tests
+  D1: honest E2E test asserting real diff, RED+GREEN, draft PR, ledger
+
+analysis:
+  source: docs/analysis/2026-07-19-external-llm-analysis.md
+  stories: docs/analysis/2026-07-19-priority-stories.md
+
+quality_gates:
+  ruff_format: clean
+  ruff_check: 0 errors
+  mypy_strict: 87 files clean
+  bandit: 0 issues
+  pip_audit: clean
+  pytest: 1159 passed
+  mutation: 0 mutants (covered manually)
+  ci: green (run 29669290030, 36s)
+
+files_added:
+  - src/seharness/controller/real_adapters.py
+  - tests/unit/controller/test_real_adapters.py
+  - tests/e2e/test_real_vertical_slice.py
+
+files_modified:
+  - examples/controller.yaml
+  - src/seharness/controller/__init__.py
+  - src/seharness/controller/application_service.py
+  - CHANGELOG.md
+
+closes:
+  - G3: real production adapters (LocalTaskExecutor, GitHubChecksClient, FileRunLedger)
+  - G5: honest E2E test that fails under phase-handler stubbing
+
+auto_merge_prevention_layers_added:
+  layer_7: LocalTaskExecutor exposes no merge* methods
+
+deferred:
+  - G4 sandbox → cluster C
+  - G7-G11 durable + traces + policy-as-code → cluster E
+  - G12-G13 provider + repo breadth → cluster F
+  - G14-G20 CI gates + supply chain → cluster G

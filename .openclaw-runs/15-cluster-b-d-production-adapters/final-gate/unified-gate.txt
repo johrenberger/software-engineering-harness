@@ -1,0 +1,40 @@
+=== Cluster B + D — unified quality gate ===
+
+[ruff format --check src tests]
+187 files already formatted
+
+[ruff check src tests]
+All checks passed!
+
+[mypy --strict src/seharness]
+Success: no issues found in 87 source files
+
+[bandit --ini .bandit -q -r src/seharness]
+exit=0
+(no findings)
+
+[pip-audit]
+Local package 'seharness' not on PyPI; advisory DB clean for all deps.
+
+[pytest --no-cov]
+1159 passed in 2.45s
+(+30 over 1149 baseline: +20 real_adapters + 10 honest E2E)
+
+[mutmut 2.5.1]
+0 mutants generated from real_adapters.py (same characteristic as Cluster A:
+frozen dataclasses + Protocols; structural invariants covered by
+dedicated mutation-killers).
+
+[CI run 29669290030 (PR #15)]
+quality-gate (3.13): PASS (36s, all steps green)
+
+PR #15: https://github.com/johrenberger/software-engineering-harness/pull/15
+Branch: agent/cluster-b-production-adapters @ 0537e01
+State: DRAFT OPEN, awaiting user merge decision.
+
+Honest-E2E mutant-killer verification:
+  Patching IMPLEMENTATION → SKIPPED in the orchestrator causes
+  tests/e2e/test_real_vertical_slice.py::test_orchestrator_invokes_real_task_execution_service
+  to fail (no task-* directory under run_dir). This proves the
+  test would fail if any real phase implementation is removed,
+  closing gap G5 from the analysis.
