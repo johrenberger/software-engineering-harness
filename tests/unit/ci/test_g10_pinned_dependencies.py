@@ -162,7 +162,7 @@ def test_workflow_pip_installs_are_pinned() -> None:
             # `python -m pip install --upgrade "pip==<version>"` is pinned.
             # (Scorecard rejects bare `--upgrade pip` because it can't pin
             # the version; we pin to the version in uv.lock.)
-            if "pip install" in line and "pip==" in line:
+            if "pip install" in line and "pip==" in line and not stripped.startswith("#"):
                 continue
             # `pip install --require-hashes -r <file>` is the gold standard.
             if "--require-hashes" in line and "-r" in line:
@@ -198,9 +198,16 @@ def test_pip_install_uses_require_hashes() -> None:
         for lineno, line in enumerate(text.splitlines(), start=1):
             if "pip install" not in line:
                 continue
-            if "requirements" not in line and "-r" not in line:
+            stripped = line.strip()
+            # Skip comments.
+            if stripped.startswith("#"):
                 continue
-            if "pip install --upgrade" in line:
+            # Skip pip-self upgrade/reinstall (they're for pip itself, not deps).
+            if "pip==" in stripped:
+                continue
+            # Only check lines that explicitly use -r <requirements-file>.
+            # Use word-boundary to avoid matching --force-reinstall.
+            if not re.search(r"(?:^|\s)-r\s+\S+", line):
                 continue
             if "--require-hashes" not in line:
                 offenders.append((wf.name, lineno, line.strip()))
