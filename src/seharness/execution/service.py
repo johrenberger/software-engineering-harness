@@ -27,8 +27,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
+
+if TYPE_CHECKING:
+    from seharness.sandbox import SandboxExecutor, SandboxProfile
 
 from seharness.artifacts.traceability import Plan
 from seharness.execution.completion import (
@@ -110,10 +114,37 @@ Runner = Callable[[Path, Path], None]
 
 @dataclass(frozen=True)
 class TaskExecutionService:
-    """Public boundary: execute a single task from a Plan."""
+    """Public boundary: execute a single task from a Plan.
+
+    Cluster C, story C4: the service now accepts an optional
+    :class:`SandboxExecutor` and :class:`SandboxProfile`. The runner
+    callable is invoked under the configured profile's ``cwd`` so the
+    subprocess inherits the isolation constraints. Default
+    ``sandbox=NoopSandbox()`` and ``sandbox_profile=None`` preserve
+    pre-cluster-C behaviour.
+    """
 
     repo_root: Path
     execution_root: Path
+    sandbox: SandboxExecutor | None = None
+    sandbox_profile: SandboxProfile | None = None
+
+    def __post_init__(self) -> None:
+        # Late import keeps the module importable even when the
+        # sandbox layer is being edited.
+        from seharness.sandbox import NoopSandbox, SandboxExecutor, SandboxProfile  # noqa: PLC0415
+
+        if self.sandbox is None:
+            object.__setattr__(self, "sandbox", NoopSandbox())
+        if not isinstance(self.sandbox, SandboxExecutor):
+            raise TypeError(f"sandbox must be a SandboxExecutor, got {type(self.sandbox).__name__}")
+        if self.sandbox_profile is not None and not isinstance(
+            self.sandbox_profile, SandboxProfile
+        ):
+            raise TypeError(
+                "sandbox_profile must be a SandboxProfile or None, "
+                f"got {type(self.sandbox_profile).__name__}"
+            )
 
     def execute(
         self,

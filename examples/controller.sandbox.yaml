@@ -1,0 +1,72 @@
+# Cluster C example — controller.yaml with sandbox isolation enabled.
+#
+# Pair this with the regular examples/controller.yaml and replace the
+# `adapters:` block. Cluster C ships with backwards-compatible
+# defaults (NoopSandbox) so the regular examples/controller.yaml
+# remains valid for environments without Docker.
+#
+# Differences from examples/controller.yaml:
+#   - adapters.task_executor adds `sandbox` (DockerSandbox) and
+#     `sandbox_profile` (SandboxProfile fields).
+#   - adapters.run_ledger stays identical.
+#   - adapters.ci_monitor gains `poll_timeout_seconds: 600` so
+#     the new bounded-budget sandbox cannot run away.
+#
+# Env vars:
+#   OPENCLAW_HOME    — root for ledger + repos.
+#   GITHUB_TOKEN     — required by GitHubChecksClient (gh auth).
+#   GITHUB_REPO      — owner/repo for CI checks.
+#   SANDBOX_NETWORK  — comma-separated allowlist of destinations;
+#                      default empty = network denied (fail-closed).
+#   SANDBOX_WALL_SECONDS — wall-clock ceiling per child; default 300.
+
+services:
+  feature: controller
+  status:  controller
+  runs:    controller
+  resume:  controller
+  cancel:  controller
+  pr:      controller
+
+adapters:
+  task_executor:
+    kind: local
+    repo_root: "${OPENCLAW_HOME}/repos/${GITHUB_REPO##*/}"
+    execution_root: "${OPENCLAW_HOME}/runs"
+    # Cluster C: opt-in sandbox isolation. The default executor is
+    # DockerSandbox (requires a reachable Docker daemon); fall back
+    # to SubprocessSandbox by setting `sandbox.kind: subprocess`.
+    sandbox:
+      kind: docker                       # or "subprocess" | "noop"
+      image: python:3.13-slim
+      network_mode: none                 # deny all egress by default
+      # Allow only pypi.org by default; expand via SANDBOX_NETWORK env.
+      allowed_network_destinations:
+        - pypi.org
+      cpu_seconds: 300.0
+      memory_bytes: 1073741824           # 1 GiB
+      disk_bytes: 104857600              # 100 MiB
+      pids_limit: 128
+      # User-supplied additions to the built-in deny list. Built-in
+      # defaults (PATH, HOME, AWS_*, GITHUB_TOKEN, *_SECRET, *_KEY,
+      # *_TOKEN) are always present and cannot be removed by config.
+      denied_env_vars:
+        - OPENCLAW_TOKEN
+
+  run_ledger:
+    kind: file
+    path: "${OPENCLAW_HOME}/ledger.jsonl"
+    max_records: 100
+
+  ci_monitor:
+    kind: github
+    repo: "${GITHUB_REPO}"
+    timeout_s: 30
+    poll_timeout_seconds: 600           # bounded to sandbox budget
+
+workspace_root: ~/.openclaw
+repository_root: ./repos
+
+ci_poll:
+  max_attempts: 10
+  poll_interval_seconds: 30
