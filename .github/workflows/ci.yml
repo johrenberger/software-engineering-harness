@@ -254,3 +254,29 @@ jobs:
             echo ""
             echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # G12: render dashboard/assets/data.js from the artifacts we
+      # just produced (junit.xml + flaky-tests.json + coverage.xml +
+      # mutmut-junit.xml). The dashboard.yml workflow independently
+      # runs the same script on push-to-main so the Pages deploy does
+      # not depend on this ci.yml job succeeding.
+      #
+      # Render here too so the PR-time job summary can preview the
+      # snapshot (debug aid when a PR shifts coverage/mutation/flaky).
+      - name: render-dashboard
+        if: always()
+        run: |
+          echo "DASHBOARD_GENERATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
+          echo "DASHBOARD_COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
+          echo "DASHBOARD_RUN_ID=${{ github.run_id }}" >> $GITHUB_ENV
+          echo "DASHBOARD_WORKFLOW_URL=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
+          python scripts/render_dashboard.py
+          if [ -f dashboard/assets/data.js ]; then
+            {
+              echo "## Dashboard snapshot"
+              echo ""
+              echo '```js'
+              head -60 dashboard/assets/data.js
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
