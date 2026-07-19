@@ -117,6 +117,10 @@ jobs:
       # G1c: upload junit.xml + flaky-tests.json as artifacts. Used by
       # the G12 dashboard job and by post-hoc flaky analysis. Upload
       # even on failure so the flaky report is preserved.
+      #
+      # G12c: include coverage.xml so dashboard.yml's workflow_run
+      # can download test-results and populate the live `coverage`
+      # block (was always 0 before this slice).
       - name: upload-test-artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -125,6 +129,7 @@ jobs:
           path: |
             junit.xml
             flaky-tests.json
+            coverage.xml
           if-no-files-found: ignore
           retention-days: 30
 

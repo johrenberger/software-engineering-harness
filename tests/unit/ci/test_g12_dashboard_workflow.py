@@ -346,22 +346,35 @@ def test_dashboard_workflow_exists() -> None:
     )
 
 
-def test_dashboard_workflow_triggers_on_push_to_main() -> None:
-    """The Pages workflow must trigger on push to main only.
+def test_dashboard_workflow_triggers_on_push_and_workflow_run() -> None:
+    """The Pages workflow must trigger on push to main AND/OR ci.yml workflow_run.
 
-    Per design: a single page, updated each push to main. PRs do not
-    redeploy (the live site would thrash).
+    Per design (post-G12c): the canonical path is `workflow_run` after
+    ci.yml completes, so dashboard.yml gets cross-workflow artifact
+    access (test-results + mutation-results within 30-day retention).
+
+    The plain `push` trigger is retained as a manual fallback for
+    testing without needing a ci.yml run, and `workflow_dispatch` for
+    manual triggering from the Actions UI.
+
+    PRs must NOT trigger a redeploy (would thrash the live site).
     """
     text = DASHBOARD_WORKFLOW.read_text()
-    # Match `on: push: branches: [main]` OR a `push` block with a
-    # branches filter.
+    # Must include either a push: branches: [main] block OR a
+    # workflow_run: workflows: [ci] block.
     has_push_main = bool(
         re.search(r"push:\s*branches:\s*\[?\s*main\s*\]?", text)
         or re.search(r"push:\s*\n\s*branches:\s*[\[\(]?\s*main", text)
     )
-    assert has_push_main, (
-        "dashboard.yml must trigger on push to main only (no "
-        "pull_request trigger; no schedule trigger)"
+    has_workflow_run = bool(
+        re.search(
+            r"workflow_run:\s*\n\s*workflows:\s*\[?\s*[\"']ci[\"']\s*\]?",
+            text,
+        )
+    )
+    assert has_push_main or has_workflow_run, (
+        "dashboard.yml must trigger on push to main OR via workflow_run "
+        "from ci (G12c canonical path), so the deployed page stays fresh"
     )
     # Must NOT include pull_request trigger.
     assert "pull_request:" not in text, (
