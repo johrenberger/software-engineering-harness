@@ -34,6 +34,7 @@ dev = [
     "pytest>=9.0.3,<10",
     "pytest-cov>=5.0,<6",
     "pytest-bdd>=7.0,<8",
+    "pytest-rerunfailures>=14,<17",
     "ruff>=0.5,<1",
     "mypy>=1.10,<2",
     "bandit>=1.7,<2",
@@ -128,6 +129,15 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
+    # G1c: test analytics. Capture top-10 slowest tests > 50 ms; emit
+    # JUnit XML for downstream consumers (GH Actions, dashboard); enable
+    # up to 3 reruns for flaky detection. Output the flaky-test JSON
+    # alongside the JUnit XML.
+    "--durations=10",
+    "--durations-min=0.05",
+    "--junit-xml=junit.xml",
+    "--reruns=3",
+    "--seharness-flaky-output=flaky-tests.json",
 ]
 testpaths = ["tests"]
 # Allow ``pytest`` to import ``seharness`` from ``src/`` even when the

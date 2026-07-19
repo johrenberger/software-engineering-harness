@@ -65,3 +65,8 @@ examples/harness.local.*.yaml
 .mutmut-cache
 
 # Ignore .mutmut-cache file (mutmut 2.0+ creates as file, not dir)
+
+# G1c: pytest test artifacts (produced by addopts on every test run).
+# Comitted via upload-test-artifacts in CI, not via git.
+junit.xml
+flaky-tests.json
