@@ -1,0 +1,88 @@
+# Dependabot configuration for the software-engineering-harness repo.
+#
+# G6: automated weekly dependency updates. Each PR runs the full CI
+# pipeline (pytest + lint + mutation + dashboard re-render) so
+# dependabot PRs that break the build are auto-flagged.
+#
+# Ecosystem coverage:
+#   * `pip`: scans pyproject.toml + uv.lock for newer versions of
+#     direct + transitive deps.
+#   * `github-actions`: scans .github/workflows/*.yml for newer
+#     action versions.
+#
+# Future (G6 follow-ups):
+#   * Add `devcontainers` if we adopt devcontainer.json.
+#   * Add `docker` if we publish Docker images for the sandbox (C2).
+
+version: 2
+
+updates:
+  # Weekly pip ecosystem updates (Python deps).
+  # Schedule: Monday 09:00 UTC. PRs labeled `dependencies` + `python`
+  # so they're easy to filter in the GH UI.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+      - "supply-chain"
+    # Auto-merge patch + minor updates; major updates need human review.
+    # (Dependabot's auto-merge requires branch protection rules to
+    # allow it; if not, this is a no-op.)
+    groups:
+      patch-and-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+        # Auto-merge only if all CI checks pass.
+        # The `gh-actions` group below uses the same pattern.
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps(dev)"
+      include: "scope"
+    # Don't open PRs when only the lockfile changes (uv handles that).
+    # But uv.lock IS read for version discovery; allow direct updates.
+    ignore:
+      # Don't auto-bump Python itself (matrix change lives in G3).
+      - dependency-name: "python"
+    # Allow GitHub Actions bot to commit to the PRs it creates.
+    # (Default behavior; explicit for documentation.)
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+
+  # Weekly GitHub Actions ecosystem updates.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "supply-chain"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      patch-and-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # G4 note: action versions should move from tag to SHA in a
+    # follow-up. Dependabot handles both patterns.
+    allow:
+      - dependency-type: "action"

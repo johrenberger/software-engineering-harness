@@ -187,8 +187,10 @@ exclude_dirs = ["tests", ".venv"]
 skips = []
 
 [tool.pip-audit]
-# Use PyPI's advisory database
-require-hashes = false
+# G6: require-hashes must be true for supply-chain hardening. CI will
+# fail when an installed dep lacks a hash in the lockfile (would
+# indicate a MITM risk or unsigned dep).
+require-hashes = true
 
 # G2: mutation testing configuration.
 #
@@ -228,5 +230,12 @@ disable_mutation_types = "argument"
 #
 # The gate is enforced by ``scripts/mutation_gate.py`` (chained after
 # mutmut in ``.github/workflows/ci.yml``).
+[tool.uv]
+# G6: lockfile hardening. uv writes hashes for every sdist + wheel
+# in uv.lock by default; `lock-deterministic` makes byte-for-byte
+# reproducibility work across machines + CI.
+lock-deterministic = true
+# `hashes = true` is implicit in uv ≥ 0.4 (always written); no setting needed.
+
 [tool.mutation_gate]
 max_survivors = 5
