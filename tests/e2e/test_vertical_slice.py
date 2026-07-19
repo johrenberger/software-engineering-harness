@@ -104,3 +104,24 @@ def test_pipeline_runs_under_90_seconds(tmp_path: Path) -> None:
     elapsed = time.monotonic() - start
     assert elapsed < 90.0, f"pipeline took {elapsed:.1f}s"
     assert result.terminal_state == "completed"
+
+
+def test_pipeline_produces_real_artifacts(tmp_path: Path) -> None:
+    """Cluster A: deleting a real phase implementation must fail this test.
+
+    Asserts the orchestrator's event-log details reference the concrete
+    artifacts each phase produced. The slice-13 phase-name loop emitted
+    only ``"feature_request ok"`` etc. with no concrete detail; this
+    test fails under that simulation.
+    """
+    cls = _import_pipeline()
+    repo = _build_fixture(tmp_path)
+    pipeline = cls(repo_path=repo)
+    result = pipeline.run()
+    detail_blob = " ".join(e.detail for e in result.events)
+    assert "profile written" in detail_blob
+    assert "specification written" in detail_blob
+    assert "plan produced" in detail_blob
+    assert "verdict: approve" in detail_blob
+    assert "draft PR:" in detail_blob
+    assert "executed" in detail_blob

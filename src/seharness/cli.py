@@ -97,13 +97,42 @@ def run_command(
     model: str = typer.Option(
         "fake", "--model", help="Implementation model: fake, minimax, codex."
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        help="Output format: text or json.",
+    ),
 ) -> None:
-    """Run a harness workflow for a feature (not implemented in Slice 1)."""
-    typer.echo(
-        "seharness run is not implemented yet. Slice 2+ will deliver the workflow controller.",
-        err=True,
+    """Run a harness workflow for a feature.
+
+    Cluster A: this invokes the canonical ``Orchestrator`` end-to-end.
+    The ``--model`` flag is accepted but does not yet select a model
+    adapter (Cluster F wires real adapters).
+    """
+    if output_format not in {"text", "json"}:
+        typer.echo(f"unknown --format value: {output_format}", err=True)
+        raise typer.Exit(code=2)
+    from seharness.controller.run_ledger import RunLedger  # noqa: PLC0415
+    from seharness.orchestrator import Orchestrator  # noqa: PLC0415
+
+    orchestrator = Orchestrator(run_ledger=RunLedger())
+    result = orchestrator.start_run(
+        feature_description=feature,
+        repo_path=repository,
     )
-    raise typer.Exit(code=1)
+    payload: dict[str, Any] = {
+        "status": "ok" if result.terminal_state == "completed" else result.terminal_state,
+        "run_id": result.run_id,
+        "terminal_state": result.terminal_state,
+        "events": len(result.events),
+        "phases": [e.phase for e in result.events],
+    }
+    if output_format == "json":
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        typer.echo(f"run {result.run_id}: {result.terminal_state} ({len(result.events)} events)")
+    if result.terminal_state != "completed":
+        raise typer.Exit(code=1)
 
 
 def main() -> None:
