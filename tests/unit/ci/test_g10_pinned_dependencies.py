@@ -145,6 +145,10 @@ def test_workflow_pip_installs_are_pinned() -> None:
     Scorecard's Pinned-Dependencies category flags unpinned `pip install`
     commands as a regression. The recommended pattern is
     `pip install pkg==1.2.3` or use of `requirements.txt` / `uv.lock`.
+
+    `pip install -e ".[dev]"` is also flagged as unpinned by Scorecard
+    (it can't statically resolve the [dev] extra version), so we forbid
+    it in favour of `pip install -r requirements.txt`.
     """
     offenders: list[tuple[str, int, str]] = []
     for wf in _all_workflow_files():
@@ -152,22 +156,30 @@ def test_workflow_pip_installs_are_pinned() -> None:
         for lineno, line in enumerate(text.splitlines(), start=1):
             if "pip install" not in line:
                 continue
-            # Skip comment-only lines and `pip install -e ".[dev]"`.
             stripped = line.strip()
             if stripped.startswith("#"):
-                continue
-            if "-e" in line or "--editable" in line:
                 continue
             if "requirements" in line or "pyproject.toml" in line:
                 continue
             # `python -m pip install --upgrade pip` is allowed (pinned via setup-python).
             if "pip install --upgrade pip" in line or "pip install -U pip" in line:
                 continue
+            # `pip install -r requirements.txt` is allowed.
+            if "-r" in line:
+                continue
+            # `pip install uv` (one-time bootstrap for uv export) is allowed.
+            if "pip install uv" in line:
+                continue
+            # `pip install -e ".[dev]"` is NOT allowed (Scorecard can't pin it).
+            if "-e" in line or "--editable" in line:
+                offenders.append((wf.name, lineno, line.strip()))
+                continue
             m = UNPINNED_PIP_RE.search(line)
             if m:
                 offenders.append((wf.name, lineno, line.strip()))
     assert not offenders, (
-        "Unpinned `pip install <pkg>` in workflow (must pin version):\n"
+        "Unpinned `pip install <pkg>` in workflow (must pin version or "
+        "use `pip install -r requirements.txt`):\n"
         + "\n".join(f"  {name}:{ln}: {text}" for name, ln, text in offenders)
     )
 
