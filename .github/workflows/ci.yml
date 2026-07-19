@@ -15,7 +15,11 @@ jobs:
         python-version: ["3.13"]
 
     steps:
+      # G1b: fetch-depth: 0 so diff-cover can compute the PR diff against
+      # origin/main. Default depth (1) only fetches the PR head.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -43,5 +47,58 @@ jobs:
       - name: pip-audit
         run: pip-audit
 
+      # G1a: --no-cov removed; addopts enforces fail_under = 88.
+      # G1b: --cov-report=xml produces coverage.xml for diff-cover.
       - name: pytest
         run: pytest
+
+      # G1b: per-PR coverage delta. Fails CI if any line added or modified
+      # by this PR is uncovered, or if the PR drops the diff coverage below
+      # the configured floor (80 %). Uses --src-roots to scope to source
+      # directories (excludes tests).
+      #
+      # Only runs on pull_request events because push to main has no
+      # "diff" to evaluate against origin/main. The XML file is still
+      # produced by pytest on every run for the job-summary step.
+      - name: coverage-diff-check
+        if: github.event_name == 'pull_request'
+        run: |
+          diff-cover coverage.xml \
+            --compare-branch=origin/main \
+            --src-roots=src \
+            --fail-under=80 \
+            --markdown-report=/tmp/diff-cover.md
+
+      # G1b: publish per-file coverage table to the GH Actions job summary
+      # so reviewers see the impact at a glance without leaving the PR.
+      # Runs on every event so push-to-main builds also show coverage.
+      - name: coverage-summary
+        if: success()
+        run: |
+          {
+            echo "## Coverage report"
+            echo ""
+            echo "Overall: $(coverage report --format=total)"
+            echo ""
+            echo "<details><summary>Per-file coverage</summary>"
+            echo ""
+            echo '```'
+            coverage report --format=markdown
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # G1b: on PRs, append the diff-cover markdown report to the summary.
+      # Independent of coverage-diff-check success because the markdown
+      # report is still useful even when the diff fails the gate.
+      - name: coverage-diff-summary
+        if: github.event_name == 'pull_request' && always()
+        run: |
+          if [ -f /tmp/diff-cover.md ]; then
+            {
+              echo "## Coverage diff vs main"
+              echo ""
+              cat /tmp/diff-cover.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
