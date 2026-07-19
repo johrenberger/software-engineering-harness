@@ -187,19 +187,24 @@ jobs:
 
       # G7: Attest the build provenance (SLSA L1).
       #
-      # `actions/attest-build-provenance` produces a Sigstore-signed
-      # attestation that links the produced artifacts (test-results,
-      # mutation-results, sbom) to the source commit + workflow run.
-      # Downstream consumers can verify that the artifacts really
-      # came from this commit using the GH API.
+      # `actions/attest-build-provenance@v1` produces a Sigstore-signed
+      # attestation that cryptographically links the produced SBOM to
+      # the source commit + workflow run. Downstream consumers can
+      # verify with: `gh attestation verify sbom-cyclonedx.json
+      # --repo johrenberger/software-engineering-harness`.
       #
-      # subject-name: the workflow run, e.g.
-      # `https://github.com/johrenberger/software-engineering-harness/sha/<sha>`
+      # subject-path: glob pointing at the SBOM artifact to attest.
+      # Without subject-path (or subject-digest), the action has nothing
+      # to sign — caught in CI run 29703712905 (post-PR #29 merge).
+      #
+      # subject-name: the inferred-from-path identifier so the
+      # attestation log reads `…sbom-cyclonedx.json` instead of a bare
+      # digest — easier for humans grepping the run summary.
       - name: Attest build provenance
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ${{ github.server_url }}/${{ github.repository }}/sha/${{ github.sha }}
+          subject-path: sbom-cyclonedx.json
 
       # G1b: per-PR coverage delta. Fails CI if any line added or modified
       # by this PR is uncovered, or if the PR drops the diff coverage below
