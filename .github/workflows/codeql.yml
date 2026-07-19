@@ -24,8 +24,6 @@ on:
 
 permissions:
   contents: read
-  # Required to upload SARIF + manage code-scanning alerts.
-  security-events: write
   # Required to read actions/checkout contents when init runs.
   actions: read
 
@@ -33,6 +31,11 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    # security-events: write moved to job scope per G5 Scorecard contract.
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
     strategy:
       fail-fast: false
       matrix:

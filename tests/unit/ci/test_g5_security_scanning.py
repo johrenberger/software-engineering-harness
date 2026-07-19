@@ -145,16 +145,39 @@ def test_expected_sha_pin_is_used(owner_repo: str, expected_sha: str) -> None:
 
 
 def test_pip_audit_has_minimum_permissions(pip_audit: dict) -> None:
-    """pip-audit.yml must declare top-level permissions (no implicit)."""
-    perms = pip_audit.get("permissions", {})
-    assert "contents" in perms
-    assert "security-events" in perms, "pip-audit.yml needs security-events: write to upload SARIF"
+    """pip-audit.yml must declare minimum-privilege permissions.
+
+    security-events: write must live at JOB scope (matches Scorecard
+    pattern from PR #38); workflow-level writes trigger a Token-Permissions
+    warning.
+    """
+    top_perms = pip_audit.get("permissions", {})
+    job_perms = next(iter(pip_audit.get("jobs", {}).values()), {}).get("permissions", {})
+    assert "contents" in top_perms
+    assert top_perms.get("security-events") != "write", (
+        "pip-audit: security-events: write should be at JOB scope "
+        "to avoid the Token-Permissions Scorecard warning"
+    )
+    assert job_perms.get("security-events") == "write", (
+        f"pip-audit job needs security-events: write; got {job_perms!r}"
+    )
 
 
 def test_codeql_has_minimum_permissions(codeql: dict) -> None:
-    perms = codeql.get("permissions", {})
-    assert "contents" in perms
-    assert "security-events" in perms, "codeql needs security-events: write"
+    """codeql.yml must declare minimum-privilege permissions.
+
+    security-events: write at JOB scope (not workflow scope).
+    """
+    top_perms = codeql.get("permissions", {})
+    job_perms = next(iter(codeql.get("jobs", {}).values()), {}).get("permissions", {})
+    assert "contents" in top_perms
+    assert top_perms.get("security-events") != "write", (
+        "codeql: security-events: write should be at JOB scope "
+        "to avoid the Token-Permissions Scorecard warning"
+    )
+    assert job_perms.get("security-events") == "write", (
+        f"codeql job needs security-events: write; got {job_perms!r}"
+    )
 
 
 def test_scorecard_has_minimum_permissions(scorecard: dict) -> None:
