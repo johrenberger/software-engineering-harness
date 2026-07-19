@@ -140,7 +140,7 @@ def test_build_sbom_runs_only_on_push_to_main(ci_workflow: dict) -> None:
     )
 
 
-def test_sbom_stage_step_exists(ci_workflow: dict) -> None:
+def test_sbom_stage_step_exists(ci_workflow: dict, ci_text: str) -> None:
     """A 'Stage SBOM for attestation' step must exist.
 
     anchore/sbom-action@v0 writes the SBOM to /tmp/sbom-action-XXX/, not
@@ -154,8 +154,17 @@ def test_sbom_stage_step_exists(ci_workflow: dict) -> None:
     """
     step = _step_by_name(ci_workflow, "Stage SBOM for attestation")
     assert step, "ci.yml must include a 'Stage SBOM for attestation' step"
-    assert step.get("uses") == "actions/download-artifact@v4", (
-        f"Stage SBOM step must use actions/download-artifact@v4. Got uses={step.get('uses')!r}"
+    # G4: action is SHA-pinned. Check the action name from the parsed YAML;
+    # check the version comment via the raw text (PyYAML strips comments).
+    uses = step.get("uses", "")
+    assert uses.startswith("actions/download-artifact@"), (
+        f"Stage SBOM step must use actions/download-artifact. Got uses={uses!r}"
+    )
+    assert "actions/download-artifact@" in ci_text and re.search(
+        r"actions/download-artifact@[\da-f]+ # v4", ci_text
+    ), (
+        "ci.yml must have `actions/download-artifact@<sha> # v4` (G4 pinned "
+        "with version comment for readability)."
     )
     with_block = step.get("with", {})
     assert with_block.get("name") == "sbom-cyclonedx.json", (
@@ -177,17 +186,21 @@ def test_ci_workflow_has_attest_step(ci_workflow: dict) -> None:
     assert step.get("uses"), "Attest build provenance step must declare a `uses:`"
 
 
-def test_attest_uses_official_github_action(ci_workflow: dict) -> None:
+def test_attest_uses_official_github_action(ci_workflow: dict, ci_text: str) -> None:
     """Attestation must use actions/attest-build-provenance (GitHub-official)."""
     step = _step_by_name(ci_workflow, "Attest build provenance")
     uses = step.get("uses", "")
     assert "actions/attest-build-provenance" in uses, (
         f"Attest step must use actions/attest-build-provenance. Got uses={uses!r}"
     )
-    # Should be at v1+ (not v0 which doesn't exist).
-    m = re.search(r"@v(\d+)", uses)
+    # G4: SHA-pinned. PyYAML strips trailing comments, so we read the
+    # raw YAML text and check the comment is present.
+    m = re.search(
+        r"actions/attest-build-provenance@[\da-f]+ # v(\d+)",
+        ci_text,
+    )
     assert m and int(m.group(1)) >= 1, (
-        f"attest-build-provenance must be pinned to v1 or later (got {uses!r})"
+        "attest-build-provenance must have `# v1+` comment after SHA. Looked in ci.yml."
     )
 
 

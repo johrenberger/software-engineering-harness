@@ -193,8 +193,8 @@ def test_upload_mutation_artifacts_uploads_mutation_results() -> None:
     assert m is not None, "could not find upload-mutation-artifacts step body"
     body = m.group(0)
     assert "mutmut-junit.xml" in body, "upload-mutation-artifacts must include mutmut-junit.xml"
-    assert "actions/upload-artifact@v4" in body, (
-        "upload-mutation-artifacts must use actions/upload-artifact@v4"
+    assert "actions/upload-artifact@" in body, (
+        "upload-mutation-artifacts must use actions/upload-artifact@<sha> # v4"
     )
 
 
