@@ -154,6 +154,7 @@ markers = [
     "security: security tests",
     "workflow: workflow tests",
     "unit: unit tests",
+    "network: tests that require network access; skip if offline",
 ]
 
 [tool.coverage.run]
