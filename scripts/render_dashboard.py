@@ -24,6 +24,7 @@ import json
 import os
 import sys
 import xml.etree.ElementTree as ET
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -207,7 +208,8 @@ def build_data_js(
 ) -> str:
     """Render the data.js content with the snapshot."""
     snapshot: dict[str, Any] = {
-        "generatedAt": os.environ.get("DASHBOARD_GENERATED_AT", ""),
+        "generatedAt": os.environ.get("DASHBOARD_GENERATED_AT")
+        or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "totals": {
             "passed": junit["passed"],
             "failed": junit["failed"],
