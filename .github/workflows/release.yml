@@ -140,7 +140,9 @@ jobs:
           # `python-build` (PyPA canonical). Each package pinned to
           # satisfy the G10 contract test.
           python -m pip install "build==1.2.2.post1"
-          python -m pip install "sigstore==3.0.1"
+          # sigstore 3.0.1 was yanked from PyPI; bumping to latest
+          # stable (4.4.0) which preserves the `sign --bundle` CLI.
+          python -m pip install "sigstore==4.4.0"
 
       - name: Build wheel + sdist
         run: |
