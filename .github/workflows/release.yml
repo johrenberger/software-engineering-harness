@@ -53,9 +53,18 @@ name: release
 # the release + upload assets; `publish-pypi` needs `id-token` for OIDC)
 # declare their own `permissions:` block. This satisfies the G4 contract
 # test `test_workflow_has_permissions_block`.
+#
+# `attestations: write` and `id-token: write` are required at the
+# top level because the `build` job runs `actions/attest-build-provenance`
+# (which emits an in-toto attestation via the GH attestations API and
+# needs OIDC) and `sigstore sign` (which also does OIDC for keyless
+# signing). These mirror the scopes declared in ci.yml's top-level
+# `permissions:` block (G7 contract).
 
 permissions:
   contents: read
+  attestations: write
+  id-token: write
 
 on:
   push:
