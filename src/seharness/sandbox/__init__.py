@@ -91,6 +91,12 @@ class SandboxResult(BaseModel):
     (e.g. empty allowlist, denied env var references) for telemetry.
     ``command`` may be empty (used to signal "command rejected before
     launch") — unlike ``CommandResult.command`` which is min_length=1.
+
+    ``cancelled`` is True when the run was terminated by
+    :class:`seharness.sandbox.cancellation.CancellationToken`. In that
+    case ``exit_code`` is -1 (sentinel for \"no natural exit code\")
+    and ``stderr`` includes a marker line so logs can distinguish
+    cancellation from natural timeouts (which use exit_code 124).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -101,6 +107,7 @@ class SandboxResult(BaseModel):
     stderr: str
     duration_s: float = Field(ge=0)
     sandbox_violations: tuple[str, ...] = ()
+    cancelled: bool = False
 
 
 class NoopSandbox:
