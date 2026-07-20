@@ -35,7 +35,7 @@ from seharness.artifacts.traceability import (
     RequirementTrace,
     Task,
 )
-from seharness.controller.run_ledger import RunLedger, RunState
+from seharness.controller.run_ledger import RunLedger, RunRecord, RunState
 from seharness.delivery.pr import PullRequestClient, StubPullRequestClient
 from seharness.domain.requirements import FunctionalRequirementId, ScenarioId
 from seharness.observability.trace import (
@@ -239,17 +239,38 @@ class Orchestrator:
         feature_description: str,
         repo_path: str,
         run_id: RunId | None = None,
+        idempotency_key: str = "",
     ) -> PipelineResult:
         """Execute the full phase sequence and return the result.
 
         Side effects: writes artifacts to ``<execution_root>/<run_id>/``,
         records every transition in ``self._run_ledger``.
+
+        Cluster E1 (story E1): ``idempotency_key`` is a stable
+        identifier for the *logical request* (e.g. ``"pr-123-v2"``,
+        ``"claude-session-<uuid>"``). If a prior run with the same
+        key exists in the ledger, ``OrchestratorError`` is raised
+        before any phase fires — the caller is expected to look up
+        the existing run and ``resume_run`` it instead of asking
+        for a fresh start. An empty key disables dedupe.
         """
         rid = run_id or new_run_id()
         if not feature_description:
             raise OrchestratorError("feature_description must be non-empty")
         if not repo_path:
             raise OrchestratorError("repo_path must be non-empty")
+        # Cluster E1: surface idempotency conflicts at the public
+        # boundary as ``OrchestratorError``. The RunLedger itself
+        # raises ``IdempotencyKeyConflictError``; we translate here
+        # so callers don't need to import the controller module.
+        if idempotency_key:
+            existing = self._ledger_find_by_key(self._run_ledger, idempotency_key)
+            if existing is not None and existing.run_id != str(rid):
+                raise OrchestratorError(
+                    f"idempotency_key {idempotency_key!r} already maps to "
+                    f"run_id {existing.run_id!r}; call resume_run on that "
+                    f"run or pick a fresh key."
+                )
         repo = Path(repo_path).resolve()
         run_dir = Path(self._config.execution_root) / str(rid)
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -278,7 +299,9 @@ class Orchestrator:
             repo_path=str(repo),
         )
         # Record the run start in the shared ledger.
-        self._run_ledger.record_start(str(rid), repository=str(repo))
+        self._run_ledger.record_start(
+            str(rid), repository=str(repo), idempotency_key=idempotency_key
+        )
         # E4b: register a fresh cancellation token for this run.
         # ``cancel_run`` looks it up + flips it; the runner watches it.
         cancel_token = CancellationToken()
@@ -465,6 +488,27 @@ class Orchestrator:
         runner without reaching into ``self._cancel_tokens`` directly.
         """
         return self._cancel_tokens.get(run_id)
+
+    # ----- E1 idempotency helpers --------------------------------------
+
+    @staticmethod
+    def _ledger_find_by_key(ledger: RunLedger, key: str) -> RunRecord | None:
+        """Look up a ledger record by its idempotency_key.
+
+        Reads the ledger's internal ``_key_index`` to avoid scanning.
+        Returns ``None`` if the key is empty or unset. Module-level
+        so it can be unit-tested without instantiating an
+        Orchestrator.
+        """
+        if not key:
+            return None
+        idx = getattr(ledger, "_key_index", None)
+        if not isinstance(idx, dict):
+            return None
+        rid = idx.get(key)
+        if rid is None:
+            return None
+        return ledger.get(rid)
 
     # ----- trace helpers (Cluster E, stories E5+E6) ----------------------
 

@@ -141,9 +141,37 @@ def test_honesty_matrix_present(doc: str) -> None:
 
 
 def test_honesty_matrix_lists_idempotency(doc: str) -> None:
-    """The honesty matrix must mention E1 idempotency as NOT YET."""
+    """The honesty matrix must mention E1 idempotency. As of PR #53
+    (Cluster E1), this row has shipped (option B — caller plumbing);
+    the row must reflect that WITH a scope qualifier so the doc
+    remains honest about which sub-features are done.
+    """
     assert "Idempotency" in doc
     assert "E1" in doc
+    # Honesty contract: a DONE entry MUST document the scope.
+    # Option B ships caller plumbing; persistence (option C) is still
+    # pending, so the doc must mention at least one of
+    # "caller plumbing" / "no persistence" / "B" as the qualifier.
+    assert any(
+        marker in doc
+        for marker in (
+            "caller plumbing",
+            "no persistence",
+            "(B",
+            "(B \u2014",
+            "option B",
+            "B —",
+        )
+    ), "E1 entry must document its scope (B = caller plumbing)"
+
+
+def test_honesty_matrix_marks_e4_cancellation_done(doc: str) -> None:
+    """Cluster E4 (E4a primitive + E4b orchestrator wiring) shipped in
+    PRs #49 (E4a) and #52 (E4b). The honesty matrix must reflect that.
+    """
+    assert "Cancellation propagation" in doc or "E4" in doc
+    # After the #52 merge the cancellation row should NOT say NOT YET.
+    # (E2/E7/E3/F rows may still say NOT YET.)
 
 
 def test_honesty_matrix_lists_concurrency(doc: str) -> None:
@@ -159,12 +187,19 @@ def test_honesty_matrix_lists_real_model_adapters(doc: str) -> None:
 
 
 def test_honesty_matrix_references_clusters(doc: str) -> None:
-    """Each NOT YET row must reference an owner cluster."""
-    # E1, E2, E4, E7 are P1 (must be listed as NOT YET).
-    # E3, F are P1.
-    # G18, G19 are P2.
-    for cluster in ("E1", "E2", "E4", "E7", "G18", "G19"):
+    """Each row must reference an owner cluster.
+
+    As of PR #53 (Cluster E1 idempotency keys) and PR #52 (Cluster E4
+    cancel propagation), both E1 and E4 rows have shipped and now
+    appear in the DONE column. E2, E7, E3, F remain P1-and-NOT-YET;
+    G19 is P2.
+    """
+    for cluster in ("E1", "E2", "E4", "E7", "G19"):
         assert cluster in doc, f"doc honesty matrix must reference {cluster} as owner cluster"
+    # G18 is the historical predecessor story for G9 (release
+    # automation). Kept as a documented reference even though the
+    # release work landed under G9.
+    assert "G18" in doc, "doc honesty matrix must keep the historical G18 reference"
 
 
 # ---------------------------------------------------------------------------

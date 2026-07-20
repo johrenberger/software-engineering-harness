@@ -311,18 +311,21 @@ class _LedgerLine:
     state: str
     repository: str | None
     timestamp: str
+    # Cluster E1: optional idempotency_key carried on the start line
+    # so a replay preserves the key. Empty string means "no key".
+    idempotency_key: str = ""
 
     def to_jsonl(self) -> str:
-        return json.dumps(
-            {
-                "kind": self.kind,
-                "run_id": self.run_id,
-                "state": self.state,
-                "repository": self.repository,
-                "timestamp": self.timestamp,
-            },
-            sort_keys=True,
-        )
+        payload: dict[str, str | None] = {
+            "kind": self.kind,
+            "run_id": self.run_id,
+            "state": self.state,
+            "repository": self.repository,
+            "timestamp": self.timestamp,
+        }
+        if self.idempotency_key:
+            payload["idempotency_key"] = self.idempotency_key
+        return json.dumps(payload, sort_keys=True)
 
 
 class FileRunLedger:
@@ -371,6 +374,7 @@ class FileRunLedger:
                         state=RunState(state),
                         repository=repository or "",
                         started_at=entry.get("timestamp") or datetime.now(tz=UTC).isoformat(),
+                        idempotency_key=entry.get("idempotency_key", "") or "",
                     )
                 elif kind == "transition":
                     rec = self._index.get(run_id)
@@ -381,6 +385,7 @@ class FileRunLedger:
                         state=RunState(state),
                         repository=rec.repository,
                         started_at=rec.started_at,
+                        idempotency_key=rec.idempotency_key,
                     )
 
     # ---- append ---------------------------------------------------------
@@ -391,12 +396,13 @@ class FileRunLedger:
 
     # ---- record API (mirrors in-memory RunLedger) -----------------------
 
-    def record_start(self, run_id: str, *, repository: str) -> RunRecord:
+    def record_start(self, run_id: str, *, repository: str, idempotency_key: str = "") -> RunRecord:
         rec = RunRecord(
             run_id=run_id,
             state=RunState.RUNNING,
             repository=repository,
             started_at=_utcnow_iso(),
+            idempotency_key=idempotency_key,
         )
         self._index[run_id] = rec
         self._append(
@@ -406,6 +412,7 @@ class FileRunLedger:
                 state=RunState.RUNNING.value,
                 repository=repository,
                 timestamp=_utcnow_iso(),
+                idempotency_key=idempotency_key,
             )
         )
         return rec
@@ -419,6 +426,7 @@ class FileRunLedger:
             state=state,
             repository=rec.repository,
             started_at=rec.started_at,
+            idempotency_key=rec.idempotency_key,
         )
         self._index[run_id] = updated
         self._append(
@@ -428,6 +436,7 @@ class FileRunLedger:
                 state=state.value,
                 repository=rec.repository,
                 timestamp=_utcnow_iso(),
+                idempotency_key=rec.idempotency_key,
             )
         )
         return updated

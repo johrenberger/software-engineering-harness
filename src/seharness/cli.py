@@ -97,6 +97,16 @@ def run_command(
     model: str = typer.Option(
         "fake", "--model", help="Implementation model: fake, minimax, codex."
     ),
+    idempotency_key: str = typer.Option(
+        "",
+        "--idempotency-key",
+        envvar="SEHARNESS_IDEMPOTENCY_KEY",
+        help=(
+            "Stable identifier for the logical request (Cluster E1). "
+            "Re-runs with the same key dedupe to the existing run; "
+            "collisions on a different run_id raise. Empty = no dedupe."
+        ),
+    ),
     output_format: str = typer.Option(
         "text",
         "--format",
@@ -107,7 +117,9 @@ def run_command(
 
     Cluster A: this invokes the canonical ``Orchestrator`` end-to-end.
     The ``--model`` flag is accepted but does not yet select a model
-    adapter (Cluster F wires real adapters).
+    adapter (Cluster F wires real adapters). Cluster E1 surfaces
+    ``--idempotency-key`` so callers can pass a stable key for
+    retries / replay.
     """
     if output_format not in {"text", "json"}:
         typer.echo(f"unknown --format value: {output_format}", err=True)
@@ -119,6 +131,7 @@ def run_command(
     result = orchestrator.start_run(
         feature_description=feature,
         repo_path=repository,
+        idempotency_key=idempotency_key,
     )
     payload: dict[str, Any] = {
         "status": "ok" if result.terminal_state == "completed" else result.terminal_state,
