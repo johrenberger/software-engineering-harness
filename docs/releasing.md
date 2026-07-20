@@ -4,13 +4,19 @@ This document is the canonical release runbook. Follow it from top to
 bottom; every step produces an artifact tracked in the project's
 release audit trail.
 
-> **Status:** Preparatory — the project is at
-> `Development Status :: 3 - Alpha` and is not yet published to PyPI
-> (cluster G story G18 will automate this end-to-end). For now, this
-> document captures the **manual** steps and lists the G18 follow-up
-> work. The SBOM + provenance steps in this slice (G7) **are
-> automated** and produce artifacts on every CI run, even without a
-> formal release.
+> **Status:** Automated (cluster G story G9, v0.2.0). The tag-driven
+> pipeline at `.github/workflows/release.yml` handles steps 2–6 of the
+> release process end-to-end. This document captures the **operator
+> checklist** for cutting a release and the **manual fallback** for
+> emergencies when the workflow is unavailable.
+>
+> Pre-requisites (one-time):
+>
+> - PyPI Trusted Publisher entry pointing at `.github/workflows/release.yml`
+>   on the `johrenberger/software-engineering-harness` project.
+> - A matching TestPyPI Trusted Publisher entry for `v*rc*` tags.
+> - A GitHub environment named `pypi` with required reviewers (set at
+>   Settings → Environments). The `publish-pypi` job will block on it.
 
 ## Release process overview
 
@@ -106,16 +112,31 @@ gh attestation verify sbom-cyclonedx.json \
 If verification fails, **do not publish** — investigate the workflow
 log for tampered artifacts or supply-chain MITM.
 
-### 6. PyPI publish (when G18 lands — not yet automated)
+### 6. PyPI publish (automated — `.github/workflows/release.yml`)
 
-Once `release.yml` ships (story G18), the tag push will also:
+Pushing a `v*` tag fires `release.yml`, which:
 
-1. Build wheel + sdist with `python -m build`.
-2. Sign both with `python -m sigstore` (Sigstore keyless).
-3. Publish to PyPI via `pypa/gh-action-pypi-publish`.
-4. Attach the SBOM + provenance to the GitHub Release.
+1. Verifies that the tag version matches `pyproject.toml`, `__version__`,
+   and `CHANGELOG.md` via `scripts/check_version_drift.py`.
+2. Builds wheel + sdist with `python -m build` on Python 3.12 and 3.13.
+3. Generates a CycloneDX SBOM with `anchore/sbom-action`.
+4. Signs build provenance (SLSA L1) with `actions/attest-build-provenance`.
+5. Sigstore-signs wheel + sdist with `sigstore-python` (keyless via OIDC).
+6. Publishes to **TestPyPI** for `vX.Y.Z-rcN` tags, or to **PyPI** for
+   `vX.Y.Z` tags via `pypa/gh-action-pypi-publish` (Trusted Publisher).
+7. Creates a GitHub Release with auto-generated release notes, attaching
+   wheel + sdist + Sigstore bundles + SBOM as binary assets.
 
-For now, manual publish is **not** recommended — wait for G18.
+**Manual fallback** — if the workflow is broken or unavailable:
+
+```bash
+python -m build --sdist --wheel
+python -m twine check dist/*
+python -m twine upload --repository testpypi dist/*  # or 'pypi' for prod
+```
+
+Manual fallback is **not** the normal path — investigate the workflow
+log and re-cut the tag once the pipeline is healthy.
 
 ## Post-release
 
@@ -138,12 +159,11 @@ If a release has a critical issue:
 Yanking is non-destructive — the artifacts remain download-able but
 pip refuses to install by default.
 
-## Future work (G18)
+## Future work
 
-* `release.yml` workflow that automates steps 2-6.
-* Wheel + sdist signing with Sigstore (keyless).
 * Auto-generated CHANGELOG from conventional-commits.
 * `pip-audit` post-publish gate (block install on known vulns).
+* Multi-arch wheel builds (ci.yml matrix is x86_64 only today).
 
 ## See also
 

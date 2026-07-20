@@ -56,6 +56,9 @@ EXPECTED_PINS: dict[str, str] = {
     "github/codeql-action/analyze@v3": "b7351df727350dca84cb9d725d57dcf5bc82ba26",
     "ossf/scorecard-action@v2.4.3": "4eaacf0543bb3f2c246792bd56e8cdeffafb205a",
     "astral-sh/setup-uv@v6": "d0cc045d04ccac9d8b7881df0226f9e82c39688e",
+    # G9: PyPI release workflow (release.yml).
+    "pypa/gh-action-pypi-publish@v1.12": "67339c736fd9354cd4f8cb0b744f2b82a74b5c70",
+    "softprops/action-gh-release@v2": "9d991d2c8bced2c9ef3e4985e1d79b95c91a3c0c",
 }
 
 # Reverse map: (owner/repo, sha) -> version tag. Used to translate a pinned
