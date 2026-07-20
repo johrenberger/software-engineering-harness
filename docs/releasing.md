@@ -10,13 +10,26 @@ release audit trail.
 > checklist** for cutting a release and the **manual fallback** for
 > emergencies when the workflow is unavailable.
 >
-> Pre-requisites (one-time):
+> **Operator model: tag = release.** Pushing a `v*` tag always
+> produces a public GitHub Release with wheel + sdist + SBOM +
+> Sigstore-provenance bundle attached. PyPI publish is **best-effort**:
+> if the Trusted Publisher isn't configured yet, the publish steps log
+> "NOT PUBLISHED" to the job summary and the GitHub Release still
+> ships. Consumers can install straight from the release asset URL:
+>
+> ```bash
+> pip install https://github.com/johrenberger/software-engineering-harness/releases/download/v0.2.0/<wheel-filename>
+> ```
+>
+> **Pre-requisites (one-time, optional):**
 >
 > - PyPI Trusted Publisher entry pointing at `.github/workflows/release.yml`
->   on the `johrenberger/software-engineering-harness` project.
+>   on the `johrenberger/software-engineering-harness` project. Without
+>   this, PyPI publish logs a warning and the release still ships.
 > - A matching TestPyPI Trusted Publisher entry for `v*rc*` tags.
 > - A GitHub environment named `pypi` with required reviewers (set at
->   Settings → Environments). The `publish-pypi` job will block on it.
+>   Settings → Environments). When configured, this gates the publish
+>   job. When absent, GitHub logs a warning and proceeds.
 
 ## Release process overview
 
@@ -124,8 +137,27 @@ Pushing a `v*` tag fires `release.yml`, which:
 5. Sigstore-signs wheel + sdist with `sigstore-python` (keyless via OIDC).
 6. Publishes to **TestPyPI** for `vX.Y.Z-rcN` tags, or to **PyPI** for
    `vX.Y.Z` tags via `pypa/gh-action-pypi-publish` (Trusted Publisher).
+   **Both publish steps are wrapped in `continue-on-error: true`** so
+   a missing Trusted Publisher logs "NOT PUBLISHED" to the step
+   summary instead of cancelling the workflow. A final
+   `if: always()` step records the outcome for the GitHub Release.
 7. Creates a GitHub Release with auto-generated release notes, attaching
-   wheel + sdist + Sigstore bundles + SBOM as binary assets.
+   wheel + sdist + Sigstore bundles + SBOM as binary assets. The
+   `github-release` job only depends on `build` — NOT on
+   `publish-pypi` — so the release ships even when PyPI publish
+   fails or is unconfigured.
+
+**Soft-publish behavior** — read this if you're cutting a release
+without the PyPI Trusted Publisher set up:
+
+- `publish-pypi` job outcome: **failure** (red ✗) on the run page, but
+  with the `Publish status` step noting "NOT PUBLISHED". This is
+  expected and not a bug. Look at the step summary, not the job badge.
+- `github-release` job outcome: **success** (green ✓). The release
+  page is live with all artifacts attached.
+- Consumers can `pip install <release-url>/<wheel>` directly.
+- To enable PyPI for the next release, complete the one-time setup
+  and re-tag.
 
 **Manual fallback** — if the workflow is broken or unavailable:
 

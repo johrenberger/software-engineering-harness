@@ -30,6 +30,24 @@ name: release
 #   - TestPyPI publishing (RC tags) requires the corresponding
 #     trusted-publisher entry there too.
 #
+# Soft-publish policy (2026-07-21):
+#   - The `publish-pypi` job is BEST-EFFORT. A missing/untrusted
+#     PyPI publisher, an unconfigured `pypi` environment, or any
+#     transient 403/409 from PyPI logs the outcome but does NOT fail
+#     the workflow. The GitHub Release ships regardless so the tag is
+#     always publicly consumable (wheel + sdist + SBOM + provenance
+#     attached). This matches the operator model "tag = release";
+#     PyPI upload is a separate opt-in distribution step.
+#   - To enable PyPI publish:
+#       1. Add a PyPI Trusted Publisher entry at
+#          https://pypi.org/manage/account/publishing/ for the
+#          `software-engineering-harness` project pointing at
+#          `.github/workflows/release.yml`.
+#       2. (Optional) Create the GitHub `pypi` environment with
+#          required reviewers for a manual approval gate.
+#     Until then, the publish steps log a "skipped, not configured"
+#     summary and the release still ships.
+#
 # Permissions model: top-level `contents: read` (default for every job).
 # Jobs that need elevated scope (`github-release` needs write to create
 # the release + upload assets; `publish-pypi` needs `id-token` for OIDC)
@@ -182,13 +200,23 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
+    # BEST-EFFORT publish. The job is NOT in `github-release`'s
+    # `needs:` chain — see comments at the top of this file.
+    # `continue-on-error: true` on each publish step turns transient
+    # 4xx/5xx from PyPI (or "Trusted Publisher not configured") into
+    # a logged warning. The final `Publish status` step records the
+    # outcome for the GitHub Release body.
     permissions:
-      # OIDC for Trusted Publishing + Sigstore.
+      # OIDC for Trusted Publishing + Sigstore. Declared even on the
+      # soft-fail path because a future Trusted Publisher setup will
+      # reuse the same job without re-pinning the workflow file.
       id-token: write
     environment:
-      # Protect prod publishes with an environment + required reviewers.
-      # Set up the `pypi` environment at
-      # https://github.com/<owner>/<repo>/settings/environments.
+      # Protect prod publishes with an environment + required reviewers
+      # WHEN the env is configured. Until it's configured, GitHub
+      # Actions logs a warning and proceeds — which is exactly what
+      # the soft-publish policy needs. Set up the `pypi` environment
+      # at https://github.com/<owner>/<repo>/settings/environments.
       name: pypi
       url: https://pypi.org/p/seharness
     steps:
@@ -200,25 +228,63 @@ jobs:
 
       - name: Publish to TestPyPI if pre-release
         if: contains(github.ref_name, '-rc')
+        continue-on-error: true
         uses: pypa/gh-action-pypi-publish@67339c736fd9354cd4f8cb0b744f2b82a74b5c70 # v1.12
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist-all/
-          # TestPyPI Trusted Publisher must be configured with this exact
-          # workflow path; the project already has the matching entry
-          # under owner `johrenberger`.
+          # TestPyPI Trusted Publisher must be configured with this
+          # exact workflow path; the project already has the matching
+          # entry under owner `johrenberger`. Until then this step
+          # logs a warning and continues.
 
       - name: Publish to PyPI (prod)
         if: "!contains(github.ref_name, '-rc')"
+        continue-on-error: true
         uses: pypa/gh-action-pypi-publish@67339c736fd9354cd4f8cb0b744f2b82a74b5c70 # v1.12
         with:
           packages-dir: dist-all/
           # Trusted Publishing (OIDC) — no PYPI_API_TOKEN needed.
+          # Until the Trusted Publisher entry is configured, this
+          # step logs a warning and continues.
+
+      - name: Publish status
+        if: always()
+        env:
+          REF_TAG: ${{ github.ref_name }}
+          TEST_OUTCOME: ${{ steps.publish-testpypi.outcome }}
+          PROD_OUTCOME: ${{ steps.publish-pypi-prod.outcome }}
+        run: |
+          {
+            echo "## PyPI publish status"
+            echo ""
+            if [[ "${REF_TAG}" =~ -rc ]]; then
+              if [[ "${TEST_OUTCOME}" == "success" ]]; then
+                echo "- TestPyPI: published"
+              elif [[ "${TEST_OUTCOME}" == "skipped" ]]; then
+                echo "- TestPyPI: skipped (no artifacts?)"
+              else
+                echo "- TestPyPI: **NOT PUBLISHED** (${TEST_OUTCOME:-unknown}). The GitHub Release still ships; consumers can install from the release URL."
+                echo "- To enable: configure a Trusted Publisher at https://test.pypi.org/manage/account/publishing/."
+              fi
+            else
+              if [[ "${PROD_OUTCOME}" == "success" ]]; then
+                echo "- PyPI: published"
+              elif [[ "${PROD_OUTCOME}" == "skipped" ]]; then
+                echo "- PyPI: skipped (no artifacts?)"
+              else
+                echo "- PyPI: **NOT PUBLISHED** (${PROD_OUTCOME:-unknown}). The GitHub Release still ships; consumers can install from the release URL."
+                echo "- To enable: configure a Trusted Publisher at https://pypi.org/manage/account/publishing/."
+              fi
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
   github-release:
     name: github-release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, publish-pypi]
+    # Only depends on `build`. PyPI publish is best-effort and lives
+    # in its own soft-fail job (see soft-publish policy above).
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       contents: write   # create the GitHub Release + upload assets
@@ -238,6 +304,28 @@ jobs:
           # the "Latest" badge.
           prerelease: ${{ contains(github.ref_name, '-rc') }}
           draft: false
+          # Body explains how to consume the release when PyPI publish
+          # was skipped. `softprops/action-gh-release` merges `body:`
+          # into the release notes section.
+          body: |
+            ## Install
+
+            ```bash
+            # Pin to the wheel attached below (replace <wheel> with the
+            # exact filename under "Assets"):
+            python -m pip install \
+              https://github.com/johrenberger/software-engineering-harness/releases/download/${{ github.ref_name }}/<wheel>.whl
+            ```
+
+            Or fetch the wheel + sdist + SBOM + Sigstore provenance
+            bundle directly from the assets below.
+
+            ## PyPI publish
+
+            PyPI upload is best-effort. If the Trusted Publisher isn't
+            configured on PyPI yet, this release still ships with all
+            artifacts attached — consumers can install from the asset
+            URL above. See `docs/releasing.md` for the one-time setup.
           files: |
             dist-all/*.whl
             dist-all/*.tar.gz
