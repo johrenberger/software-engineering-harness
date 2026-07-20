@@ -14,16 +14,29 @@ The orchestrator delegates to a runner for two operations:
 
 Cluster A ships both runners; Cluster C replaces ``LocalCommandRunner``
 with a sandboxed variant.
+
+Cluster E, story E4b: every ``run_*`` method accepts an optional
+``cancel: CancellationToken | None = None``. When the token fires,
+``LocalCommandRunner.run_validation`` sends SIGTERM (then SIGKILL
+after a grace window) to the subprocess via the cluster-E4a
+``CancellationWatcher`` (see ``seharness.sandbox.cancellation``).
+``StubRunner`` ignores cancellation entirely — its work is
+synchronous and instant, so cancel is moot.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import signal as _signal
 import subprocess  # nosec B404 — gated by use_real_subprocess, validated below
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from seharness.sandbox.cancellation import CancellationToken
 
 
 @dataclass(frozen=True)
@@ -64,7 +77,12 @@ class StubRunner:
         red_dir: Path,
         green_dir: Path,
         task_id: str,
+        cancel: CancellationToken | None = None,
     ) -> CommandResult:
+        # ``StubRunner`` is synchronous and instant; cancellation is a
+        # no-op. The parameter is accepted (and ignored) so callers
+        # (the orchestrator) can pass the same cancel token to every
+        # runner method without branching on the concrete runner type.
         for d in (red_dir, green_dir):
             d.mkdir(parents=True, exist_ok=True)
             (d / "command.txt").write_text(f"pytest tests/unit/{task_id}.py --no-cov -q\n")
@@ -112,11 +130,15 @@ class StubRunner:
         command: str,
         cwd: Path,
         timeout_s: float = 60.0,
+        cancel: CancellationToken | None = None,
     ) -> CommandResult:
         """Deterministic validation — always returns exit 0.
 
         Real subprocess validation is gated by
-        ``OrchestratorConfig.use_real_subprocess``.
+        ``OrchestratorConfig.use_real_subprocess``. The ``cancel``
+        parameter is accepted (and ignored) so callers can pass the
+        same token to every runner method without branching on the
+        concrete runner type.
         """
         return CommandResult(
             command=command,
@@ -131,7 +153,18 @@ class LocalCommandRunner:
     """Real subprocess runner. Used when ``use_real_subprocess=True``.
 
     Cluster A ships this; Cluster C wraps it with sandboxing.
+
+    Cluster E, story E4b: ``run_validation`` accepts a
+    ``CancellationToken``. When provided, the runner uses
+    ``subprocess.Popen`` instead of ``subprocess.run`` so the
+    watcher thread (SIGTERM → grace → SIGKILL) can actually reach
+    the child. ``run_task`` is still a thin shim over ``StubRunner``
+    — the slice-7 TaskExecutionService drives the heavy lifting.
     """
+
+    # SIGTERM (POSIX) / taskkill /T (Windows) — used to politely ask
+    # the child to terminate. The watcher handles SIGKILL escalation.
+    _CANCEL_GRACE_SECONDS: float = 5.0
 
     def run_task(
         self,
@@ -139,6 +172,7 @@ class LocalCommandRunner:
         red_dir: Path,
         green_dir: Path,
         task_id: str,
+        cancel: CancellationToken | None = None,
     ) -> CommandResult:
         # LocalCommandRunner.run_task is intentionally a thin shim
         # around the validation runner — the slice-7 TaskExecutionService
@@ -152,8 +186,31 @@ class LocalCommandRunner:
         command: str,
         cwd: Path,
         timeout_s: float = 60.0,
+        cancel: CancellationToken | None = None,
     ) -> CommandResult:
         start = time.monotonic()
+        # When no cancel token is provided we keep the fast path:
+        # ``subprocess.run`` with a timeout, no watcher thread. The
+        # token path needs ``Popen`` + a watcher, which is more
+        # expensive but is the only way cancellation can actually
+        # reach the child before the timeout fires.
+        if cancel is None:
+            return self._run_validation_simple(
+                command=command, cwd=cwd, timeout_s=timeout_s, start=start
+            )
+        return self._run_validation_cancellable(
+            command=command, cwd=cwd, timeout_s=timeout_s, cancel=cancel, start=start
+        )
+
+    def _run_validation_simple(
+        self,
+        *,
+        command: str,
+        cwd: Path,
+        timeout_s: float,
+        start: float,
+    ) -> CommandResult:
+        """Original ``subprocess.run(timeout=)`` fast path (no cancel)."""
         try:
             completed = subprocess.run(  # nosec B602
                 command,
@@ -183,3 +240,141 @@ class LocalCommandRunner:
             stderr=completed.stderr,
             duration_s=time.monotonic() - start,
         )
+
+    def _run_validation_cancellable(
+        self,
+        *,
+        command: str,
+        cwd: Path,
+        timeout_s: float,
+        cancel: CancellationToken,
+        start: float,
+    ) -> CommandResult:
+        """``Popen`` + watcher path. Cancel can interrupt before timeout.
+
+        POSIX caveat: with ``shell=True`` we get a shell parent and
+        a Python grandchild. ``proc.terminate()`` only kills the
+        shell; the grandchild keeps the stdout/stderr pipes open
+        and ``communicate()`` hangs forever. We avoid this by
+        starting a new session and terminating the entire process
+        group on cancellation.
+        """
+        try:
+            # ``start_new_session=True`` puts the child into its own
+            # process group so SIGTERM/SIGKILL can reach the whole
+            # subtree (shell + grandchild).
+            proc = subprocess.Popen(  # nosec B602
+                command,
+                shell=True,  # nosec B603
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            return CommandResult(
+                command=command,
+                exit_code=127,
+                stdout="",
+                stderr=f"failed to spawn subprocess: {exc}",
+                duration_s=time.monotonic() - start,
+            )
+
+        # Wait for the child to exit, but wake up promptly when the
+        # token fires. We poll ``proc.poll`` in short slices and
+        # check the token + the overall timeout each slice.
+        exit_code = self._wait_with_group_cancel(proc=proc, cancel=cancel, timeout_s=timeout_s)
+        try:
+            stdout, stderr = proc.communicate(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            # Belt-and-braces: even after SIGKILL on the group, the
+            # pipes may be wedged. Force-reap and move on.
+            self._kill_process_group(proc)
+            try:
+                stdout, stderr = proc.communicate(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                stdout, stderr = "", ""
+
+        if cancel.is_cancelled() and exit_code not in (0,):
+            # Cancellation fired and the process was reaped by the
+            # watcher. Use a sentinel exit code (130 = 128+SIGTERM,
+            # matching sh convention).
+            return CommandResult(
+                command=command,
+                exit_code=130,
+                stdout=stdout or "",
+                stderr=(stderr or "") + "\n[cancelled by orchestrator]",
+                duration_s=time.monotonic() - start,
+            )
+        return CommandResult(
+            command=command,
+            exit_code=exit_code if exit_code is not None else 124,
+            stdout=stdout or "",
+            stderr=stderr or "",
+            duration_s=time.monotonic() - start,
+        )
+
+    @staticmethod
+    def _kill_process_group(proc: subprocess.Popen[str]) -> None:
+        """Send SIGKILL to the entire process group of ``proc``.
+
+        Used as a fallback when ``communicate()`` itself hangs even
+        after the watcher fired. POSIX-only; on other platforms we
+        fall back to terminating the proc directly (the watcher
+        thread will already have done the escalation).
+        """
+        try:
+            os.killpg(proc.pid, _signal.SIGKILL)
+        except (OSError, ProcessLookupError, AttributeError):
+            # Windows / process already gone / no ``pgid`` available.
+            with contextlib.suppress(Exception):
+                proc.kill()
+
+    @staticmethod
+    def _wait_with_group_cancel(
+        *,
+        proc: subprocess.Popen[str],
+        cancel: CancellationToken,
+        timeout_s: float,
+        poll_interval: float = 0.05,
+    ) -> int | None:
+        """Wait for ``proc``, waking early on cancel/timeout.
+
+        On cancellation we send SIGTERM to the entire process
+        group, wait up to ``grace_seconds + safety`` for the
+        subprocess to exit, then SIGKILL the group if it's still
+        alive. Mirrors what ``CancellationWatcher`` does for
+        single-process targets but operates at the group level
+        (necessary because ``shell=True`` spawns a shell + child).
+        """
+        deadline = time.monotonic() + timeout_s
+        grace = 5.0  # matches _CANCEL_GRACE_SECONDS
+        while True:
+            exit_code = proc.poll()
+            if exit_code is not None:
+                return exit_code
+            if cancel.is_cancelled() or time.monotonic() >= deadline:
+                # Flip the token (in case timeout fired first) so any
+                # downstream watcher knows cancellation happened.
+                if not cancel.is_cancelled():
+                    cancel.set()
+                # Send SIGTERM to the whole group.
+                LocalCommandRunner._terminate_process_group(proc)
+                try:
+                    return proc.wait(timeout=grace + 5.0)
+                except subprocess.TimeoutExpired:
+                    # Escalate to SIGKILL on the group.
+                    LocalCommandRunner._kill_process_group(proc)
+                    return proc.wait(timeout=2.0)
+            time.sleep(poll_interval)
+
+    @staticmethod
+    def _terminate_process_group(proc: subprocess.Popen[str]) -> None:
+        """Send SIGTERM to the entire process group of ``proc``."""
+        try:
+            os.killpg(proc.pid, _signal.SIGTERM)
+        except (OSError, ProcessLookupError, AttributeError):
+            # Non-POSIX (no killpg) or group already gone.
+            with contextlib.suppress(Exception):
+                proc.terminate()

@@ -58,6 +58,7 @@ from seharness.orchestrator.types import (
     RunId,
     new_run_id,
 )
+from seharness.sandbox.cancellation import CancellationToken
 
 
 @dataclass(frozen=True)
@@ -222,6 +223,13 @@ class Orchestrator:
         # in-flight run id at a time. Multi-run parallelism lands in
         # Cluster E (story E2).
         self._events: dict[str, tuple[PipelineEvent, ...]] = {}
+        # Per-run cancellation tokens. Cluster E, story E4b:
+        # ``start_run`` registers a fresh token keyed by run_id;
+        # ``cancel_run`` flips it (which triggers SIGTERM/SIGKILL
+        # escalation in the runner); the registry entry is removed
+        # when the run finishes. Multi-run parallelism lands in
+        # Cluster E (story E2).
+        self._cancel_tokens: dict[str, CancellationToken] = {}
 
     # ----- public API ----------------------------------------------------
 
@@ -271,6 +279,10 @@ class Orchestrator:
         )
         # Record the run start in the shared ledger.
         self._run_ledger.record_start(str(rid), repository=str(repo))
+        # E4b: register a fresh cancellation token for this run.
+        # ``cancel_run`` looks it up + flips it; the runner watches it.
+        cancel_token = CancellationToken()
+        self._cancel_tokens[str(rid)] = cancel_token
 
         events: list[PipelineEvent] = []
         # SPEC §line 587 canonicalizes the terminal phrase as
@@ -374,6 +386,11 @@ class Orchestrator:
             events=tuple(events),
         )
         self._events[str(rid)] = result.events
+        # E4b: deregister the cancellation token now that the run is
+        # terminal. ``cancel_run`` after this point still works (it
+        # marks the ledger) but cannot interrupt an already-finished
+        # subprocess — which is fine because the subprocess is gone.
+        self._cancel_tokens.pop(str(rid), None)
         if owns_writer and trace_writer is not None:
             trace_writer.close()
             self._trace_writer_active = None
@@ -405,12 +422,49 @@ class Orchestrator:
         )
 
     def cancel_run(self, run_id: str) -> None:
+        """Cancel a run.
+
+        E4b: this does two things in order:
+
+        1. **Flip the per-run cancellation token** (if the run is
+           still in-flight and the token is registered). The runner
+           watches the token and escalates to SIGTERM/SIGKILL on
+           the running subprocess. The ``start_run`` call that is
+           blocked in the runner will return promptly with
+           ``exit_code=130`` ("cancelled by orchestrator").
+        2. **Mark the ledger as CANCELLED.** This was the entire
+           behaviour before E4b; kept for backward compatibility
+           and for the case where ``start_run`` has already
+           finished (no token registered) but the caller still
+           wants the ledger to reflect a cancellation.
+
+        Idempotent: calling ``cancel_run`` twice is safe. The
+        second call will not raise even if the run is already
+        CANCELLED in the ledger (the token, if still registered,
+        is a no-op when set twice).
+        """
         rec = self._run_ledger.get(run_id)
         if rec is None:
             raise OrchestratorError(f"unknown run_id: {run_id}")
         if rec.state == RunState.COMPLETE:
             raise OrchestratorError(f"run {run_id} already complete; cannot cancel")
+        # E4b: flip the per-run token (if registered). This wakes
+        # the runner's watcher, which sends SIGTERM, waits the
+        # grace window, then SIGKILL.
+        token = self._cancel_tokens.get(run_id)
+        if token is not None:
+            token.set()
         self._run_ledger.mark_cancelled(run_id)
+
+    # ----- E4b runner helpers ------------------------------------------
+
+    def _cancel_token_for(self, run_id: str) -> CancellationToken | None:
+        """Return the per-run cancellation token (or ``None`` if absent).
+
+        Phase handlers use this to thread cancellation into the
+        runner without reaching into ``self._cancel_tokens`` directly.
+        """
+        return self._cancel_tokens.get(run_id)
 
     # ----- trace helpers (Cluster E, stories E5+E6) ----------------------
 
@@ -630,7 +684,12 @@ def _phase_implementation(
     green_dir.mkdir(parents=True, exist_ok=True)
 
     def _runner(r: Path, g: Path) -> None:
-        orch._runner.run_task(red_dir=r, green_dir=g, task_id=task.task_id)
+        orch._runner.run_task(
+            red_dir=r,
+            green_dir=g,
+            task_id=task.task_id,
+            cancel=orch._cancel_token_for(str(ctx.run_id)),
+        )
 
     try:
         result = svc.execute(plan=plan, task_id=task.task_id, runner=_runner)
@@ -652,7 +711,12 @@ def _phase_validation(
     if not task.validation_commands:
         return PhaseOutcome.SKIPPED, ctx, "no validation commands"
     cmd = task.validation_commands[0]
-    result = orch._runner.run_validation(command=cmd, cwd=Path(ctx.repo_path), timeout_s=60.0)
+    result = orch._runner.run_validation(
+        command=cmd,
+        cwd=Path(ctx.repo_path),
+        timeout_s=60.0,
+        cancel=orch._cancel_token_for(str(ctx.run_id)),
+    )
     detail = f"{cmd} → exit {result.exit_code}"
     if result.exit_code != 0:
         return PhaseOutcome.FAILED, ctx, detail
