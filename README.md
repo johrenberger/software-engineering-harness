@@ -142,6 +142,7 @@ seharness --help
 - [Run traces](docs/user/traces.md) *(Cluster E)*
 - [Releasing the harness](docs/releasing.md)
 - [Engineering dashboard](docs/engineering-dashboard.md)
+- [Operations runbook](docs/operations.md) *(Cluster I, I3)*
 - [Priority tracker](docs/analysis/2026-07-19-priority-stories.md)
 
 ## Project layout
