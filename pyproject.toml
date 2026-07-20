@@ -90,6 +90,11 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["PLR2004", "S101", "ARG", "FBT", "PLC0415", "RUF100"]
 "src/seharness/cli.py" = ["B008"]
+# PLW1509: preexec_fn is intentionally used in SubprocessSandbox to apply
+# POSIX rlimits (RLIMIT_CPU, RLIMIT_FSIZE, RLIMIT_NOFILE, RLIMIT_NPROC).
+# The CancellationWatcher thread only reads the token + proc handle, never
+# touches any variable read by the preexec_fn, so the threading is safe.
+"src/seharness/sandbox/subprocess_sandbox.py" = ["PLW1509"]
 
 [tool.mypy]
 python_version = "3.12"

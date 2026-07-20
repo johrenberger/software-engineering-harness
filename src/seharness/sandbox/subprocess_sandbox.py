@@ -37,6 +37,7 @@ import time
 from typing import Any
 
 from seharness.sandbox import SandboxProfile, SandboxResult
+from seharness.sandbox.cancellation import CancellationToken, CancellationWatcher
 
 # ---------------------------------------------------------------------------
 # Resource-limit helper
@@ -141,8 +142,29 @@ class SubprocessSandbox:
         profile: SandboxProfile,
         env: dict[str, str] | None = None,
         stdin: str | None = None,
+        cancel: CancellationToken | None = None,
+        cancel_grace_seconds: float = 5.0,
     ) -> SandboxResult:
-        """Run ``command`` under the subprocess sandbox."""
+        """Run ``command`` under the subprocess sandbox.
+
+        Parameters
+        ----------
+        command:
+            The shell command (parsed via ``shlex.split`` unless
+            ``allow_shell=True``).
+        profile:
+            SandboxProfile with rlimits, cwd, and denied env vars.
+        env:
+            Extra env vars to merge into the child's environment.
+        stdin:
+            Optional stdin payload for the child.
+        cancel:
+            Optional :class:`CancellationToken`. If provided, the
+            subprocess is terminated (SIGTERM, then SIGKILL after
+            ``cancel_grace_seconds``) when the token is set.
+        cancel_grace_seconds:
+            Seconds between SIGTERM and SIGKILL. Default 5.0.
+        """
         start = time.monotonic()
         full_env = _scrub_env(profile, env)
         violations: list[str] = []
@@ -171,30 +193,27 @@ class SubprocessSandbox:
 
         timeout = max(1.0, float(profile.cpu_seconds))
         preexec_fn: Any = None
+        # Use start_new_session=True so the child becomes its own process
+        # group leader. This lets the CancellationWatcher send SIGTERM /
+        # SIGKILL to the group (terminating any grandchildren spawned by
+        # the child, e.g. pytest fixtures) rather than just the immediate
+        # child. We keep preexec_fn for POSIX rlimits.
+        start_new_session = hasattr(os, "setsid")
         if hasattr(os, "fork"):  # POSIX  # pragma: no cover
             preexec_fn = _make_preexec(profile, violations)
 
         try:
-            completed = subprocess.run(  # nosec B603,B602 - caller controls argv; shell only when opted-in
+            proc = subprocess.Popen(  # nosec B603,B602 - caller controls argv; shell only when opted-in
                 argv,
                 shell=self._allow_shell,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                check=False,
                 cwd=profile.cwd,
                 env=full_env,
-                input=stdin,
-                timeout=timeout,
+                stdin=subprocess.PIPE if stdin else None,
                 preexec_fn=preexec_fn,
-            )
-        except subprocess.TimeoutExpired as exc:
-            return SandboxResult(
-                command=command,
-                exit_code=124,  # canonical timeout exit code (matches LocalCommandRunner)
-                stdout=_decode(exc.stdout),
-                stderr=_decode(exc.stderr) + f"\nTIMEOUT after {timeout}s",
-                duration_s=time.monotonic() - start,
-                sandbox_violations=tuple(violations),
+                start_new_session=start_new_session,
             )
         except FileNotFoundError as exc:
             return SandboxResult(
@@ -206,11 +225,66 @@ class SubprocessSandbox:
                 sandbox_violations=tuple(violations),
             )
 
+        # Start cancellation watcher before we block on communicate().
+        # The watcher holds a weak reference to proc; if proc is GC'd
+        # before the watcher fires, the watcher exits cleanly.
+        watcher: CancellationWatcher | None = None
+        if cancel is not None:
+            watcher = CancellationWatcher(
+                token=cancel,
+                target=proc,
+                grace_seconds=cancel_grace_seconds,
+            )
+
+        # Run communicate with a wall-clock ceiling. We use communicate()
+        # rather than wait() so stdout/stderr are drained (avoids
+        # deadlock on child writing to a full pipe buffer).
+        try:
+            try:
+                stdout, stderr = proc.communicate(input=stdin, timeout=timeout)
+            except subprocess.TimeoutExpired:
+                # Wall-clock timeout (matches the previous
+                # subprocess.run(... timeout=...) behaviour).
+                proc.kill()
+                stdout, stderr = proc.communicate()
+                if watcher is not None:
+                    watcher.stop(timeout=cancel_grace_seconds + 1.0)
+                return SandboxResult(
+                    command=command,
+                    exit_code=124,  # canonical timeout exit code
+                    stdout=_decode(stdout),
+                    stderr=_decode(stderr) + f"\nTIMEOUT after {timeout}s",
+                    duration_s=time.monotonic() - start,
+                    sandbox_violations=tuple(violations),
+                )
+        finally:
+            if watcher is not None:
+                # Tear down the watcher (idempotent). If it had already
+                # fired and escalated, escalated_to_sigkill reflects that.
+                watcher.stop(timeout=cancel_grace_seconds + 1.0)
+
+        # Distinguish cancellation (SIGTERM/SIGKILL from watcher) from
+        # natural completion. The watcher sets proc.returncode to a
+        # negative signal value (-SIGTERM = -15, -SIGKILL = -9); we
+        # also check the cancellation token's state since that's the
+        # authoritative signal source.
+        cancelled = cancel is not None and bool(cancel.is_cancelled())
+        if cancelled:
+            return SandboxResult(
+                command=command,
+                exit_code=-1,  # sentinel: no natural exit code
+                stdout=_decode(stdout),
+                stderr=_decode(stderr) + "\nCANCELLED via CancellationToken",
+                duration_s=time.monotonic() - start,
+                sandbox_violations=tuple(violations),
+                cancelled=True,
+            )
+
         return SandboxResult(
             command=command,
-            exit_code=completed.returncode,
-            stdout=completed.stdout or "",
-            stderr=completed.stderr or "",
+            exit_code=proc.returncode,
+            stdout=_decode(stdout) if stdout else "",
+            stderr=_decode(stderr) if stderr else "",
             duration_s=time.monotonic() - start,
             sandbox_violations=tuple(violations),
         )
