@@ -241,9 +241,7 @@ class TestModelRouterRateLimitRetry:
             ProviderName.MINIMAX,
             [_rate_limited(ProviderName.MINIMAX), _rate_limited(ProviderName.MINIMAX)],
         )
-        fallback = _SequenceAdapter(
-            ProviderName.CODEX, [_rate_limited(ProviderName.CODEX)]
-        )
+        fallback = _SequenceAdapter(ProviderName.CODEX, [_rate_limited(ProviderName.CODEX)])
         router = ModelRouter(
             adapters={ProviderName.MINIMAX: primary, ProviderName.CODEX: fallback},
             routing={RoutingRole.PLANNING: ProviderName.MINIMAX},

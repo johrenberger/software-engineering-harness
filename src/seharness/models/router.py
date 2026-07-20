@@ -118,6 +118,7 @@ class RetryPolicy:
             f"max_backoff_s={self._max_backoff_s})"
         )
 
+
 # Canonical default routing table per SPEC §10. Module-level so mypy can
 # infer the precise enum value type without a runtime cast.
 DEFAULT_ROUTING: Mapping[RoutingRole, ProviderName] = {
@@ -180,9 +181,7 @@ class ModelRouter:
         # is rate-limited, retry with bounded exponential backoff
         # before considering fallback. Non-rate-limit failures skip
         # the retry path entirely.
-        primary_response = self._invoke_with_rate_limit_retry(
-            primary_adapter, request
-        )
+        primary_response = self._invoke_with_rate_limit_retry(primary_adapter, request)
 
         # If the primary succeeded (after retries), return immediately.
         if primary_response.error is None:
