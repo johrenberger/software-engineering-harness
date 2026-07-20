@@ -264,3 +264,227 @@ def test_controller_idempotency_default_is_empty_string() -> None:
 
     sig = inspect.signature(RunLedger.record_start)
     assert sig.parameters["idempotency_key"].default == ""
+
+
+# ---------------------------------------------------------------------------
+# Cluster E2: optimistic concurrency via revision + expected_state CAS
+# ---------------------------------------------------------------------------
+
+
+def test_record_starts_at_revision_one() -> None:
+    """Fresh records have ``revision == 1``.
+
+    Subsequent ``record_start`` calls bumping revision:
+    - Same idempotency_key on same run_id → E1 dedupe, no write.
+    - Different idempotency_key on same run_id (E1 re-keying) → +1.
+    Pure dedupe (same key + same run_id) → unchanged.
+    """
+    ledger2 = RunLedger()
+    ledger2.record_start("r1", repository="repo", idempotency_key="k-A")
+    assert ledger2.get("r1").revision == 1
+    rec2 = ledger2.record_start("r1", repository="repo", idempotency_key="k-A")
+    assert rec2.revision == 1  # dedupe did not write
+    # Re-keying (E1 contract: swap key) → bump to 2.
+    ledger2.record_start("r1", repository="repo", idempotency_key="k-B")
+    assert ledger2.get("r1").revision == 2
+    # Subsequent dedupe on k-B → still 2.
+    ledger2.record_start("r1", repository="repo", idempotency_key="k-B")
+    assert ledger2.get("r1").revision == 2
+
+
+def test_replace_bumps_revision() -> None:
+    """E1's re-keying path (same run_id, fresh idempotency_key)
+    MUST bump revision so holders of the old revision see the change."""
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo", idempotency_key="k-A")
+    assert ledger.get("r1").revision == 1
+    # Re-key with no key → bump to 2.
+    ledger.record_start("r1", repository="repo")
+    assert ledger.get("r1").revision == 2
+    # Re-key with k-B → bump to 3.
+    ledger.record_start("r1", repository="repo", idempotency_key="k-B")
+    assert ledger.get("r1").revision == 3
+
+
+def test_mark_bumps_revision_on_success() -> None:
+    """Every successful ``mark_*`` bumps revision by 1."""
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    assert ledger.get("r1").revision == 1
+    ledger.mark_paused("r1")
+    assert ledger.get("r1").revision == 2
+    assert ledger.get("r1").state == RunState.PAUSED
+    ledger.mark_resume("r1")
+    assert ledger.get("r1").revision == 3
+    ledger.mark_complete("r1")
+    assert ledger.get("r1").revision == 4
+
+
+def test_mark_with_matching_revision_succeeds() -> None:
+    """``mark_complete(expected_revision=2)`` succeeds when revision
+    is currently 2 → returns revision 3."""
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    ledger.mark_paused("r1")
+    result = ledger.mark_complete("r1", expected_revision=2)
+    assert result is not None
+    assert result.revision == 3
+    assert result.state == RunState.COMPLETE
+
+
+def test_mark_with_stale_revision_raises_actual_includes_obs() -> None:
+    """``mark_complete(expected_revision=1)`` on a record at revision
+    2 raises ``OptimisticConcurrencyError`` carrying observed values."""
+    from seharness.controller.run_ledger import OptimisticConcurrencyError
+
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    ledger.mark_paused("r1")
+    with pytest.raises(OptimisticConcurrencyError) as exc_info:
+        ledger.mark_complete("r1", expected_revision=1)
+    err = exc_info.value
+    assert err.run_id == "r1"
+    assert err.expected_revision == 1
+    assert err.actual_revision == 2
+    # Ledger state was NOT mutated by the failed CAS.
+    assert ledger.get("r1").state == RunState.PAUSED
+    assert ledger.get("r1").revision == 2
+
+
+def test_mark_with_matching_expected_state_succeeds() -> None:
+    """``mark_complete(expected_state=RunState.RUNNING)`` succeeds
+    when the record is currently RUNNING (the typical happy path)."""
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    result = ledger.mark_complete("r1", expected_state=RunState.RUNNING)
+    assert result is not None
+    assert result.state == RunState.COMPLETE
+    assert result.revision == 2
+
+
+def test_mark_with_stale_expected_state_raises() -> None:
+    """``mark_resume(expected_state=RUNNING)`` on a PAUSED record raises."""
+    from seharness.controller.run_ledger import OptimisticConcurrencyError
+
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    ledger.mark_paused("r1")
+    with pytest.raises(OptimisticConcurrencyError) as exc_info:
+        ledger.mark_resume("r1", expected_state=RunState.RUNNING)
+    err = exc_info.value
+    assert err.expected_state == RunState.RUNNING
+    assert err.actual_state == RunState.PAUSED
+    # Ledger state untouched.
+    assert ledger.get("r1").state == RunState.PAUSED
+
+
+def test_mark_requires_both_cas_clauses_when_both_supplied() -> None:
+    """If BOTH ``expected_revision`` and ``expected_state`` are
+    supplied, BOTH must match. Mismatching one is enough to raise.
+    """
+    from seharness.controller.run_ledger import OptimisticConcurrencyError
+
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    ledger.mark_paused("r1")
+    # Both correct → success.
+    ledger.mark_resume("r1", expected_revision=2, expected_state=RunState.PAUSED)
+    assert ledger.get("r1").revision == 3
+    assert ledger.get("r1").state == RunState.RUNNING
+    # Revision matches, state doesn't → CAS fails.
+    with pytest.raises(OptimisticConcurrencyError):
+        ledger.mark_complete("r1", expected_revision=3, expected_state=RunState.PAUSED)
+    # State matches, revision doesn't → CAS fails.
+    with pytest.raises(OptimisticConcurrencyError):
+        ledger.mark_complete("r1", expected_revision=2, expected_state=RunState.RUNNING)
+
+
+def test_mark_without_cas_args_preserves_pre_e2_behavior() -> None:
+    """``mark_*`` called with no ``expected_*`` args must keep the
+    pre-E2 unconditional-transition semantics. Back-compat invariant.
+    """
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    assert ledger.mark_paused("r1").revision == 2
+    assert ledger.mark_resume("r1").revision == 3
+
+
+def test_mark_unknown_run_id_returns_none_silently() -> None:
+    """Pre-E2 invariant: ``mark_*`` on an unknown ``run_id`` returns
+    ``None`` without raising. The CAS variant MUST preserve this."""
+    ledger = RunLedger()
+    assert ledger.mark_paused("does-not-exist") is None
+    assert (
+        ledger.mark_complete(
+            "does-not-exist",
+            expected_revision=1,
+            expected_state=RunState.RUNNING,
+        )
+        is None
+    )
+
+
+def test_cas_loses_to_concurrent_modification() -> None:
+    """Realistic scenario: two readers, one wins the CAS, the other
+    retries. After losing the CAS the caller reads the new value and
+    gets back in sync.
+    """
+    from seharness.controller.run_ledger import OptimisticConcurrencyError
+
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    snapshot_a = ledger.get("r1")
+    ledger.mark_paused("r1")  # → rev 2
+    with pytest.raises(OptimisticConcurrencyError) as exc:
+        ledger.mark_resume("r1", expected_revision=snapshot_a.revision)
+    assert exc.value.actual_revision == 2
+    fresh = ledger.get("r1")
+    assert fresh.revision == 2
+    ledger.mark_resume("r1", expected_revision=fresh.revision, expected_state=RunState.PAUSED)
+    assert ledger.get("r1").state == RunState.RUNNING
+    assert ledger.get("r1").revision == 3
+
+
+def test_idempotent_state_mark_also_bumps_revision() -> None:
+    """``mark_complete(expected_state=RunState.COMPLETE)`` on an
+    already-COMPLETE record: the CAS check passes (state matches)
+    but the revision is incremented. This keeps ``revision`` strictly
+    monotonic and visible to anyone watching.
+    """
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    ledger.mark_complete("r1")
+    again = ledger.mark_complete("r1", expected_revision=2, expected_state=RunState.COMPLETE)
+    assert again is not None
+    assert again.revision == 3
+    assert again.state == RunState.COMPLETE
+
+
+def test_optimistic_concurrency_error_attributes() -> None:
+    """The exception's attributes are populated and the message names
+    each value so log scrubbers can grep them."""
+    from seharness.controller.run_ledger import OptimisticConcurrencyError
+
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    ledger.mark_paused("r1")
+    with pytest.raises(OptimisticConcurrencyError) as exc:
+        ledger.mark_complete("r1", expected_revision=1)
+    assert exc.value.run_id == "r1"
+    assert exc.value.expected_revision == 1
+    assert exc.value.actual_revision == 2
+    assert exc.value.expected_state is None
+    assert exc.value.actual_state == RunState.PAUSED
+    msg = str(exc.value)
+    assert "r1" in msg
+    assert "revision" in msg.lower()
+
+
+def test_revision_field_on_run_record_default() -> None:
+    """``RunRecord.revision`` defaults to 1 (Pydantic invariant)."""
+    rec = RunRecord(
+        run_id="x",
+        state=RunState.RUNNING,
+        repository="r",
+    )
+    assert rec.revision == 1

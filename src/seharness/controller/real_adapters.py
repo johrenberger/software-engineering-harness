@@ -27,7 +27,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from seharness.controller.run_ledger import RunRecord, RunState
+from seharness.controller.run_ledger import (
+    OptimisticConcurrencyError,
+    RunRecord,
+    RunState,
+)
 from seharness.telegram.service import FeatureRequest
 
 
@@ -314,14 +318,19 @@ class _LedgerLine:
     # Cluster E1: optional idempotency_key carried on the start line
     # so a replay preserves the key. Empty string means "no key".
     idempotency_key: str = ""
+    # Cluster E2: revision number carried on every line so a replay
+    # preserves monotonic revision. Defaults to 1 (the start-of-record
+    # case), so older files that lack the field reconstruct cleanly.
+    revision: int = 1
 
     def to_jsonl(self) -> str:
-        payload: dict[str, str | None] = {
+        payload: dict[str, str | int | None] = {
             "kind": self.kind,
             "run_id": self.run_id,
             "state": self.state,
             "repository": self.repository,
             "timestamp": self.timestamp,
+            "revision": self.revision,
         }
         if self.idempotency_key:
             payload["idempotency_key"] = self.idempotency_key
@@ -375,17 +384,24 @@ class FileRunLedger:
                         repository=repository or "",
                         started_at=entry.get("timestamp") or datetime.now(tz=UTC).isoformat(),
                         idempotency_key=entry.get("idempotency_key", "") or "",
+                        revision=int(entry.get("revision") or 1),
                     )
                 elif kind == "transition":
                     rec = self._index.get(run_id)
                     if rec is None:
                         continue
+                    # Cluster E2: read the post-transition revision
+                    # from disk (rather than re-deriving it). Last
+                    # write wins so concurrent writers can't roll
+                    # back via a stale replay order.
+                    new_rev = int(entry.get("revision") or rec.revision + 1)
                     self._index[run_id] = RunRecord(
                         run_id=run_id,
                         state=RunState(state),
                         repository=rec.repository,
                         started_at=rec.started_at,
                         idempotency_key=rec.idempotency_key,
+                        revision=new_rev,
                     )
 
     # ---- append ---------------------------------------------------------
@@ -397,13 +413,35 @@ class FileRunLedger:
     # ---- record API (mirrors in-memory RunLedger) -----------------------
 
     def record_start(self, run_id: str, *, repository: str, idempotency_key: str = "") -> RunRecord:
-        rec = RunRecord(
-            run_id=run_id,
-            state=RunState.RUNNING,
-            repository=repository,
-            started_at=_utcnow_iso(),
-            idempotency_key=idempotency_key,
-        )
+        existing = self._index.get(run_id)
+        if existing is not None:
+            # Cluster E1 + E2: re-keying or re-record bumps revision
+            # (and persists the new key on the JSONL envelope). The
+            # in-memory ledger uses ``_key_index`` for true dedupe; on
+            # disk, ``run_id`` is the unique key. So we treat every
+            # ``record_start`` on an existing ``run_id`` as a write.
+            if existing.idempotency_key and existing.idempotency_key != idempotency_key:
+                # Drop the old key association from the live index
+                # (Cluster E1: the durable layer still carries the old
+                # key in the JSONL history; only the live cache forgets).
+                pass  # nothing to do here; marker for future Cluster B wiring
+            rec = RunRecord(
+                run_id=run_id,
+                state=RunState.RUNNING,
+                repository=repository,
+                started_at=_utcnow_iso(),
+                idempotency_key=idempotency_key,
+                revision=existing.revision + 1,
+            )
+        else:
+            rec = RunRecord(
+                run_id=run_id,
+                state=RunState.RUNNING,
+                repository=repository,
+                started_at=_utcnow_iso(),
+                idempotency_key=idempotency_key,
+                # revision defaults to 1
+            )
         self._index[run_id] = rec
         self._append(
             _LedgerLine(
@@ -413,20 +451,47 @@ class FileRunLedger:
                 repository=repository,
                 timestamp=_utcnow_iso(),
                 idempotency_key=idempotency_key,
+                revision=rec.revision,
             )
         )
         return rec
 
-    def _update_state(self, run_id: str, state: RunState) -> RunRecord | None:
+    def _update_state(
+        self,
+        run_id: str,
+        state: RunState,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        """Cluster E2: same CAS contract as in-memory ``RunLedger``."""
         rec = self._index.get(run_id)
         if rec is None:
             return None
+        # CAS check before mutation so the durable log stays consistent.
+        if expected_revision is not None and expected_revision != rec.revision:
+            raise OptimisticConcurrencyError(
+                run_id=run_id,
+                expected_revision=expected_revision,
+                actual_revision=rec.revision,
+                expected_state=expected_state,
+                actual_state=rec.state,
+            )
+        if expected_state is not None and expected_state != rec.state:
+            raise OptimisticConcurrencyError(
+                run_id=run_id,
+                expected_revision=expected_revision,
+                actual_revision=rec.revision,
+                expected_state=expected_state,
+                actual_state=rec.state,
+            )
         updated = RunRecord(
-            run_id=run_id,
+            run_id=rec.run_id,
             state=state,
             repository=rec.repository,
             started_at=rec.started_at,
             idempotency_key=rec.idempotency_key,
+            revision=rec.revision + 1,
         )
         self._index[run_id] = updated
         self._append(
@@ -437,27 +502,94 @@ class FileRunLedger:
                 repository=rec.repository,
                 timestamp=_utcnow_iso(),
                 idempotency_key=rec.idempotency_key,
+                revision=updated.revision,
             )
         )
         return updated
 
-    def mark_complete(self, run_id: str) -> RunRecord | None:
-        return self._update_state(run_id, RunState.COMPLETE)
+    def mark_complete(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        return self._update_state(
+            run_id,
+            RunState.COMPLETE,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
 
-    def mark_failed(self, run_id: str) -> RunRecord | None:
-        return self._update_state(run_id, RunState.FAILED)
+    def mark_failed(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        return self._update_state(
+            run_id,
+            RunState.FAILED,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
 
-    def mark_paused(self, run_id: str) -> RunRecord | None:
-        return self._update_state(run_id, RunState.PAUSED)
+    def mark_paused(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        return self._update_state(
+            run_id,
+            RunState.PAUSED,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
 
-    def mark_blocked(self, run_id: str) -> RunRecord | None:
-        return self._update_state(run_id, RunState.BLOCKED)
+    def mark_blocked(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        return self._update_state(
+            run_id,
+            RunState.BLOCKED,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
 
-    def mark_cancelled(self, run_id: str) -> RunRecord | None:
-        return self._update_state(run_id, RunState.CANCELLED)
+    def mark_cancelled(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        return self._update_state(
+            run_id,
+            RunState.CANCELLED,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
 
-    def mark_resume(self, run_id: str) -> RunRecord | None:
-        return self._update_state(run_id, RunState.RUNNING)
+    def mark_resume(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        return self._update_state(
+            run_id,
+            RunState.RUNNING,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
 
     # ---- read API (mirrors in-memory RunLedger) ------------------------
 
