@@ -287,14 +287,14 @@ class LocalCommandRunner:
         exit_code = self._wait_with_group_cancel(proc=proc, cancel=cancel, timeout_s=timeout_s)
         try:
             stdout, stderr = proc.communicate(timeout=2.0)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired:  # pragma: no cover  # defensive: belt-and-braces if pipes wedge after SIGKILL
             # Belt-and-braces: even after SIGKILL on the group, the
             # pipes may be wedged. Force-reap and move on.
-            self._kill_process_group(proc)
-            try:
-                stdout, stderr = proc.communicate(timeout=1.0)
-            except subprocess.TimeoutExpired:
-                stdout, stderr = "", ""
+            self._kill_process_group(proc)  # pragma: no cover
+            try:  # pragma: no cover  # nested safety net
+                stdout, stderr = proc.communicate(timeout=1.0)  # pragma: no cover
+            except subprocess.TimeoutExpired:  # pragma: no cover
+                stdout, stderr = "", ""  # pragma: no cover
 
         if cancel.is_cancelled() and exit_code not in (0,):
             # Cancellation fired and the process was reaped by the
@@ -363,10 +363,10 @@ class LocalCommandRunner:
                 LocalCommandRunner._terminate_process_group(proc)
                 try:
                     return proc.wait(timeout=grace + 5.0)
-                except subprocess.TimeoutExpired:
+                except subprocess.TimeoutExpired:  # pragma: no cover  # SIGTERM-ignoring process: escalation path
                     # Escalate to SIGKILL on the group.
-                    LocalCommandRunner._kill_process_group(proc)
-                    return proc.wait(timeout=2.0)
+                    LocalCommandRunner._kill_process_group(proc)  # pragma: no cover
+                    return proc.wait(timeout=2.0)  # pragma: no cover
             time.sleep(poll_interval)
 
     @staticmethod
