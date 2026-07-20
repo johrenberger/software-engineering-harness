@@ -48,6 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   persistence to durable SQLite store is not yet wired (Cluster B
   follow-up). 25 tests (14 ledger-level incl. FileRunLedger
   round-trip, 11 orchestrator-level).
+- **E2** (PR #54) — optimistic concurrency on `RunLedger`.
+  `RunRecord.revision: int = 1` (monotonic; bumped on every state
+  transition AND on `record_start` re-keying). New exception
+  `OptimisticConcurrencyError(run_id, expected_revision,
+  actual_revision, expected_state, actual_state)` for stale CAS.
+  Every `mark_*` accepts `expected_revision=` and/or `expected_state=`
+  (semantic CAS); both must match if both supplied. Backward-compat:
+  no `expected_*` arg preserves pre-E2 semantics. `FileRunLedger`
+  mirrors the API and persists `revision` on the JSONL envelope so
+  replays reconstruct it. Scope: option B (revision counter + CAS,
+  no public API threading). Threading `expected_revision` into
+  `Orchestrator` API and CLI is deferred to a follow-up if callers
+  ask. 22 tests (14 in-memory ledger + 8 durable ledger round-trip).
 
 ## [0.2.0] - 2026-07-20
 

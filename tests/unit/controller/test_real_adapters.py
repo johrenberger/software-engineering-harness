@@ -417,3 +417,88 @@ def test_file_run_ledger_omits_empty_idempotency_key(tmp_path: Path) -> None:
     assert "idempotency_key" not in first_line
     # And of course the record has an empty key.
     assert ledger.get("orch-001").idempotency_key == ""
+
+
+# ---------------------------------------------------------------------------
+# E2 — FileRunLedger optimistic-concurrency + revision round-trip
+# ---------------------------------------------------------------------------
+
+
+def _mk(tmp_path: Path) -> Path:
+    return tmp_path / "ledger_e2.jsonl"
+
+
+def test_file_run_ledger_revision_default_one(tmp_path: Path) -> None:
+    """A fresh record starts at revision 1 in the durable ledger;
+    the JSONL envelope carries the revision number so replays
+    reconstruct it correctly."""
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    rec = ledger.record_start("orch-001", repository="/tmp/repo")
+    assert rec.revision == 1
+    first_line = json.loads(path.read_text().strip().split("\n")[0])
+    assert first_line.get("revision") == 1
+
+
+def test_file_run_ledger_replace_bumps_revision(tmp_path: Path) -> None:
+    """``record_start`` on an existing ``run_id`` (E1 re-keying path)
+    bumps revision in the durable ledger."""
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("r1", repository="/repo", idempotency_key="k-A")
+    ledger.record_start("r1", repository="/repo", idempotency_key="k-B")
+    assert ledger.get("r1").revision == 2
+
+
+def test_file_run_ledger_mark_with_revision_cas_succeeds(tmp_path: Path) -> None:
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("r1", repository="/repo")
+    ledger.mark_paused("r1")
+    result = ledger.mark_complete("r1", expected_revision=2)
+    assert result is not None
+    assert result.revision == 3
+    assert result.state == RunState.COMPLETE
+
+
+def test_file_run_ledger_mark_revision_cas_fails(tmp_path: Path) -> None:
+    from seharness.controller.run_ledger import OptimisticConcurrencyError
+
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("r1", repository="/repo")
+    ledger.mark_paused("r1")
+    with pytest.raises(OptimisticConcurrencyError):
+        ledger.mark_complete("r1", expected_revision=1)
+    # Ledger state preserved.
+    assert ledger.get("r1").state == RunState.PAUSED
+    assert ledger.get("r1").revision == 2
+
+
+def test_file_run_ledger_mark_state_cas_fails(tmp_path: Path) -> None:
+    from seharness.controller.run_ledger import OptimisticConcurrencyError
+
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("r1", repository="/repo")
+    ledger.mark_paused("r1")
+    with pytest.raises(OptimisticConcurrencyError):
+        ledger.mark_resume("r1", expected_state=RunState.RUNNING)
+    assert ledger.get("r1").state == RunState.PAUSED
+
+
+def test_file_run_ledger_replay_preserves_revision(tmp_path: Path) -> None:
+    """After several writes the JSONL line for the final transition
+    carries the latest revision; replaying into a fresh instance
+    reconstructs the same revision number."""
+    path = _mk(tmp_path)
+    a = FileRunLedger(path=path)
+    a.record_start("r1", repository="/repo")
+    a.mark_paused("r1")
+    a.mark_resume("r1")
+    # Last state on disk is RUNNING at revision 3.
+    b = FileRunLedger(path=path)
+    rec = b.get("r1")
+    assert rec is not None
+    assert rec.state == RunState.RUNNING
+    assert rec.revision == 3

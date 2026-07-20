@@ -32,6 +32,44 @@ class IdempotencyKeyConflictError(ValueError):
     """
 
 
+class OptimisticConcurrencyError(ValueError):
+    """Raised when a ``mark_*`` call detects the ledger has been
+    mutated since the caller read it.
+
+    Cluster E2: callers pass an ``expected_revision`` and/or
+    ``expected_state`` with every state transition. The transition
+    only fires if both expected values still match the current
+    record. On mismatch the transition is rejected and the caller
+    must re-read the record (the ``actual`` and ``expected`` values
+    are surfaced for diagnostics).
+
+    Carries ``run_id``, ``expected_revision``, ``actual_revision``,
+    ``expected_state``, ``actual_state`` so callers can retry with
+    fresh values.
+    """
+
+    def __init__(
+        self,
+        *,
+        run_id: str,
+        expected_revision: int | None,
+        actual_revision: int,
+        expected_state: RunState | None,
+        actual_state: RunState,
+    ) -> None:
+        self.run_id = run_id
+        self.expected_revision = expected_revision
+        self.actual_revision = actual_revision
+        self.expected_state = expected_state
+        self.actual_state = actual_state
+        super().__init__(
+            f"optimistic concurrency conflict on run_id {run_id!r}: "
+            f"expected revision={expected_revision}, state={expected_state}; "
+            f"actual revision={actual_revision}, state={actual_state}; "
+            f"re-read the record and retry."
+        )
+
+
 class RunState(StrEnum):
     """State of a feature run in the ledger.
 
@@ -63,6 +101,12 @@ class RunRecord(BaseModel):
     request (e.g. ``gh-<pr-number>`` or ``claude-session-<uuid>``).
     When the same key is presented twice, ``RunLedger.record_start``
     returns the existing record instead of creating a duplicate.
+
+    Cluster E2 (story E2): carries a monotonic ``revision`` integer.
+    It is bumped on every state transition (``mark_*``) AND on every
+    ``record_start`` ``run_id`` replacement (preserving the E1
+    re-keying contract: a caller who read the record at revision N
+    must CAS against N+1 after a re-key). New records start at 1.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -72,6 +116,7 @@ class RunRecord(BaseModel):
     repository: str = Field(min_length=1)
     started_at: str = Field(default_factory=lambda: _utcnow().isoformat())
     idempotency_key: str = Field(default="")
+    revision: int = Field(default=1, ge=1)
 
 
 class RunLedger:
@@ -146,15 +191,20 @@ class RunLedger:
             state=RunState.RUNNING,
             repository=repository,
             idempotency_key=idempotency_key,
+            # New record: revision 1. On replace (same run_id) the
+            # bumped revision is applied below so the E1 re-keying
+            # path stays visible to holders of the old revision.
         )
         if run_id in self._records:
             # Preserve prior semantics for run-id-only callers: replace.
             # Re-keying is allowed: if the caller now wants to associate
             # a key with this run, we register it in the index, freeing
-            # any previous key mapping for this run_id first.
+            # any previous key mapping for this run_id first. Revision
+            # is bumped so optimistic-concurrency callers see the change.
             old = self._records[run_id]
             if old.idempotency_key and old.idempotency_key != idempotency_key:
                 self._key_index.pop(old.idempotency_key, None)
+            rec = rec.model_copy(update={"revision": old.revision + 1})
             self._records[run_id] = rec
         else:
             self._records[run_id] = rec
@@ -164,35 +214,139 @@ class RunLedger:
         self._evict()
         return rec
 
-    def mark_resume(self, run_id: str) -> RunRecord | None:
-        return self._update_state(run_id, RunState.RUNNING)
+    # ----- Cluster E2: optimistic concurrency ----------------------
+    #
+    # Every ``mark_*`` accepts:
+    #   * ``expected_revision: int | None`` — CAS against the record's
+    #     current ``revision``. On mismatch: ``OptimisticConcurrencyError``.
+    #   * ``expected_state: RunState | None`` — semantic CAS against the
+    #     record's current ``state``. On mismatch: ``OptimisticConcurrencyError``.
+    # Either or both may be set; both must match if both are set. A ``None``
+    # skips that particular check (the standard pre-E2 path).
+    # ---------------------------``-----------------------------------
 
-    def mark_complete(self, run_id: str) -> RunRecord | None:
-        return self._update_state(run_id, RunState.COMPLETE)
+    def mark_resume(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        return self._update_state(
+            run_id,
+            RunState.RUNNING,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
 
-    def mark_cancelled(self, run_id: str) -> RunRecord | None:
-        return self._update_state(run_id, RunState.CANCELLED)
+    def mark_complete(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        return self._update_state(
+            run_id,
+            RunState.COMPLETE,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
 
-    def mark_failed(self, run_id: str) -> RunRecord | None:
-        return self._update_state(run_id, RunState.FAILED)
+    def mark_cancelled(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        return self._update_state(
+            run_id,
+            RunState.CANCELLED,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
 
-    def mark_paused(self, run_id: str) -> RunRecord | None:
-        return self._update_state(run_id, RunState.PAUSED)
+    def mark_failed(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        return self._update_state(
+            run_id,
+            RunState.FAILED,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
 
-    def mark_blocked(self, run_id: str) -> RunRecord | None:
+    def mark_paused(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
+        return self._update_state(
+            run_id,
+            RunState.PAUSED,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
+
+    def mark_blocked(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
         """Cluster A: transition a run to ``BLOCKED`` (policy halt)."""
-        return self._update_state(run_id, RunState.BLOCKED)
+        return self._update_state(
+            run_id,
+            RunState.BLOCKED,
+            expected_revision=expected_revision,
+            expected_state=expected_state,
+        )
 
-    def _update_state(self, run_id: str, state: RunState) -> RunRecord | None:
+    def _update_state(
+        self,
+        run_id: str,
+        state: RunState,
+        *,
+        expected_revision: int | None = None,
+        expected_state: RunState | None = None,
+    ) -> RunRecord | None:
         rec = self._records.get(run_id)
         if rec is None:
             return None
+        # Cluster E2: optimistic-concurrency check. Both expected_*
+        # MUST match when set. Failure raises BEFORE mutating so the
+        # ledger state stays untouched (no half-applied transitions).
+        if expected_revision is not None and expected_revision != rec.revision:
+            raise OptimisticConcurrencyError(
+                run_id=run_id,
+                expected_revision=expected_revision,
+                actual_revision=rec.revision,
+                expected_state=expected_state,
+                actual_state=rec.state,
+            )
+        if expected_state is not None and expected_state != rec.state:
+            raise OptimisticConcurrencyError(
+                run_id=run_id,
+                expected_revision=expected_revision,
+                actual_revision=rec.revision,
+                expected_state=expected_state,
+                actual_state=rec.state,
+            )
         updated = RunRecord(
             run_id=rec.run_id,
             state=state,
             repository=rec.repository,
             started_at=rec.started_at,
             idempotency_key=rec.idempotency_key,
+            revision=rec.revision + 1,
         )
         self._records[run_id] = updated
         return updated

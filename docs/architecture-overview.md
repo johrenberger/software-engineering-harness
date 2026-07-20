@@ -242,7 +242,7 @@ that will wire it up.
 | Capability | Status | Owner cluster |
 |---|---|---|
 | Idempotency keys on RunLedger | **DONE (B — caller plumbing)** | E1 (P1) |
-| Optimistic concurrency on RunLedger | NOT YET | E2 (P1) |
+| Optimistic concurrency on RunLedger | **DONE (B — version counter + CAS)** | **E2** |
 | SQLite-backed durable ledger | NOT YET | B (P1) — currently in-memory only |
 | Cancellation propagation to subprocess | **DONE (E4a primitive + E4b orchestrator plumbing)** | **E4** |
 | Human-approval gates (pause + resume) | NOT YET | E7 (P1) |

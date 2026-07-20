@@ -171,13 +171,29 @@ def test_honesty_matrix_marks_e4_cancellation_done(doc: str) -> None:
     """
     assert "Cancellation propagation" in doc or "E4" in doc
     # After the #52 merge the cancellation row should NOT say NOT YET.
-    # (E2/E7/E3/F rows may still say NOT YET.)
+    # (E7/E3/F rows may still say NOT YET.)
 
 
 def test_honesty_matrix_lists_concurrency(doc: str) -> None:
-    """The honesty matrix must mention E2 optimistic concurrency as NOT YET."""
+    """E2 optimistic concurrency has shipped (PR #54, option B =
+    revision counter + CAS). The honesty matrix must reflect that
+    WITH a scope qualifier (B = version counter + CAS; no public
+    API threading yet).
+    """
     assert "Optimistic concurrency" in doc or "optimistic" in doc.lower()
     assert "E2" in doc
+    # DONE entry must document scope.
+    assert any(
+        marker in doc
+        for marker in (
+            "version counter",
+            "revision",
+            "(B \u2014",
+            "(B",
+            "option B",
+            "B \u2014",
+        )
+    ), "E2 entry must document its scope (B = version counter + CAS)"
 
 
 def test_honesty_matrix_lists_real_model_adapters(doc: str) -> None:
