@@ -5,39 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - Cluster B (production adapters) + Cluster D (honest E2E)
-
-### Added
-- `seharness.controller.real_adapters`: production implementations
-  of the slice-12 wiring slots.
-  - `LocalTaskExecutor` — wraps slice-7 `TaskExecutionService`.
-  - `GitHubChecksClient` — backs `ChecksClient` via `gh api`.
-  - `FileRunLedger` — durable JSONL ledger with crash-safe replay.
-- `examples/controller.yaml` defaults to the real adapters
-  (`controller` instead of `stub`).
-- `tests/e2e/test_real_vertical_slice.py` — 10 honest E2E tests
-  asserting real artifacts, RED+GREEN evidence, draft PR, and
-  durable ledger state. Proves the slice-13 simulation is gone.
-
-### Auto-merge prevention
-- Layer 7 added: `LocalTaskExecutor` exposes no `merge*` methods
-  (enforced by mutation-killer).
-
-
-## [Unreleased] - Cluster A (canonical orchestrator)
-
-### Added
-- `seharness.orchestrator` package: canonical workflow engine that
-  composes the existing slice-3..slice-10 services in the SPEC §"Phase 8"
-  sequence. Single entry point for `/feature`, `seharness run`, Telegram,
-  dashboard, and the E2E test.
-- `Orchestrator.start_run(feature_description, repo_path)` — runs the 12
-  phases end-to-end, writes real artifacts under
-  `<execution_root>/<run_id>/`, persists state in the shared `RunLedger`.
-- `Orchestrator.resume_run` / `Orchestrator.cancel_run` — lifecycle API.
-- `StubRunner` (default) and `LocalCommandRunner` (subprocess-gated by
-  `OrchestratorConfig.use_real_subprocess`).
-- `RunState.BLOCKED` and `RunLedger.mark_blocked()` for policy-halt runs.
+## [Unreleased]
 - CLI `seharness run` now invokes the orchestrator (was: "not implemented").
 - `docs/architecture.md` describing the orchestrator topology.
 
@@ -53,6 +21,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Auto-merge prevention
 - Layer 6 added: `Orchestrator` exposes no `merge*` methods, enforced by
   `tests/unit/orchestrator/test_orchestrator_mutation_killers.py`.
+
+## [0.2.0] - 2026-07-20
+
+### Added — Cluster H (rate-limit + payload hardening)
+
+- `RetryPolicy` class in `seharness.models.router` with bounded
+  exponential backoff (`max_attempts`, `initial_backoff_s`,
+  `max_backoff_s`, injectable `sleeper`). `ModelRouter` consults it on
+  `rate_limit` (`ErrorKind`) errors before falling back.
+- `ErrorKind` Literal extended with `"rate_limit"` (fifth canonical kind).
+- New `seharness.security` package: `SuspiciousPayloadFilter` rejects
+  payloads with closed `FilterReason` reasons (`zero_length`, `too_long`,
+  `null_bytes`, `control_characters`, `excessive_control_characters`,
+  `binary_content`, `prompt_injection_marker`). Tunable via
+  `PayloadFilterConfig`. Rejected verdicts include a sanitised preview
+  so callers can log safely.
+
+### Added — Cluster F1 + I3 (honest docs)
+
+- `docs/providers.md` — provider & credentials reference. Documents the
+  fail-closed behaviour of `FakeMiniMaxAdapter` + `FakeCodexAdapter`
+  and the honesty matrix: `providers.toml` and env-var credentials
+  are NOT yet wired (P1 follow-up).
+- `docs/operations.md` — operator runbook: container lifecycle, log
+  forensics, ledger replay, rollback, observability surfaces, incident
+  playbook.
+- Contract tests for both: `tests/unit/docs/test_providers_md.py` (13
+  tests) + `tests/unit/docs/test_operations_md.py` (15 tests). The
+  architecture-overview contract test (`test_doc_lists_all_subsystem_packages`)
+  automatically forces updates when a new subsystem package ships.
+
+### Added — Cluster E4a (cancellation primitive)
+
+- `CancellationToken` + `CancellationWatcher` + `install_sigint_handler`
+  in `seharness.sandbox.cancellation`. `SubprocessSandbox.run` accepts
+  `cancel=` + `cancel_grace_seconds=`; SIGTERM → grace window →
+  SIGKILL escalation. `SandboxResult.cancelled: bool` field.
+- `tests/unit/sandbox/test_cancellation.py` — 17 tests.
+- Orchestrator-phase plumbing (E4b) and CLI SIGINT integration
+  deferred to a follow-up.
+
+### Added — Cluster G9 (release automation)
+
+- `.github/workflows/release.yml` — tag-driven pipeline: build wheel
+  + sdist, generate CycloneDX SBOM, sign with Sigstore (keyless via
+  OIDC), publish to PyPI via Trusted Publishers, attach all artifacts
+  to a GitHub Release. Pre-release tags (`vX.Y.Z-rcN`) route to TestPyPI.
+- `scripts/check_version_drift.py` — cross-file version drift checker.
+  Fails CI if `pyproject.toml`, `__version__`, or CHANGELOG disagree.
+  Used by `release.yml::verify-version` and the unit suite.
+- `tests/unit/scripts/test_check_version_drift.py` — 19 tests.
+- `docs/releasing.md` updated to point at the automated pipeline;
+  manual steps retained as a fallback.
+
+### Changed
+
+- Cluster B + Cluster D promoted from `[Unreleased]` into `[0.2.0]`:
+  production adapter implementations (`LocalTaskExecutor`,
+  `GitHubChecksClient`, `FileRunLedger`), 10-test honest E2E vertical
+  slice, and 7-layer auto-merge prevention.
+- `pyproject.toml` version bumped `0.1.0 → 0.2.0`.
+- `seharness.__init__.py.__version__` bumped to `0.2.0`.
 
 ## [0.1.0] - 2026-07-19
 

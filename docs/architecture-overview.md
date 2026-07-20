@@ -251,10 +251,12 @@ that will wire it up.
 | Real MiniMax adapter | NOT YET (fake only) | F (P1) |
 | **Rate-limit retry-with-backoff in ModelRouter** | **DONE** | **H1** |
 | **Suspicious-payload filtering** | **DONE** | **H2** |
+| **PyPI release automation (release.yml)** | **DONE** | **G9** |
+| **Version drift check** | **DONE** | **G9** |
 | Rate limiting on Telegram commands | NOT YET | (P2) |
 | Multi-user auth (beyond allowlist) | NOT YET | (P2) |
 | Distributed tracing (OTel) | NOT YET | (P2) |
-| PyPI publishing | NOT YET | G18 (P2) |
+| PyPI publishing (release.yml workflow + drift check) | DONE | G9 (was G18) |
 | Branch protection on main | NOT YET | G19 (P2) |
 
 ## Composition rule
