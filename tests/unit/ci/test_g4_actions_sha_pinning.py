@@ -20,6 +20,7 @@ deliberate re-pin + re-test of the action.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -58,7 +59,7 @@ EXPECTED_PINS: dict[str, str] = {
     "astral-sh/setup-uv@v6": "d0cc045d04ccac9d8b7881df0226f9e82c39688e",
     # G9: PyPI release workflow (release.yml).
     "pypa/gh-action-pypi-publish@v1.12": "67339c736fd9354cd4f8cb0b744f2b82a74b5c70",
-    "softprops/action-gh-release@v2": "9d991d2c8bced2c9ef3e4985e1d79b95c91a3c0c",
+    "softprops/action-gh-release@v2.6.2": "3bb12739c298aeb8a4eeaf626c5b8d85266b0e65",
 }
 
 # Reverse map: (owner/repo, sha) -> version tag. Used to translate a pinned
@@ -298,4 +299,94 @@ def test_ci_workflow_permissions_include_attestations() -> None:
     )
     assert perms.get("id-token") == "write", (
         f"ci.yml must declare `id-token: write` for OIDC exchange. Got: {perms}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 9. Every pinned SHA actually resolves upstream (force-push detection)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not os.environ.get("RUN_NETWORK_PIN_CHECK"),
+    reason=(
+        "Skipped by default (offline CI). Set RUN_NETWORK_PIN_CHECK=1 to "
+        "verify that every pinned SHA still resolves upstream. This catches "
+        "force-push / history-rewrites on action repos (which silently "
+        "break our pin map). Re-run this on a routine schedule (e.g. "
+        "monthly) and after any unexpected release workflow failure."
+    ),
+)
+def test_pinned_shas_resolve_upstream() -> None:
+    """Every pinned SHA in EXPECTED_PINS MUST resolve to an upstream
+    commit. A 422 from the GitHub commits API means the SHA has been
+    invalidated (force-push / repo rewrite). Without this check we
+    only learn the pin is stale when the release workflow fails on
+    the next tag push.
+
+    Uses ``gh api`` when available (authenticated, bypasses the
+    unauthenticated 60-req/h rate limit). Falls back to urllib for
+    unauthenticated runs; rate-limit (HTTP 429) failures are then
+    reported as a known-environment limitation rather than a pin
+    regression.
+    """
+    import shutil
+    import subprocess
+
+    failures: list[str] = []
+    rate_limited: list[str] = []
+
+    use_gh = shutil.which("gh") is not None
+
+    for key, sha in EXPECTED_PINS.items():
+        # Resolve at the repo level. Sub-paths (e.g.
+        # ``github/codeql-action/init``) share a commit with their
+        # parent repo; only the first 2 path segments are the
+        # ``owner/repo`` pair.
+        owner_repo = "/".join(key.split("@", 1)[0].split("/")[:2])
+        if use_gh:
+            proc = subprocess.run(
+                ["gh", "api", f"repos/{owner_repo}/commits/{sha}"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+            if proc.returncode == 0:
+                continue
+            if proc.stderr and "rate limit" in proc.stderr.lower():
+                rate_limited.append(key)
+                continue
+            failures.append(f"{key} -> gh api rc={proc.returncode}: {proc.stderr.strip()[:80]}")
+        else:
+            import urllib.error
+            import urllib.request
+
+            url = f"https://api.github.com/repos/{owner_repo}/commits/{sha}"
+            req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+                    if resp.status != 200:
+                        failures.append(f"{key} -> {resp.status}")
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    rate_limited.append(key)
+                else:
+                    failures.append(f"{key} -> HTTP {e.code}")
+            except (urllib.error.URLError, TimeoutError) as e:
+                failures.append(f"{key} -> network: {e}")
+
+    # 429s without an authenticated client are an environment
+    # limitation, not a pin regression. Surface them in the assertion
+    # message so operators know what happened, but don't fail the
+    # contract unless at least one non-429 failure was found.
+    if rate_limited and not failures and not use_gh:
+        pytest.skip(
+            f"Unauthenticated run hit GitHub rate limit on {len(rate_limited)} pins; "
+            f"re-run with `gh auth status` (uses `gh api` with credentials) or set "
+            f"GITHUB_TOKEN. Pins checked before rate-limit: no failures found."
+        )
+    assert not failures, (
+        "Pinned SHAs no longer resolve upstream (force-push detected). "
+        "Re-pin and re-test:\n" + "\n".join(f"  {f}" for f in failures)
     )

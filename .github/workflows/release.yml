@@ -307,7 +307,7 @@ jobs:
           merge-multiple: true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@9d991d2c8bced2c9ef3e4985e1d79b95c91a3c0c # v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           # Generate release notes from PRs merged since the last tag.
           generate_release_notes: true
