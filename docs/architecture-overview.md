@@ -11,7 +11,7 @@ For user-facing how-tos, see [`docs/user/`](user/).
 ## At a glance
 
 `seharness` is a 12-phase workflow engine that turns a *feature request*
-into a *draft pull request* by composing six subsystems:
+into a *draft pull request* by composing the following subsystems:
 
 | Subsystem | Package | Responsibility |
 |---|---|---|
@@ -22,6 +22,7 @@ into a *draft pull request* by composing six subsystems:
 | **Observability** | `seharness.observability` | Trace records + secret redactor |
 | **Artifacts** | `seharness.artifacts` | SBOM + traceability manifests |
 | **Telegram** | `seharness.telegram` | Operator UI (slash commands + run buttons) |
+| **Security** | `seharness.security` | Suspicious-payload filter (cluster H, story H2) |
 
 All of these subsystem boundaries are enforced by **typed protocols**
 in `src/seharness/<pkg>/types.py` and exercised by **mutation-killer
@@ -248,6 +249,8 @@ that will wire it up.
 | Schema migration framework | NOT YET | E3 (P1) |
 | Real Codex adapter | NOT YET (fake only) | F (P1) |
 | Real MiniMax adapter | NOT YET (fake only) | F (P1) |
+| **Rate-limit retry-with-backoff in ModelRouter** | **DONE** | **H1** |
+| **Suspicious-payload filtering** | **DONE** | **H2** |
 | Rate limiting on Telegram commands | NOT YET | (P2) |
 | Multi-user auth (beyond allowlist) | NOT YET | (P2) |
 | Distributed tracing (OTel) | NOT YET | (P2) |

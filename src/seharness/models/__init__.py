@@ -49,6 +49,7 @@ from seharness.models.router import (
     DEFAULT_FALLBACK,
     DEFAULT_ROUTING,
     ModelRouter,
+    RetryPolicy,
 )
 
 # Adapter registry — populated lazily to avoid import cycles. The slice 4
@@ -114,6 +115,7 @@ __all__ = [
     "ReattemptCallable",
     "RepairOutcome",
     "RepairResult",
+    "RetryPolicy",
     "RoutingRole",
     "StructuredOutputRepair",
     "get_adapter",

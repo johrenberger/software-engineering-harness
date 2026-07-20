@@ -26,8 +26,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from seharness.domain.enums import ProviderName
 
 # Canonical, closed-set of normalized error kinds per SPEC §10.
-# Adapters must map any internal failure onto one of these four values.
-ErrorKind = Literal["timeout", "provider_failure", "malformed_output", "auth"]
+# Adapters must map any internal failure onto one of these values.
+#
+# ``rate_limit`` (cluster H, story H1) is the fifth canonical kind,
+# emitted when the upstream provider returns HTTP 429 or equivalent.
+# The router treats ``rate_limit`` as routable: retry-with-backoff
+# within the primary adapter first, then fall back to the alternate
+# provider if still throttled. See ``seharness.models.router``.
+ErrorKind = Literal[
+    "timeout",
+    "provider_failure",
+    "malformed_output",
+    "auth",
+    "rate_limit",
+]
 
 
 class ModelUsage(BaseModel):
