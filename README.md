@@ -143,6 +143,7 @@ seharness --help
 - [Releasing the harness](docs/releasing.md)
 - [Engineering dashboard](docs/engineering-dashboard.md)
 - [Operations runbook](docs/operations.md) *(Cluster I, I3)*
+- [Providers & credentials](docs/providers.md) *(Cluster F, F1)*
 - [Priority tracker](docs/analysis/2026-07-19-priority-stories.md)
 
 ## Project layout
