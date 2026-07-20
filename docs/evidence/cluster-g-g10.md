@@ -1,8 +1,9 @@
 # G10 — Reduce checked-in construction artifacts
 
-**Status:** ✅ MERGED (4 PRs, full Scorecard round-trip)
+**Status:** ✅ MERGED (5 PRs, Scorecard ceiling reached at 5.8)
 **Branch:** `agent/g10-*` → `main`
 **PRs:** #39 (round 1), #41 (round 2), #42 (round 3), #43 (round 4), #44 (round 5 test fix)
+**Final Scorecard score:** 5.8 / 10 (Pinned-Dependencies 7/10 ceiling; see structural-ceiling note)
 
 ## What landed
 
@@ -66,8 +67,19 @@ with version pin — `--upgrade` semantics override the pin).
   `--force-reinstall` (because `-r` is in the word). Use word-boundary
   regex `(?:^|\s)-r\s+\S+` instead.
 
-**Outcome:** Awaiting post-merge Scorecard run (GitHub Actions
-queue was stuck as of 23:35 UTC).
+**Outcome:** **Score: 5.8** (Pinned-Dependencies 7/10, unchanged).
+The `--force-reinstall` change did not move the needle — pip itself
+cannot be hash-pinned (only version-pinned), and `pip install
+--force-reinstall "pip==<ver>"` is structurally indistinguishable
+from `--upgrade "pip==<ver>"` to Scorecard's static analyzer. The
+7/10 ceiling on Pinned-Dependencies reflects this structural limit
+for any project that needs to bootstrap pip itself. See "Structural
+ceiling" note below.
+
+**Authoritative score source:** public Scorecard API dated
+2026-07-20 02:26 UTC (post-PR-#44 merge), run 29709881422 in
+this repo's Actions history. Downloaded SARIF artifact
+`results.sarif` cross-checked against the public API result.
 
 ## Files touched
 
@@ -103,7 +115,37 @@ queue was stuck as of 23:35 UTC).
 | Round 2 (#41) | 5.8 | 5/10 | **10/10** ✅ | Token-Perm full |
 | Round 3 (#42) | 5.9 | **7/10** | 10/10 | requirements tracked |
 | Round 4 (#43) | 5.9 | 7/10 | 10/10 | pip version pinned (rejected) |
-| Round 5 (#44) | (pending) | (10?) | 10/10 | pip --force-reinstall |
+| Round 5 (#44) | **5.8** | 7/10 (ceiling) | 10/10 | pip --force-reinstall (no further lift) |
+
+### Structural ceiling on Pinned-Dependencies
+
+Per the SARIF output from run 29709881422, three pipCommand findings
+remain at 7/10:
+
+- `docker/Dockerfile` line 32: `pip install --no-cache-dir --force-reinstall "pip==26.1.2"`
+- `.github/workflows/ci.yml` line 67: `python -m pip install --force-reinstall "pip==26.1.2"`
+- `.github/workflows/dashboard.yml` line 68: `python -m pip install --force-reinstall "pip==26.1.2"`
+
+These cannot be hash-pinned: pip itself has no PyPI hash to pin
+against (the bootstrap install is what *reads* the hash file).
+Any project that runs `python -m pip install` to bootstrap pip
+hits this same ceiling. Workarounds considered and rejected:
+
+1. **Skip the pip-bootstrap step entirely** (rely on runner's
+   pre-installed pip). Rejected: Scorecard then sees the runner's
+   pip version as unknown, which is worse.
+2. **Vendor pip wheel into the repo** and install via
+   `pip install --require-hashes ./vendor/pip.whl`. Rejected: 7+
+   MB of binaries violates Binary-Artifacts 10/10 and contradicts
+   the spirit of "minimal construction artifacts".
+3. **Use `uv pip install`** instead of `pip install`. Rejected:
+   would change the entire dep-installation story and re-trigger
+   the same finding for `uv` itself.
+
+Conclusion: **7/10 Pinned-Dependencies is the achievable ceiling**
+for this repo given the pip-bootstrap requirement. Score 5.8 is
+stable; further work in this cluster would target other categories
+(License, CodeReview, Contributors), not Pinned-Dep.
 
 ## G10 contract tests added
 
