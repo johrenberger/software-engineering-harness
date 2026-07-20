@@ -1,0 +1,247 @@
+name: release
+
+# G9: PyPI release automation. Replaces the manual steps described in
+# docs/releasing.md step 6 ("PyPI publish (when G18 lands)").
+#
+# Triggers:
+#   - push of a `v<MAJOR>.<MINOR>.<PATCH>` tag.
+#   - pull_request that touches version-sensitive files (runs the
+#     verify-version drift check only; no actual build/publish).
+#
+# Pipeline (matches docs/releasing.md steps 3-6):
+#   1. Build wheel + sdist with `python -m build` (PEP 517/518).
+#   2. Generate SBOM with `anchore/sbom-action` (matches ci.yml).
+#   3. Attest build provenance with `actions/attest-build-provenance`
+#      (SLSA L1; matches ci.yml).
+#   4. Verify the version in pyproject.toml / __version__ / CHANGELOG
+#      matches the tag (catches "version bump forgot one place" via
+#      scripts/check_version_drift.py).
+#   5. Sigstore-sign wheel + sdist with sigstore-python (keyless via OIDC).
+#   6. Publish to PyPI via `pypa/gh-action-pypi-publish` (Trusted Publisher).
+#      Pre-release tags (vX.Y.Z-rcN) route to TestPyPI instead.
+#   7. Create a GitHub Release; attach wheel + sdist + SBOM + provenance
+#      bundle as binary assets.
+#
+# Behaviour notes:
+#   - PyPI publishing uses Trusted Publishers (OIDC); no long-lived
+#     PYPI_API_TOKEN is needed. The project must be configured at
+#     https://pypi.org/manage/account/publishing/ with the workflow
+#     path `.github/workflows/release.yml`.
+#   - TestPyPI publishing (RC tags) requires the corresponding
+#     trusted-publisher entry there too.
+#
+# Permissions model: top-level `contents: read` (default for every job).
+# Jobs that need elevated scope (`github-release` needs write to create
+# the release + upload assets; `publish-pypi` needs `id-token` for OIDC)
+# declare their own `permissions:` block. This satisfies the G4 contract
+# test `test_workflow_has_permissions_block`.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-rc*"
+  pull_request:
+    paths:
+      - "pyproject.toml"
+      - "src/seharness/__init__.py"
+      - "CHANGELOG.md"
+      - ".github/workflows/release.yml"
+      - "scripts/check_version_drift.py"
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Always-runs job: verify the tag (or, on PR, the proposed bump) is
+  # consistent across pyproject.toml, __version__, and CHANGELOG.md.
+  # -------------------------------------------------------------------------
+  verify-version:
+    name: verify-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.13"
+
+      - name: Run drift check
+        env:
+          EXPECTED_VERSION: ${{ github.event.inputs.expected_version }}
+          REF_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ "${EXPECTED_VERSION}" != "" ]]; then
+            python scripts/check_version_drift.py \
+              --expected "${EXPECTED_VERSION}"
+          else
+            # Tag push: ref_name is `vX.Y.Z` or `vX.Y.Z-rcN`.
+            if [[ "${REF_TAG}" =~ ^v([0-9].*)$ ]]; then
+              python scripts/check_version_drift.py \
+                --expected "${BASH_REMATCH[1]}"
+            else
+              python scripts/check_version_drift.py
+            fi
+          fi
+
+  # -------------------------------------------------------------------------
+  # Tag-only pipeline: build, sign, publish, release.
+  # Skipped on PR builds (only verify-version runs there).
+  # -------------------------------------------------------------------------
+  build:
+    name: build (${{ matrix.python-version }})
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: verify-version
+    strategy:
+      fail-fast: false
+      matrix:
+        # Build on every supported Python to match `requires-python` and
+        # the quality-gate matrix in ci.yml.
+        python-version: ["3.12", "3.13"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade "pip==26.1.2"
+          # PEP 517/518 build backend is hatchling; build frontend is
+          # `python-build` (PyPA canonical). Each package pinned to
+          # satisfy the G10 contract test.
+          python -m pip install "build==1.2.2.post1"
+          python -m pip install "sigstore==3.0.1"
+
+      - name: Build wheel + sdist
+        run: |
+          # Clean any prior artifacts.
+          rm -rf dist/ build/ *.egg-info src/*.egg-info
+          python -m build --sdist --wheel
+
+      - name: List dist artifacts
+        run: |
+          ls -la dist/
+          # Sanity check: exactly one wheel + one sdist.
+          test "$(ls dist/*.whl | wc -l)" = "1"
+          test "$(ls dist/*.tar.gz | wc -l)" = "1"
+
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          artifact-name: sbom-cyclonedx.json
+          format: cyclonedx-json
+          # Anchore uploads the SBOM as an artifact named `sbom-cyclonedx.json`.
+          # We download it on the next step to keep the path predictable.
+
+      - name: Stage SBOM for attestation
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: sbom-cyclonedx.json
+          path: sbom-stage/
+
+      - name: Attest build provenance (SLSA L1)
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
+        with:
+          subject-path: dist/
+          # `dist/` contains both the wheel and sdist; the attestation
+          # covers both. See https://github.com/actions/attest-build-provenance.
+
+      - name: Sigstore-sign wheel + sdist (keyless)
+        env:
+          SIGSTORE_ID_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # `sigstore sign` uses OIDC + Rekor; no long-lived key needed.
+          # The `--bundle` flag writes a Sigstore bundle alongside each
+          # artifact so consumers can verify without network.
+          for art in dist/*.whl dist/*.tar.gz; do
+            python -m sigstore sign "$art" --bundle "${art}.sigstore.json"
+          done
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-artifacts-${{ matrix.python-version }}
+          path: |
+            dist/
+            sbom-stage/
+
+  publish-pypi:
+    name: publish-pypi
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # OIDC for Trusted Publishing + Sigstore.
+      id-token: write
+    environment:
+      # Protect prod publishes with an environment + required reviewers.
+      # Set up the `pypi` environment at
+      # https://github.com/<owner>/<repo>/settings/environments.
+      name: pypi
+      url: https://pypi.org/p/seharness
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist-all
+          merge-multiple: true
+
+      - name: Publish to TestPyPI if pre-release
+        if: contains(github.ref_name, '-rc')
+        uses: pypa/gh-action-pypi-publish@67339c736fd9354cd4f8cb0b744f2b82a74b5c70 # v1.12
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist-all/
+          # TestPyPI Trusted Publisher must be configured with this exact
+          # workflow path; the project already has the matching entry
+          # under owner `johrenberger`.
+
+      - name: Publish to PyPI (prod)
+        if: "!contains(github.ref_name, '-rc')"
+        uses: pypa/gh-action-pypi-publish@67339c736fd9354cd4f8cb0b744f2b82a74b5c70 # v1.12
+        with:
+          packages-dir: dist-all/
+          # Trusted Publishing (OIDC) — no PYPI_API_TOKEN needed.
+
+  github-release:
+    name: github-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the GitHub Release + upload assets
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist-all
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@9d991d2c8bced2c9ef3e4985e1d79b95c91a3c0c # v2
+        with:
+          # Generate release notes from PRs merged since the last tag.
+          generate_release_notes: true
+          # RCs are marked as pre-release so they don't auto-show on
+          # the "Latest" badge.
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
+          draft: false
+          files: |
+            dist-all/*.whl
+            dist-all/*.tar.gz
+            dist-all/*.sigstore.json
+            dist-all/sbom-cyclonedx.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
