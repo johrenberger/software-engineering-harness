@@ -371,3 +371,49 @@ def test_file_run_ledger_contains_dunder(tmp_path: Path) -> None:
     assert "orch-002" not in ledger
     # Non-string check must not crash.
     assert (123 in ledger) is False
+
+
+# ---------------------------------------------------------------------------
+# E1 — FileRunLedger idempotency-key round-trip
+# ---------------------------------------------------------------------------
+
+
+def test_file_run_ledger_persists_idempotency_key(tmp_path: Path) -> None:
+    """When ``record_start`` is called with ``idempotency_key``, the
+    key is stored on the record AND on the JSONL envelope."""
+    path = tmp_path / "ledger.jsonl"
+    ledger = FileRunLedger(path=path)
+    rec = ledger.record_start("orch-001", repository="/tmp/repo", idempotency_key="req-abc")
+    assert rec.idempotency_key == "req-abc"
+
+    # JSONL line carries the key (to_jsonl omits empty keys).
+    first_line = json.loads(path.read_text().strip().split("\n")[0])
+    assert first_line.get("idempotency_key") == "req-abc"
+
+
+def test_file_run_ledger_replay_preserves_idempotency_key(tmp_path: Path) -> None:
+    """A fresh ``FileRunLedger`` instance replaying a file with a
+    populated ``idempotency_key`` must reconstruct the key on the
+    record."""
+    path = tmp_path / "ledger.jsonl"
+    a = FileRunLedger(path=path)
+    a.record_start("orch-001", repository="/tmp/repo", idempotency_key="req-xyz")
+    a.mark_complete("orch-001")
+    # Replay into a fresh instance.
+    b = FileRunLedger(path=path)
+    rec = b.get("orch-001")
+    assert rec is not None
+    assert rec.idempotency_key == "req-xyz"
+    assert rec.state == RunState.COMPLETE
+
+
+def test_file_run_ledger_omits_empty_idempotency_key(tmp_path: Path) -> None:
+    """When no key is provided, the JSONL line does NOT carry the
+    ``idempotency_key`` field (keeps the on-disk format terse)."""
+    path = tmp_path / "ledger.jsonl"
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("orch-001", repository="/tmp/repo")
+    first_line = json.loads(path.read_text().strip().split("\n")[0])
+    assert "idempotency_key" not in first_line
+    # And of course the record has an empty key.
+    assert ledger.get("orch-001").idempotency_key == ""

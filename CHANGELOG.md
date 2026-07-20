@@ -22,6 +22,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Layer 6 added: `Orchestrator` exposes no `merge*` methods, enforced by
   `tests/unit/orchestrator/test_orchestrator_mutation_killers.py`.
 
+### Added — Cluster E (orchestrator internals)
+
+- **E4a** (PR #49) — `CancellationToken` + `CancellationWatcher`
+  primitives in `seharness.sandbox.cancellation`. 17 tests.
+- **E4b** (PR #52) — cancel propagation through
+  `LocalCommandRunner`/`Orchestrator`. `Orchestrator.start_run`
+  registers a per-run `CancellationToken`;
+  `Orchestrator.cancel_run(run_id)` flips the token (killing the
+  in-flight subprocess via group SIGTERM→SIGKILL on the
+  start_new_session group) before marking the ledger CANCELLED.
+  Shell-parent/grandchild hang fixed by `start_new_session=True` +
+  `os.killpg(SIGKILL)` on the entire process group. 22 tests.
+- **E1** (PR #53) — idempotency keys on `RunLedger`. New field
+  `RunRecord.idempotency_key` (default empty) + index
+  `RunLedger._key_index`. `RunLedger.record_start(...,
+  idempotency_key=)` dedupes by key (same key + same `run_id`
+  → returns existing record; same key + different `run_id`
+  → raises `IdempotencyKeyConflictError`). `Orchestrator.start_run`
+  accepts `idempotency_key=` and threads it down. CLI
+  `seharness run` exposes `--idempotency-key` (also wired to
+  `SEHARNESS_IDEMPOTENCY_KEY`). `FileRunLedger` likewise accepts
+  the kwarg and persists the key on the JSONL envelope so replays
+  survive process restart. Scope: option B (caller plumbing) —
+  persistence to durable SQLite store is not yet wired (Cluster B
+  follow-up). 25 tests (14 ledger-level incl. FileRunLedger
+  round-trip, 11 orchestrator-level).
+
 ## [0.2.0] - 2026-07-20
 
 ### Added — Cluster H (rate-limit + payload hardening)

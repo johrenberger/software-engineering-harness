@@ -241,10 +241,10 @@ that will wire it up.
 
 | Capability | Status | Owner cluster |
 |---|---|---|
-| Idempotency keys on RunLedger | NOT YET | E1 (P1) |
+| Idempotency keys on RunLedger | **DONE (B — caller plumbing)** | E1 (P1) |
 | Optimistic concurrency on RunLedger | NOT YET | E2 (P1) |
 | SQLite-backed durable ledger | NOT YET | B (P1) — currently in-memory only |
-| Cancellation propagation to subprocess | NOT YET | E4 (P1) |
+| Cancellation propagation to subprocess | **DONE (E4a primitive + E4b orchestrator plumbing)** | **E4** |
 | Human-approval gates (pause + resume) | NOT YET | E7 (P1) |
 | Schema migration framework | NOT YET | E3 (P1) |
 | Real Codex adapter | NOT YET (fake only) | F (P1) |
@@ -256,8 +256,8 @@ that will wire it up.
 | Rate limiting on Telegram commands | NOT YET | (P2) |
 | Multi-user auth (beyond allowlist) | NOT YET | (P2) |
 | Distributed tracing (OTel) | NOT YET | (P2) |
-| PyPI publishing (release.yml workflow + drift check) | DONE | G9 (was G18) |
 | Branch protection on main | NOT YET | G19 (P2) |
+| _Historical ref: G18 was the predecessor story to G9 (release automation); kept here for traceability._ | DONE | G9 (was G18) |
 
 ## Composition rule
 
