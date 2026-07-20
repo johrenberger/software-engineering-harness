@@ -338,9 +338,14 @@ jobs:
             artifacts attached — consumers can install from the asset
             URL above. See `docs/releasing.md` for the one-time setup.
           files: |
-            dist-all/*.whl
-            dist-all/*.tar.gz
-            dist-all/*.sigstore.json
+            # `merge-multiple: true` on download-artifact extracts each
+            # artifact into a folder named after the artifact; use a
+            # recursive glob to pick up the wheel + sdist + Sigstore
+            # bundles from any per-python-version subdir.
+            dist-all/**/*.whl
+            dist-all/**/*.tar.gz
+            dist-all/**/*.sigstore.json
+            # The SBOM is a flat artifact (no enclosing dir).
             dist-all/sbom-cyclonedx.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
