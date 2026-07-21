@@ -6,8 +6,11 @@ state, validated artifacts, automated testing/remediation, Telegram
 intake, and GitHub pull-request delivery.
 
 The harness is **built** but **not yet ready for external use**: it is at
-version 0.1.0 (`Development Status :: 3 - Alpha`), has no PyPI release,
-and several documented capabilities are still in the planning or
+version 0.2.0 (`Development Status :: 3 - Alpha`). The v0.2.0 source
+tarball + wheel are published as a GitHub Release (install via the
+release asset URL — see [Install](#install)); PyPI publish is best-effort
+and requires a one-time Trusted Publisher setup (see
+[Status](#status)). Several capabilities are still in the planning or
 construction stage. This README is the canonical entry point and is
 updated alongside the code — **if a claim here is not backed by a test
 or a runnable example, it is flagged in [Status](#status)**.
@@ -21,7 +24,7 @@ This section is the source of truth for what the harness actually does
 
 | Capability | Verified by |
 |---|---|
-| Deterministic 6-phase pipeline (spec → implement → test → review → document → release) | 1552 unit + integration tests pass in <30 s; mutation-killer tests cover phase semantics. |
+| Deterministic 6-phase pipeline (spec → implement → test → review → document → release) | 1874 unit + integration tests pass in <30 s; mutation-killer tests cover phase semantics. |
 | Telegram intake bot with 9 commands (`/start /help /status /runs /feature /pr /resume /cancel /dashboard`) | `tests/unit/telegram/` covers auth + dispatch + stub transport + mutation-killers. |
 | Two-runner model: `StubRunner` (in-memory) and `LocalCommandRunner` (subprocess, with timeout) | `tests/unit/orchestrator/test_runner_coverage.py` (100% coverage). |
 | Sandbox layer (Docker, subprocess, Noop) with threat-modeled isolation | Cluster C slices C1–C5; `examples/controller.sandbox.yaml` shows operator config. |
@@ -39,11 +42,11 @@ This section is the source of truth for what the harness actually does
 
 | Capability | Status | Tracking |
 |---|---|---|
-| **PyPI release** (`pip install seharness`) | Not yet published. Package is at v0.1.0 / Alpha; PyPI publish is the G18 follow-up. Today: `pip install -e ".[dev]"` from a clone. | Cluster G story G18 (P2). |
-| **Cancelled-run resumability** (`/resume <run_id>`) | The handler is wired and dispatch-tested, but the underlying orchestrator state machine does not yet persist enough to resume across a process restart. `/cancel` (E4) is also a follow-up. | Cluster E stories E3 (state model) + E4 (cancellation). |
+| **PyPI release** (`pip install seharness`) | **DONE (best-effort).** Soft-publish automation landed in v0.2.0 (PR #55): pushing a `v*` tag always produces a public GitHub Release with wheel + sdist + SBOM + Sigstore-provenance bundle attached. PyPI publish itself logs and skips unless the Trusted Publisher is configured. Install today: `pip install https://github.com/johrenberger/software-engineering-harness/releases/download/v0.2.0/seharness-0.2.0-py3-none-any.whl`. To enable `pip install seharness` on PyPI: one-time Trusted Publisher setup at <https://pypi.org/manage/account/publishing/>. | Cluster G9 (DONE soft-publish) + G18 (P2 if you want `pip install seharness`). |
+| **Cancelled-run resumability** (`/resume <run_id>`, `/cancel <run_id>`) | `/cancel <run_id>` works **in-process** (Cluster E stories E4a + E4b shipped in v0.2.0: per-run `CancellationToken` registry in `Orchestrator`; `LocalCommandRunner` propagates SIGTERM/SIGKILL via process group). Cross-process cancel-resume (the `/resume <run_id>` Telegram handler that can pick up a cancelled run after a process restart) is the next pick — needs the orchestrator state model to persist to durable storage. **In progress: E3 (state model).** | Cluster E stories E4a + E4b (DONE in v0.2.0); E3 (state model) is the open follow-up. |
 | **Human approval gates** between phases | The handler surface exists but the policy layer (which phases require approval, who can approve, what triggers a re-prompt) is design-stage. | Cluster E story E7 (P1). |
-| **Cluster F: provider/credential config** | The CLI accepts env vars but the multi-provider config file format (`config/providers.toml`) and credential-loading flow are not finalized. | Cluster F stories F1–F8 (P1). |
-| **Cluster H: hardening** | No work has started on the H-cluster hardening stories (rate-limit fallbacks, suspicious-payload filtering). | Cluster H stories H1–H2 (P1). |
+| **Cluster F: provider/credential config** | F1 (provider docs + env-var credential contract) shipped in v0.2.0 (`docs/providers.md` + 13 contract tests). The multi-provider config file format (`config/providers.toml`) and the multi-credential loading flow (file → env → secrets manager) are not finalized. | Cluster F1 (DONE) + F2–F8 (P1). |
+| **Cluster H: hardening** | **DONE.** H1 (rate-limit retry-with-backoff) + H2 (`SuspiciousPayloadFilter` rejecting binary / encoded payloads) shipped before v0.2.0; defended by unit tests in `tests/unit/security/test_payload_filter.py` + `tests/unit/models/test_rate_limit_retry.py`. | Cluster H1 + H2 (DONE in v0.2.0). |
 | **Telegram live poll test** | Stub-transport tests cover the contract, but live `python-telegram-bot` polling against a real chat is integration-only and requires a bot token + chat id the CI environment does not have. | `tests/integration/telegram/test_live_poll.py` (P2 follow-up). |
 
 ### What we explicitly are NOT doing ❌
@@ -65,25 +68,46 @@ pip install -e ".[dev]"
 The `[dev]` extra installs pytest, ruff, mypy, bandit, pip-audit, and
 mutmut (all of which the project's own CI runs).
 
-### From PyPI
+### From a release asset (current recommended path)
+
+```bash
+# v0.2.0 wheel (signed with Sigstore; SBOM + provenance in the release):
+python -m pip install \
+  https://github.com/johrenberger/software-engineering-harness/releases/download/v0.2.0/seharness-0.2.0-py3-none-any.whl
+```
+
+Each release page lists every artifact: `seharness-X.Y.Z-py3-none-any.whl`,
+`seharness-X.Y.Z.tar.gz`, the Sigstore signatures, and the CycloneDX SBOM.
+
+### From PyPI (requires one-time setup)
 
 ```bash
 pip install seharness
 ```
 
-**Status:** *Not yet published.* Track G18 in
-[docs/analysis/2026-07-19-priority-stories.md](docs/analysis/2026-07-19-priority-stories.md)
-for the release automation story.
+**Status:** *Soft-publish is enabled.* The release workflow
+attempts to publish to PyPI on every `v*` tag push; if a Trusted
+Publisher isn't configured for this project, the publish step logs
+"NOT PUBLISHED" and the GitHub Release still ships with all
+artifacts. To enable `pip install seharness`:
+
+1. Add a Trusted Publisher entry at
+   <https://pypi.org/manage/account/publishing/> for project
+   `seharness` pointing at `.github/workflows/release.yml`.
+2. (Optional) Create a GitHub `pypi` environment with required
+   reviewers for a manual approval gate.
+
+See [docs/releasing.md](docs/releasing.md) for the full workflow.
 
 ### Docker
 
 ```bash
-docker build -t seharness:0.1.0 -f docker/Dockerfile .
+docker build -t seharness:0.2.0 -f docker/Dockerfile .
 docker compose -f docker/docker-compose.yml up
 ```
 
 The image is based on `python:3.13-slim`. Image size is not currently
-reported in CI; check `docker images seharness:0.1.0` after building.
+reported in CI; check `docker images seharness:0.2.0` after building.
 
 ## Usage
 
@@ -106,8 +130,8 @@ contract and `tests/unit/telegram/` for dispatch tests):
 | `/runs` | Recent run ids. |
 | `/feature <repo> <req>` | Start a feature run. |
 | `/pr <branch>` | Check PR readiness. |
-| `/resume <run_id>` | Resume a paused run. *(See Status ⚠️.)* |
-| `/cancel <run_id>` | Cancel a running run. *(See Status ⚠️.)* |
+| `/resume <run_id>` | Resume a paused run. *(See Status ⚠️: cross-process resume pending E3.)* |
+| `/cancel <run_id>` | Cancel a running run. *(In-process cancel works since v0.2.0; cross-process cancel pending E3.)* |
 | `/dashboard` | Text dashboard summary. |
 
 ### Run the dashboard server
