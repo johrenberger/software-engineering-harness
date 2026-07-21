@@ -164,6 +164,11 @@ def test_base_commit_recorded(tmp_path: Path) -> None:
     The fixture's initial commit SHA MUST be captured before the
     run starts; the repo profile artifact pins the same repo_path
     the harness inspected, providing the base commit provenance.
+
+    Cluster WP4 / story WP4.1 changed the schema: ``repo-profile.json``
+    is now the full ``RepositoryProfile`` Pydantic model. The field
+    is ``path`` (not ``repo_path``) and the schema also exposes
+    ``detected_language`` / ``baseline_validation_status``.
     """
     wired = _GenuineWired(tmp_path)
     assert wired.base_sha
@@ -172,7 +177,8 @@ def test_base_commit_recorded(tmp_path: Path) -> None:
     profile = json.loads(
         (wired.tmp_path / "runs" / result.run_id / "repo-profile.json").read_text()
     )
-    assert profile["repo_path"] == str(wired.repo)
+    assert profile["path"] == str(wired.repo)
+    assert profile["detected_language"] == "python"
 
 
 def test_feature_absent_before_run(tmp_path: Path) -> None:
