@@ -115,6 +115,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/releasing.md` updated to point at the automated pipeline;
   manual steps retained as a fallback.
 
+### Changed — release-workflow hardening (shipped in 0.2.0)
+
+The release pipeline shipped in this version went through five
+follow-up commits before v0.2.0 cut cleanly. Each commit is
+documented here so the next operator knows what was decided and
+why.
+
+- **`chore(release): make PyPI publish best-effort; GitHub Release
+  always ships` (`bc45e30`, PR #55)** — operator model is now
+  `tag = release`. Both `pypa/gh-action-pypi-publish` steps
+  carry `continue-on-error: true`; a missing Trusted Publisher logs
+  `NOT PUBLISHED` to `$GITHUB_STEP_SUMMARY` instead of cancelling
+  the workflow. New `if: always()` `Publish status` step records
+  outcome for the run UI. `github-release.needs` changed from
+  `[build, publish-pypi]` to `[build]` — the release ships
+  regardless of PyPI outcome. `environment: name: pypi` retained so
+  a configured `pypi` environment still gates prod publishes when
+  the user enables it. Honesty matrix G9 row updated to reflect the
+  best-effort scope.
+  - New `tests/unit/ci/test_release_soft_publish.py` — 6 contract
+    tests guarding the soft-publish behaviour (continue-on-error on
+    both publish steps, status-summary step exists, `github-release`
+    does not depend on `publish-pypi`, tag-push gating preserved,
+    header comment documents the policy).
+  - `docs/releasing.md` gained a `tag = release` operator callout
+    and a `Soft-publish behavior` subsection.
+
+- **`fix(release): bump sigstore pin to 4.4.0 (3.0.1 was yanked)`
+  (`c41677e`)** — `sigstore==3.0.1` was yanked from PyPI after the
+  original G9 release shipped; bumped to latest stable (4.4.0),
+  which preserves the `sign --bundle` CLI we depend on.
+
+- **`fix(release): top-level attestations+id-token perms for build
+  job` (`aaf1e54`)** — `actions/attest-build-provenance` (SLSA L1)
+  and `sigstore sign` both perform OIDC exchanges that require
+  `id-token: write` + `attestations: write`. These were only on the
+  `publish-pypi` job; the `build` job needed them too. Promoted to
+  the top-level `permissions:` block (same shape as `ci.yml`).
+
+- **`fix(release): bump softprops/action-gh-release to v2.6.2 SHA
+  + add force-push detector` (`e3d6a22`)** — the upstream
+  `softprops/action-gh-release` repo force-pushed history on
+  2026-07-13, invalidating the G4-pinned SHA `9d991d2c...`. Re-pinned
+  to `v2.6.2` SHA `3bb12739c298aeb8a4eeaf626c5b8d85266b0e65`.
+  - New `test_pinned_shas_resolve_upstream` contract test (skipped
+    by default; set `RUN_NETWORK_PIN_CHECK=1`) verifies every pinned
+    SHA still resolves upstream. Uses `gh api` when authenticated
+    (bypasses unauthenticated 60-req/h rate limit); gracefully
+    degrades on HTTP 429 when run unauthenticated. Would have caught
+    the force-push pre-merge.
+
+- **`fix(release): use recursive glob for release asset attachments`
+  (`7906802`)** — `actions/download-artifact` with
+  `merge-multiple: true` extracts each artifact into a subdirectory
+  named after the artifact. The original `softprops/action-gh-release`
+  `files:` glob `dist-all/*.whl` did NOT descend into
+  `dist-all/release-artifacts-3.12/dist/*.whl`, so the wheel +
+  sdist + Sigstore bundles were silently dropped from the GitHub
+  Release. Only the SBOM (a flat artifact) attached. Fixed by
+  switching globs to `dist-all/**/*.whl` (recursive).
+  - New `tests/unit/ci/test_release_assets_pattern.py` — 7 contract
+    tests asserting the recursive globs are present and the bare
+    non-recursive ones are absent. Would have caught the bug pre-merge.
+
 ### Changed
 
 - Cluster B + Cluster D promoted from `[Unreleased]` into `[0.2.0]`:

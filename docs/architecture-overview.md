@@ -251,7 +251,7 @@ that will wire it up.
 | Real MiniMax adapter | NOT YET (fake only) | F (P1) |
 | **Rate-limit retry-with-backoff in ModelRouter** | **DONE** | **H1** |
 | **Suspicious-payload filtering** | **DONE** | **H2** |
-| **PyPI release automation (release.yml)** | **DONE** (PyPI publish is best-effort; GitHub Release always ships) | **G9** |
+| **PyPI release automation (release.yml)** | **DONE** (PyPI publish is best-effort; GitHub Release always ships; defended by 13 contract tests across `test_release_soft_publish.py`, `test_release_assets_pattern.py`, and the upstream-pin-resolver in `test_g4_actions_sha_pinning.py`) | **G9** |
 | **Version drift check** | **DONE** | **G9** |
 | Rate limiting on Telegram commands | NOT YET | (P2) |
 | Multi-user auth (beyond allowlist) | NOT YET | (P2) |
