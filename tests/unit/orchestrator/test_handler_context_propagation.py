@@ -22,6 +22,7 @@ Tests are grouped by handler:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -53,6 +54,21 @@ from seharness.orchestrator.types import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+class _StubReviewService:
+    """Test double for ``ReviewService``.
+
+    WP3 (story H): review is invoked through a Protocol, so tests
+    swap the attribute on the composition directly rather than
+    patching the legacy ``_Reviewer`` staticmethod.
+    """
+
+    def __init__(self, fn: Any) -> None:
+        self._fn = fn
+
+    def review(self, *, review_ctx: Any) -> Any:
+        return self._fn(review_ctx=review_ctx)
 
 
 def _fresh_orchestrator(tmp_path: Path) -> tuple[Orchestrator, RunLedger]:
@@ -346,20 +362,33 @@ class TestValidationSkippedBranchSetsExitCodeNone:
 class TestReviewFailedBranchSetsVerdict:
     """Cluster WP1 / story WP1.4: when the reviewer returns a non-approve
     verdict, ``review_verdict`` is still populated (never ``None``)
-    and the phase outcome is ``FAILED``."""
+    and the phase outcome is ``FAILED``.
+
+    WP3 (story H): review is now invoked through the
+    ``ReviewService`` Protocol, so the patch targets the service
+    attribute on the orchestrator rather than the legacy
+    ``_Reviewer`` staticmethod.
+    """
 
     def test_failed_branch_records_actual_verdict(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from seharness.orchestrator import orchestrator as orch_mod
-
-        # Patch _Reviewer.review to return a non-approve verdict.
-        original = orch_mod._Reviewer.review
-        orch_mod._Reviewer.review = staticmethod(  # type: ignore[assignment]
-            lambda *, run_dir, plan: "request_changes"
+        from seharness.orchestrator.services import (
+            ReviewContext,
+            ReviewVerdict,
         )
+
+        def _stub_review(*, review_ctx: ReviewContext) -> ReviewVerdict:
+            return ReviewVerdict(
+                status="changes_requested",
+                approval=False,
+                summary="test: request changes",
+            )
+
+        orch, _ = _fresh_orchestrator(tmp_path)
+        original_review = orch._services.review
+        orch._services.review = _StubReviewService(_stub_review)  # type: ignore[assignment]
         try:
-            orch, _ = _fresh_orchestrator(tmp_path)
             ctx = _ctx(tmp_path)
             run_dir = tmp_path / "runs" / "orch-wp1h01"
             run_dir.mkdir(parents=True, exist_ok=True)
@@ -370,7 +399,7 @@ class TestReviewFailedBranchSetsVerdict:
                 run_dir=run_dir,
             )
         finally:
-            orch_mod._Reviewer.review = original  # type: ignore[assignment]
+            orch._services.review = original_review
         assert outcome == PhaseOutcome.FAILED
         assert new_ctx.review_verdict == "request_changes"
         assert "request_changes" in detail
