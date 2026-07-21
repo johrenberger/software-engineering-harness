@@ -320,7 +320,35 @@ class Orchestrator:
             # recorded — e.g. the prior run was an old pre-E3 run),
             # fall back to index 0 (start from scratch), which
             # preserves back-compat for old ledger records.
-            if resumed_from.phase is not None:
+            #
+            # Cluster WP1 / story WP1.2: when the structured
+            # ``cursor`` is present, use it to decide whether to retry
+            # the failed phase (outcome ∈ {failed, blocked, paused})
+            # or skip the last completed phase (outcome ∈ {ok, skipped}).
+            # This is the canonical resume policy; the legacy
+            # ``resumed_from.phase`` string is the fallback for
+            # pre-WP1 records.
+            if resumed_from.cursor is not None:
+                cur = resumed_from.cursor
+                try:
+                    cur_phase_idx = PHASE_SEQUENCE.index(PhaseName(cur.current_phase))
+                except ValueError:
+                    raise OrchestratorError(
+                        f"resume_from_run_id {resume_from_run_id!r} has "
+                        f"unknown cursor phase {cur.current_phase!r}; refusing "
+                        f"to resume from an unknown phase."
+                    ) from None
+                if cur.phase_outcome in {"failed", "blocked", "paused"}:
+                    # Retry the failed phase (don't advance the index).
+                    resume_phase_index = cur_phase_idx
+                else:
+                    # Successful checkpoint — resume AFTER it.
+                    last = cur.last_completed_phase or cur.current_phase
+                    try:
+                        resume_phase_index = PHASE_SEQUENCE.index(PhaseName(last)) + 1
+                    except ValueError:
+                        resume_phase_index = cur_phase_idx + 1
+            elif resumed_from.phase is not None:
                 try:
                     resume_phase_index = PHASE_SEQUENCE.index(PhaseName(resumed_from.phase)) + 1
                 except ValueError:
@@ -408,10 +436,18 @@ class Orchestrator:
                 # phase (success OR failure). A failed phase stops
                 # the run; the cursor advances to the failed phase
                 # so the next resume picks up from there.
+                #
+                # Cluster WP1 / story WP1.1: also write the
+                # ``phase_outcome`` so the cursor records whether to
+                # retry the phase on the next resume. The attempt
+                # counter is taken from the PhaseSpec so concurrent
+                # retries bump monotonically.
                 self._run_ledger.record_phase(
                     str(rid),
                     phase=phase.value,
                     ctx=_ctx_to_persisted(ctx),
+                    phase_outcome=outcome.value,
+                    phase_attempt=spec.attempt,
                 )
                 events.append(
                     PipelineEvent(
@@ -721,12 +757,22 @@ class Orchestrator:
         try:
             outcome, new_ctx, detail = handler(self, spec=spec, ctx=ctx, run_dir=run_dir)
         except OrchestratorError as exc:
+            # Cluster WP1 / story WP1.2: even on a fatal phase failure
+            # we return ``FAILED`` instead of re-raising so the
+            # outer ``start_run`` loop records the failed-phase cursor
+            # (which is what makes resume retry the right phase). The
+            # outer loop's ``except OrchestratorError`` catch is now a
+            # backstop for truly unhandled exceptions, not the
+            # primary failure-routing path.
             if info.fatal_on_failure:
-                raise
+                return PhaseOutcome.FAILED, ctx, f"fatal phase: {exc}"
             return PhaseOutcome.FAILED, ctx, f"phase failed: {exc}"
         except Exception as exc:
             if info.fatal_on_failure:
-                raise OrchestratorError(f"fatal phase {spec.phase.value} failed: {exc}") from exc
+                # Same WP1 rationale: surface as FAILED so the cursor
+                # records the failed phase. ``detail`` carries the
+                # original exception text for diagnostics.
+                return PhaseOutcome.FAILED, ctx, f"fatal phase: {exc!r}"
             return PhaseOutcome.FAILED, ctx, f"phase failed: {exc!r}"
         return outcome, new_ctx, detail
 

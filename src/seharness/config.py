@@ -50,6 +50,7 @@ class RuntimeProfile(StrEnum):
     TEST = "test"
     PRODUCTION = "production"
 
+
 # Provider IDs we know about today. New providers must be added here AND in
 # ``ModelsConfig`` routing defaults before they can be used in routing.
 _KNOWN_PROVIDERS: tuple[ProviderName, ...] = (ProviderName.MINIMAX, ProviderName.CODEX)

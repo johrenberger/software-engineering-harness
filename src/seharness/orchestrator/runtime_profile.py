@@ -25,12 +25,12 @@ for the contract.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Protocol
+from typing import Protocol
 
 from seharness.config import RuntimeProfile
 from seharness.exceptions import ConfigurationError
-
 
 #: Class-name substrings that mark an adapter as a stub / fake / no-op.
 #: Kept as a module-level constant so it is easy to extend and so the
@@ -65,10 +65,11 @@ class _AdapterSlot(Protocol):
     We don't introspect the adapter's interface here — we just
     need to know its class name. The slots are passed in as a
     mapping of name → adapter value so the validator is decoupled
-    from ``Orchestrator`` itself.
+    from ``Orchestrator`` itself. The Protocol is intentionally
+    empty: ``_classify_adapter`` only looks up ``__class__`` and
+    ``__name__`` on the adapter instance, both of which every
+    Python object satisfies.
     """
-
-    def __class__(self) -> type: ...
 
 
 def _classify_adapter(slot_name: str, adapter: object) -> tuple[str, str] | None:
@@ -155,8 +156,8 @@ def iter_adapter_slots(orchestrator: object) -> Iterable[tuple[str, object]]:
 
 
 __all__ = [
-    "RuntimeProfileDiagnostic",
     "STUB_CLASS_MARKERS",
+    "RuntimeProfileDiagnostic",
     "iter_adapter_slots",
     "validate_runtime_profile_adapters",
 ]

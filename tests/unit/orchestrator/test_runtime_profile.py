@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import pytest
 
+from seharness.config import HarnessConfig, HarnessSection, RuntimeProfile
+
 # Imports ordered to avoid a pre-existing circular-import trap: loading
 # ``seharness.orchestrator.types`` directly as the FIRST orchestrator-
 # related import triggers ``seharness.controller.application_service``'s
@@ -22,16 +24,14 @@ import pytest
 # first (which is itself triggered by the existing test suite via
 # pytest's collection order) avoids the cycle.
 from seharness.controller.run_ledger import RunLedger  # noqa: F401  -- ordering fix
-
-from seharness.config import HarnessConfig, HarnessSection, RuntimeProfile
 from seharness.exceptions import ConfigurationError
-from seharness.orchestrator.types import OrchestratorConfig
 from seharness.orchestrator.runtime_profile import (
-    RuntimeProfileDiagnostic,
     STUB_CLASS_MARKERS,
+    RuntimeProfileDiagnostic,
     iter_adapter_slots,
     validate_runtime_profile_adapters,
 )
+from seharness.orchestrator.types import OrchestratorConfig
 
 
 class _StubAdapter:
@@ -83,9 +83,7 @@ class TestHarnessSectionDefault:
         assert section.runtime_profile == RuntimeProfile.DEVELOPMENT
 
     def test_harness_config_round_trip_profile(self) -> None:
-        cfg = HarnessConfig(
-            harness=HarnessSection(runtime_profile=RuntimeProfile.PRODUCTION)
-        )
+        cfg = HarnessConfig(harness=HarnessSection(runtime_profile=RuntimeProfile.PRODUCTION))
         assert cfg.harness.runtime_profile == RuntimeProfile.PRODUCTION
 
     def test_unknown_profile_rejected(self) -> None:
@@ -268,8 +266,8 @@ class TestIterAdapterSlots:
         """Slots absent on the orchestrator default to None so the
         validator doesn't crash on older configurations."""
         slots = dict(iter_adapter_slots(object()))
-        for slot in slots:
-            assert slots[slot] is None
+        for _, value in slots.items():
+            assert value is None
 
 
 class TestDiagnosticFrozen:

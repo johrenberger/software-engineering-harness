@@ -29,6 +29,7 @@ from typing import Any
 
 from seharness.controller.run_ledger import (
     OptimisticConcurrencyError,
+    PhaseCursor,
     RunRecord,
     RunState,
 )
@@ -329,6 +330,12 @@ class _LedgerLine:
     phase: str | None = None
     ctx: dict[str, Any] | None = None
     feature_description: str | None = None
+    # Cluster WP1: structured phase cursor (PhaseCursor dict form).
+    # Optional so older JSONL lines that pre-date WP1 still load;
+    # ``cursor`` and ``phase`` may both be present on a single line
+    # for transition rows from WP1-aware writes. New writes should
+    # populate ``cursor``; ``phase`` is kept as a derived view.
+    cursor: dict[str, Any] | None = None
 
     def to_jsonl(self) -> str:
         payload: dict[str, Any] = {
@@ -347,7 +354,27 @@ class _LedgerLine:
             payload["ctx"] = self.ctx
         if self.feature_description is not None:
             payload["feature_description"] = self.feature_description
+        if self.cursor is not None:
+            payload["cursor"] = self.cursor
         return json.dumps(payload, sort_keys=True)
+
+
+def _coerce_cursor(raw: object) -> PhaseCursor | None:
+    """Coerce a JSONL-loaded cursor dict into a :class:`PhaseCursor`.
+
+    Returns ``None`` for missing / malformed input so older JSONL
+    lines that pre-date WP1 (and partial writes from a crash) still
+    load cleanly. Validation errors are swallowed because the
+    ``PhaseCursor`` model itself is strict (``extra="forbid"``); the
+    caller falls back to ``record.phase`` for the resume signal in
+    the rare cases where ``cursor`` is corrupt.
+    """
+    if raw is None or not isinstance(raw, dict):
+        return None
+    try:
+        return PhaseCursor.model_validate(raw)
+    except Exception:
+        return None
 
 
 class FileRunLedger:
@@ -404,6 +431,11 @@ class FileRunLedger:
                         phase=entry.get("phase"),
                         ctx=entry.get("ctx"),
                         feature_description=entry.get("feature_description"),
+                        # Cluster WP1: structured cursor (optional on
+                        # disk; older lines lack it). Falls back to
+                        # ``None`` so the legacy ``phase`` string is
+                        # the only resume signal.
+                        cursor=_coerce_cursor(entry.get("cursor")),
                     )
                 elif kind == "transition":
                     rec = self._index.get(run_id)
@@ -420,6 +452,13 @@ class FileRunLedger:
                     # the transition line is older / doesn't carry them.
                     new_phase = entry.get("phase")
                     new_ctx = entry.get("ctx")
+                    # Cluster WP1: cursor may be carried on transition
+                    # lines too. When present it is authoritative;
+                    # otherwise the prior cursor is carried forward.
+                    new_cursor_raw = entry.get("cursor")
+                    new_cursor = (
+                        _coerce_cursor(new_cursor_raw) if new_cursor_raw is not None else rec.cursor
+                    )
                     self._index[run_id] = RunRecord(
                         run_id=run_id,
                         state=RunState(state),
@@ -430,6 +469,7 @@ class FileRunLedger:
                         phase=new_phase if new_phase is not None else rec.phase,
                         ctx=new_ctx if new_ctx is not None else rec.ctx,
                         feature_description=rec.feature_description,
+                        cursor=new_cursor,
                     )
 
     # ---- append ---------------------------------------------------------
@@ -476,6 +516,8 @@ class FileRunLedger:
                 feature_description=feature_description
                 if feature_description is not None
                 else existing.feature_description,
+                # Cluster WP1: preserve prior cursor too.
+                cursor=existing.cursor,
             )
         else:
             rec = RunRecord(
@@ -500,6 +542,7 @@ class FileRunLedger:
                 phase=rec.phase,
                 ctx=rec.ctx,
                 feature_description=rec.feature_description,
+                cursor=rec.cursor.model_dump() if rec.cursor is not None else None,
             )
         )
         return rec
@@ -513,8 +556,10 @@ class FileRunLedger:
         expected_state: RunState | None = None,
         phase: str | None = None,
         ctx: dict[str, Any] | None = None,
+        phase_outcome: str | None = None,
+        phase_attempt: int | None = None,
     ) -> RunRecord | None:
-        """Cluster E2 CAS + Cluster E3 phase/ctx persistence."""
+        """Cluster E2 CAS + Cluster E3 phase/ctx persistence + Cluster WP1 cursor."""
         rec = self._index.get(run_id)
         if rec is None:
             return None
@@ -535,6 +580,29 @@ class FileRunLedger:
                 expected_state=expected_state,
                 actual_state=rec.state,
             )
+        # Cluster WP1: advance the structured cursor alongside the
+        # legacy ``phase`` string. Mirrors the in-memory ledger.
+        new_cursor: PhaseCursor | None = rec.cursor
+        new_phase_str: str | None = phase if phase is not None else rec.phase
+        if phase is not None:
+            outcome = phase_outcome if phase_outcome is not None else "ok"
+            attempt = phase_attempt if phase_attempt is not None else 0
+            prev_cursor = rec.cursor
+            last_completed = prev_cursor.last_completed_phase if prev_cursor else None
+            failed_phase = prev_cursor.failed_phase if prev_cursor else None
+            if outcome in {"ok", "skipped"}:
+                last_completed = phase
+                failed_phase = None
+            else:
+                failed_phase = phase
+            new_cursor = PhaseCursor(
+                current_phase=phase,
+                last_completed_phase=last_completed,
+                failed_phase=failed_phase,
+                phase_attempt=attempt,
+                phase_outcome=outcome,
+            )
+            new_phase_str = last_completed or phase
         updated = RunRecord(
             run_id=rec.run_id,
             state=state,
@@ -543,9 +611,10 @@ class FileRunLedger:
             idempotency_key=rec.idempotency_key,
             revision=rec.revision + 1,
             # Cluster E3: carry forward + apply new values.
-            phase=phase if phase is not None else rec.phase,
+            phase=new_phase_str,
             ctx=ctx if ctx is not None else rec.ctx,
             feature_description=rec.feature_description,
+            cursor=new_cursor,
         )
         self._index[run_id] = updated
         self._append(
@@ -559,6 +628,7 @@ class FileRunLedger:
                 revision=updated.revision,
                 phase=updated.phase,
                 ctx=updated.ctx,
+                cursor=new_cursor.model_dump() if new_cursor is not None else None,
             )
         )
         return updated
@@ -569,9 +639,16 @@ class FileRunLedger:
         *,
         phase: str,
         ctx: dict[str, Any] | None = None,
+        phase_outcome: str = "ok",
+        phase_attempt: int = 0,
         expected_revision: int | None = None,
     ) -> RunRecord | None:
-        """Cluster E3: persist the resume cursor in the durable ledger."""
+        """Cluster E3: persist the resume cursor in the durable ledger.
+
+        Cluster WP1: also accepts ``phase_outcome`` + ``phase_attempt``
+        so callers can write a structured :class:`PhaseCursor` for
+        retry semantics. Defaults preserve the pre-WP1 signature.
+        """
         if not phase:
             raise ValueError("phase must be non-empty")
         if ctx is not None and not isinstance(ctx, dict):
@@ -582,6 +659,8 @@ class FileRunLedger:
             expected_revision=expected_revision,
             phase=phase,
             ctx=ctx,
+            phase_outcome=phase_outcome,
+            phase_attempt=phase_attempt,
         )
 
     def mark_complete(
