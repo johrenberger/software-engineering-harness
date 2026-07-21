@@ -46,8 +46,9 @@ from seharness.domain.results import ModelResponse
 from seharness.models.minimax import MiniMaxAdapter
 from seharness.models.minimax_transport import (
     DEFAULT_ENDPOINT,
-    DEFAULT_MODEL,
     DEFAULT_TIMEOUT_SECONDS,
+    DEPRECATED_LEGACY_ENDPOINT,
+    MODELS_ENDPOINT,
     FakeMiniMaxTransport,
     HttpMiniMaxTransport,
     MiniMaxMessage,
@@ -56,6 +57,8 @@ from seharness.models.minimax_transport import (
     MiniMaxTransportError,
     MiniMaxTransportResponse,
     RecordingMiniMaxTransport,
+    parse_model_catalog,
+    validate_model_against_account,
 )
 from seharness.models.provider_readiness import ProviderReadiness, not_live
 
@@ -85,9 +88,9 @@ def _make_minimax_request(
 
 def _make_transport_request() -> MiniMaxRequest:
     return MiniMaxRequest(
-        model=DEFAULT_MODEL,
+        model="minimax/MiniMax-M2.7",  # placeholder; tests don't use it
         messages=(MiniMaxMessage(role="user", content="ping"),),
-        max_tokens=16,
+        max_completion_tokens=16,
     )
 
 
@@ -109,8 +112,9 @@ def _ok_body(content: str = "hello") -> dict[str, object]:
 
 @pytest.fixture(autouse=True)
 def _clean_minimax_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Ensure no leftover MINIMAX_API_KEY from the test environment."""
+    """Ensure no leftover MINIMAX_API_KEY or MINIMAX_MODEL from the test environment."""
     monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+    monkeypatch.delenv("MINIMAX_MODEL", raising=False)
     yield
 
 
@@ -717,7 +721,7 @@ class TestRequestSchema:
     def test_extra_field_rejected(self) -> None:
         with pytest.raises(ValueError):
             MiniMaxRequest(
-                model=DEFAULT_MODEL,
+                model="minimax/MiniMax-M2.7",
                 messages=(MiniMaxMessage(role="user", content="x"),),
                 made_up_field="bad",  # type: ignore[call-arg]
             )
@@ -725,7 +729,7 @@ class TestRequestSchema:
     def test_minimum_one_message(self) -> None:
         with pytest.raises(ValueError):
             MiniMaxRequest(
-                model=DEFAULT_MODEL,
+                model="minimax/MiniMax-M2.7",
                 messages=(),
             )
 
@@ -769,7 +773,7 @@ class TestProviderReadiness:
             configured=True,
             transport_available=True,
             transport_is_live=True,
-            model_identifier="minimax/MiniMax-M3",
+            model_identifier="minimax/MiniMax-M2.7",
         )
         assert r.is_live()
 
@@ -778,7 +782,7 @@ class TestProviderReadiness:
             configured=False,
             transport_available=True,
             transport_is_live=True,
-            model_identifier="minimax/MiniMax-M3",
+            model_identifier="minimax/MiniMax-M2.7",
             reason="no key",
         )
         assert not r.is_live()
@@ -788,7 +792,7 @@ class TestProviderReadiness:
             configured=True,
             transport_available=True,
             transport_is_live=False,  # fake transport
-            model_identifier="minimax/MiniMax-M3",
+            model_identifier="minimax/MiniMax-M2.7",
             reason="fake",
         )
         assert not r.is_live()
@@ -808,7 +812,7 @@ class TestProviderReadiness:
             configured=True,
             transport_available=True,
             transport_is_live=True,
-            model_identifier="minimax/MiniMax-M3",
+            model_identifier="minimax/MiniMax-M2.7",
         )
         with pytest.raises((AttributeError, ValueError)):
             r.configured = False  # type: ignore[misc]
@@ -825,12 +829,12 @@ class TestProviderReadiness:
             reason="custom",
             configured=True,
             transport_available=True,
-            model_identifier="minimax/MiniMax-M3",
+            model_identifier="minimax/MiniMax-M2.7",
         )
         assert r.configured is True
         assert r.transport_available is True
         assert r.transport_is_live is False  # default
-        assert r.model_identifier == "minimax/MiniMax-M3"
+        assert r.model_identifier == "minimax/MiniMax-M2.7"
 
     def test_not_live_helper_rejects_unknown_overrides(self) -> None:
         """Unknown kwarg is a programming error."""
@@ -874,6 +878,7 @@ class TestAdapterReadiness:
         import os
 
         os.environ["MINIMAX_API_KEY"] = "sk-test"
+        os.environ["MINIMAX_MODEL"] = "MiniMax-M2.7"
         client = _mock_client(httpx.MockTransport(lambda req: httpx.Response(200)))
         adapter = MiniMaxAdapter(
             api_key_env="MINIMAX_API_KEY",
@@ -884,6 +889,7 @@ class TestAdapterReadiness:
         assert r.transport_is_live is True
         assert r.is_live()
         assert r.reason is None
+        assert r.model_identifier == "MiniMax-M2.7"
 
     def test_empty_model_identifier_yields_not_live(self) -> None:
         import os
@@ -1033,62 +1039,534 @@ class TestAdapterRequestBuilding:
         adapter = MiniMaxAdapter(transport=fake)
         assert adapter.transport is fake
 
-    def test_response_format_passed_through_when_provided(self) -> None:
-        """When ``context['response_format']`` is set, the adapter
-        passes it through to the transport request."""
+    def test_max_completion_tokens_passed_through(self) -> None:
+        """``ModelRequest.max_tokens`` maps to
+        ``MiniMaxRequest.max_completion_tokens`` (the wire name
+        per the official docs)."""
         fake = FakeMiniMaxTransport(responses=[MiniMaxTransportResponse(content_text="ok")])
-        adapter = MiniMaxAdapter(transport=fake)
+        adapter = MiniMaxAdapter(transport=fake, model_identifier="minimax/MiniMax-M2.7")
+        req = ModelRequest(role=RoutingRole.PLANNING, prompt="x", max_tokens=128)
+        adapter.invoke(req)
+        assert fake.requests[0].max_completion_tokens == 128
+
+    def test_response_format_never_set(self) -> None:
+        """Per the refinement workplan, ``response_format`` is NOT
+        used in cluster N — JSON output is requested through the
+        prompt and validated locally with Pydantic. The transport
+        request must never carry a ``response_format`` field."""
+        fake = FakeMiniMaxTransport(responses=[MiniMaxTransportResponse(content_text="ok")])
+        adapter = MiniMaxAdapter(transport=fake, model_identifier="minimax/MiniMax-M2.7")
         req = ModelRequest(
             role=RoutingRole.PLANNING,
             prompt="x",
             context={"response_format": {"type": "json_object"}},
         )
         adapter.invoke(req)
+        # ``MiniMaxRequest`` no longer has a ``response_format``
+        # field; the call would have raised during pydantic
+        # construction if it were set. Confirm the field name is
+        # absent in the serialized body.
         sent = fake.requests[0]
-        assert sent.response_format == {"type": "json_object"}
-
-    def test_response_format_ignored_when_not_dict(self) -> None:
-        """A non-dict ``response_format`` is ignored, not crashed on."""
-        fake = FakeMiniMaxTransport(responses=[MiniMaxTransportResponse(content_text="ok")])
-        adapter = MiniMaxAdapter(transport=fake)
-        req = ModelRequest(
-            role=RoutingRole.PLANNING,
-            prompt="x",
-            context={"response_format": "not a dict"},
-        )
-        adapter.invoke(req)
-        assert fake.requests[0].response_format is None
-
-    def test_response_format_ignored_when_empty_dict(self) -> None:
-        """An empty dict ``response_format`` is treated as no hint."""
-        fake = FakeMiniMaxTransport(responses=[MiniMaxTransportResponse(content_text="ok")])
-        adapter = MiniMaxAdapter(transport=fake)
-        req = ModelRequest(
-            role=RoutingRole.PLANNING,
-            prompt="x",
-            context={"response_format": {}},
-        )
-        adapter.invoke(req)
-        assert fake.requests[0].response_format is None
+        assert not hasattr(sent, "response_format")
 
 
 # ---------------------------------------------------------------------------
-# Endpoint default
+# Endpoint contract
 # ---------------------------------------------------------------------------
 
 
-class TestDefaultEndpoint:
-    """ENFORCED BOUNDARY: the default endpoint is the MiniMax v1
-    chat-completion endpoint that was probed live during Step 0."""
+class TestEndpointContract:
+    """ENFORCED BOUNDARY: the default endpoint is the official
+    OpenAI-compatible chat-completions endpoint
+    ``https://api.minimax.io/v1/chat/completions``. The legacy
+    ``/v1/text/chatcompletion_v2`` endpoint is deprecated and MUST
+    NOT be the default."""
 
-    def test_default_endpoint_matches_live_probe(self) -> None:
-        assert DEFAULT_ENDPOINT == ("https://api.minimax.chat/v1/text/chatcompletion_v2")
+    def test_default_endpoint_is_openai_compatible(self) -> None:
+        assert DEFAULT_ENDPOINT == "https://api.minimax.io/v1/chat/completions"
+
+    def test_legacy_endpoint_is_deprecated(self) -> None:
+        """The legacy endpoint is documented but officially
+        deprecated; it remains accepted as an explicit override
+        but is not the default."""
+        assert DEPRECATED_LEGACY_ENDPOINT == ("https://api.minimax.chat/v1/text/chatcompletion_v2")
+        assert DEPRECATED_LEGACY_ENDPOINT != DEFAULT_ENDPOINT
 
     def test_default_endpoint_used_by_default(self) -> None:
-        """A bare ``HttpMiniMaxTransport()`` uses the live endpoint."""
+        """A bare ``HttpMiniMaxTransport()`` uses the OpenAI-
+        compatible endpoint."""
         http = HttpMiniMaxTransport()
-        # The endpoint is private; check the underlying client.
-        # We can introspect via _endpoint attribute even though it's
-        # considered internal — the alternative would be to refactor
-        # to expose it.
         assert http._endpoint == DEFAULT_ENDPOINT
+
+    def test_models_endpoint_constant(self) -> None:
+        """The catalog endpoint is the OpenAI-compatible
+        ``/v1/models`` (per the workplan's
+        ``GET /v1/models`` startup-validation rule)."""
+        assert MODELS_ENDPOINT == "https://api.minimax.io/v1/models"
+
+
+# ---------------------------------------------------------------------------
+# Model-catalog validation
+# ---------------------------------------------------------------------------
+
+
+class TestParseModelCatalog:
+    """ENFORCED BOUNDARY: ``parse_model_catalog`` returns a tuple
+    of model ids from an OpenAI-compatible ``GET /v1/models``
+    response, in order. Malformed inputs return an empty tuple."""
+
+    def test_parses_well_formed_catalog(self) -> None:
+        body = {
+            "data": [
+                {"id": "MiniMax-M2.7"},
+                {"id": "MiniMax-M2.5"},
+                {"id": "MiniMax-M2.1"},
+                {"id": "MiniMax-M2"},
+            ]
+        }
+        assert parse_model_catalog(body) == (
+            "MiniMax-M2.7",
+            "MiniMax-M2.5",
+            "MiniMax-M2.1",
+            "MiniMax-M2",
+        )
+
+    def test_empty_catalog(self) -> None:
+        assert parse_model_catalog({"data": []}) == ()
+
+    def test_missing_data_field(self) -> None:
+        assert parse_model_catalog({}) == ()
+
+    def test_data_not_a_list(self) -> None:
+        assert parse_model_catalog({"data": "not a list"}) == ()
+
+    def test_body_data_none(self) -> None:
+        """``data`` explicitly set to None is treated as empty."""
+
+        assert parse_model_catalog({"data": None}) == ()
+
+    def test_skips_entries_without_id(self) -> None:
+        body = {
+            "data": [
+                {"id": "MiniMax-M2.7"},
+                {"name": "no id here"},
+                {"id": ""},
+                {"id": 42},
+            ]
+        }
+        assert parse_model_catalog(body) == ("MiniMax-M2.7",)
+
+
+class TestValidateModelAgainstAccount:
+    """ENFORCED BOUNDARY: ``validate_model_against_account``
+    returns ``(is_listed, available_models, error_message)``.
+    Production startup MUST fail closed when ``is_listed`` is
+    False; the harness MUST NOT silently substitute one model
+    for another."""
+
+    def test_listed_model_returns_true(self) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            assert req.method == "GET"
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"id": "MiniMax-M2.7"},
+                        {"id": "MiniMax-M2.5"},
+                    ]
+                },
+            )
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        is_listed, available, err = validate_model_against_account(
+            configured_model="MiniMax-M2.7",
+            client=client,
+        )
+        assert is_listed is True
+        assert available == ("MiniMax-M2.7", "MiniMax-M2.5")
+        assert err is None
+
+    def test_unlisted_model_returns_false(self) -> None:
+        """When the configured model is NOT in the live catalog,
+        the function returns ``(False, available, None)``. The
+        caller is expected to refuse startup."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={"data": [{"id": "MiniMax-M2.7"}]},
+            )
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        is_listed, available, err = validate_model_against_account(
+            configured_model="MiniMax-M3",  # not in catalog
+            client=client,
+        )
+        assert is_listed is False
+        assert available == ("MiniMax-M2.7",)
+        assert err is None
+
+    def test_missing_api_key_returns_error(self) -> None:
+        is_listed, available, err = validate_model_against_account(
+            configured_model="MiniMax-M2.7",
+        )
+        assert is_listed is False
+        assert available == ()
+        assert "MINIMAX_API_KEY" in (err or "")
+
+    def test_401_returns_error(self) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(401, json={"error": "unauthorized"})
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        is_listed, _available, err = validate_model_against_account(
+            configured_model="MiniMax-M2.7",
+            client=client,
+        )
+        assert is_listed is False
+        assert err is not None
+        assert "401" in err
+
+    def test_500_returns_error(self) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(500, json={"error": "internal"})
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        is_listed, _available, err = validate_model_against_account(
+            configured_model="MiniMax-M2.7",
+            client=client,
+        )
+        assert is_listed is False
+        assert err is not None
+        assert "500" in err
+
+    def test_timeout_returns_error(self) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            raise httpx.TimeoutException("read timed out")
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        is_listed, _available, err = validate_model_against_account(
+            configured_model="MiniMax-M2.7",
+            client=client,
+        )
+        assert is_listed is False
+        assert err is not None
+        assert "timed out" in err
+
+    def test_malformed_json_returns_error(self) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=b"{not json")
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        is_listed, _available, err = validate_model_against_account(
+            configured_model="MiniMax-M2.7",
+            client=client,
+        )
+        assert is_listed is False
+        assert err is not None
+        assert "JSON" in err
+
+    def test_request_url_matches_models_endpoint(self) -> None:
+        """The catalog GET hits the configured models endpoint."""
+        seen_urls: list[str] = []
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            seen_urls.append(str(req.url))
+            return httpx.Response(200, json={"data": []})
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        validate_model_against_account(
+            configured_model="MiniMax-M2.7",
+            client=client,
+        )
+        assert seen_urls == ["https://api.minimax.io/v1/models"]
+
+    def test_authorization_header_carries_bearer(self) -> None:
+        """The catalog GET uses the same bearer-token auth as the
+        chat-completions endpoint."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            auth = req.headers.get("Authorization")
+            assert auth == "Bearer sk-test"
+            return httpx.Response(200, json={"data": [{"id": "MiniMax-M2.7"}]})
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        is_listed, _, _ = validate_model_against_account(
+            configured_model="MiniMax-M2.7",
+            client=client,
+        )
+        assert is_listed is True
+
+    def test_does_not_silently_substitute_unlisted_model(self) -> None:
+        """Per the workplan: if the configured model is absent from
+        the account, stop and surface the available models; do not
+        silently substitute one. The function returns ``False``
+        plus the actual available list — substitution is the
+        caller's choice (and the caller should refuse to start)."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={"data": [{"id": "MiniMax-M2.5"}, {"id": "MiniMax-M2"}]},
+            )
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        is_listed, available, _ = validate_model_against_account(
+            configured_model="MiniMax-M3",
+            client=client,
+        )
+        assert is_listed is False
+        # The available list is returned in full so the operator
+        # can pick deliberately; it is NOT a substitution.
+        assert available == ("MiniMax-M2.5", "MiniMax-M2")
+
+    def test_creates_internal_client_when_none_provided(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When no ``client`` is passed, the helper builds its own
+        ``httpx.Client``. The internal client is closed after the
+        call (``owns_client=True`` branch).
+        """
+
+        from unittest.mock import patch
+
+        # Spy on httpx.Client to confirm it's constructed + closed.
+        with patch("seharness.models.minimax_transport.httpx.Client") as mock_client_cls:
+            mock_client = mock_client_cls.return_value
+            mock_client.get.return_value = httpx.Response(
+                200, json={"data": [{"id": "MiniMax-M2.7"}]}
+            )
+            monkeypatch.setenv("MINIMAX_API_KEY", "sk-test")
+            is_listed, available, err = validate_model_against_account(
+                configured_model="MiniMax-M2.7",
+            )
+            assert is_listed is True
+            assert available == ("MiniMax-M2.7",)
+            assert err is None
+            # The helper constructed a client (no client was passed).
+            mock_client_cls.assert_called_once()
+            # And closed it after the call.
+            mock_client.close.assert_called_once()
+
+    def test_handles_catalog_body_not_a_dict(self) -> None:
+        """When the body parses as JSON but is not an object, the
+        helper returns ``(False, (), "not a JSON object")``."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=["not", "a", "dict"])
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        is_listed, available, err = validate_model_against_account(
+            configured_model="MiniMax-M2.7",
+            client=client,
+        )
+        assert is_listed is False
+        assert available == ()
+        assert err is not None
+        assert "JSON object" in err
+
+    def test_handles_catalog_generic_httpx_error(self) -> None:
+        """A non-Timeout non-Connect ``httpx.HTTPError`` is caught
+        by the generic catch-all."""
+
+        class CustomError(httpx.HTTPError):
+            pass
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            raise CustomError("custom catalog failure")
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        is_listed, available, err = validate_model_against_account(
+            configured_model="MiniMax-M2.7",
+            client=client,
+        )
+        assert is_listed is False
+        assert available == ()
+        assert err is not None
+        assert "transport error" in err
+
+
+# ---------------------------------------------------------------------------
+# Adapter-required model identifier
+# ---------------------------------------------------------------------------
+
+
+class TestRequiredModelIdentifier:
+    """ENFORCED BOUNDARY: per the refinement workplan, the model
+    ID is mandatory + configurable. There is no hard-coded
+    default. The constructor resolves the model id in this order:
+
+    1. Explicit ``model_identifier`` argument.
+    2. ``MINIMAX_MODEL`` environment variable.
+    3. Empty string — the adapter is not configured for any model.
+    """
+
+    def test_explicit_model_identifier_used(self) -> None:
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            model_identifier="MiniMax-M2.7",
+        )
+        assert adapter.model_identifier == "MiniMax-M2.7"
+
+    def test_minimax_model_env_used_when_no_argument(self) -> None:
+        os.environ["MINIMAX_MODEL"] = "MiniMax-M2.7"
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        assert adapter.model_identifier == "MiniMax-M2.7"
+
+    def test_explicit_argument_overrides_env(self) -> None:
+        os.environ["MINIMAX_MODEL"] = "MiniMax-M2.5"
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            model_identifier="MiniMax-M2.7",
+        )
+        assert adapter.model_identifier == "MiniMax-M2.7"
+
+    def test_no_argument_no_env_yields_empty_identifier(self) -> None:
+        """When neither an argument nor an env var is provided,
+        the adapter carries an empty model identifier and reports
+        not-live. The readiness struct reports ``model_identifier``
+        as the sentinel ``unset`` to satisfy the schema's
+        ``min_length=1``."""
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        assert adapter.model_identifier == ""
+        r = adapter.readiness()
+        assert not r.is_live()
+        # The struct's identifier is the sentinel "unset"; the
+        # adapter property preserves the empty string so callers
+        # can distinguish "no model configured" from "model 'x'".
+        assert r.model_identifier == "unset"
+        # The reason mentions the missing API key (first probe
+        # gate), not the empty model id.
+        assert "MINIMAX_API_KEY" in (r.reason or "")
+
+    def test_adapter_validate_against_account_with_fake_transport(self) -> None:
+        """Validation is not possible with a fake transport — the
+        method must report so explicitly."""
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            model_identifier="MiniMax-M2.7",
+        )
+        is_listed, available, err = adapter.validate_against_account()
+        assert is_listed is False
+        assert available == ()
+        assert "HTTP transport" in (err or "")
+
+    def test_adapter_validate_against_account_without_model_id(self) -> None:
+        """Even with a valid HTTP transport, validation cannot
+        proceed without a model id."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"data": []})
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        adapter = MiniMaxAdapter(
+            transport=HttpMiniMaxTransport(client=client),
+            model_identifier="",
+        )
+        is_listed, available, err = adapter.validate_against_account()
+        assert is_listed is False
+        assert available == ()
+        assert "model identifier" in (err or "")
+
+    def test_adapter_validate_against_account_proxies_to_helper(self) -> None:
+        """When the adapter uses an HTTP transport with a configured
+        model id, ``validate_against_account`` proxies to the
+        helper and returns its result."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"id": "MiniMax-M2.7"},
+                        {"id": "MiniMax-M2.5"},
+                    ]
+                },
+            )
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
+        )
+        adapter = MiniMaxAdapter(
+            transport=HttpMiniMaxTransport(client=client),
+            model_identifier="MiniMax-M2.7",
+        )
+        is_listed, available, err = adapter.validate_against_account()
+        assert is_listed is True
+        assert available == ("MiniMax-M2.7", "MiniMax-M2.5")
+        assert err is None
+
+    def test_readiness_reports_empty_model_identifier(self) -> None:
+        """When model_identifier is empty the readiness struct
+        reports ``not_live`` with a clear reason."""
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            model_identifier="",
+        )
+        r = adapter.readiness()
+        assert not r.is_live()
+        # The empty identifier is reported as the sentinel "unset"
+        # so the readiness struct satisfies its min_length=1.
+        assert r.model_identifier == "unset"
+        # The probe goes past the "not configured" gate (key is
+        # set) and lands on the "empty model id" gate.
+        assert r.configured is True
+        assert r.transport_is_live is False
+        assert "model_identifier" in (r.reason or "")
+
+    def test_readiness_reports_fake_transport_with_key_and_model(self) -> None:
+        """When the key is set, the model id is set, but the
+        transport is a fake, the readiness probe returns the
+        explicit ``transport is not the production HTTP transport``
+        reason. The ``transport_is_live`` flag is ``False`` even
+        though the adapter is fully configured."""
+
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            model_identifier="MiniMax-M2.7",
+        )
+        r = adapter.readiness()
+        assert not r.is_live()
+        assert r.configured is True
+        assert r.transport_is_live is False
+        assert r.transport_available is True
+        assert "not the production HTTP transport" in (r.reason or "")

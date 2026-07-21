@@ -32,7 +32,8 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any
+
+import httpx
 
 from seharness.domain.enums import ProviderKind, ProviderName
 from seharness.domain.requests import ModelRequest
@@ -44,13 +45,16 @@ from seharness.domain.results import (
 )
 from seharness.models.base import ModelAdapter
 from seharness.models.minimax_transport import (
-    DEFAULT_MODEL,
+    DEFAULT_ENDPOINT,
+    DEFAULT_MODEL_ENV,
+    MODELS_ENDPOINT,
     FakeMiniMaxTransport,
     HttpMiniMaxTransport,
     MiniMaxMessage,
     MiniMaxRequest,
     MiniMaxTransport,
     MiniMaxTransportResponse,
+    validate_model_against_account,
 )
 from seharness.models.provider_readiness import ProviderReadiness, not_live
 
@@ -97,14 +101,25 @@ class MiniMaxAdapter(ModelAdapter):
         *,
         api_key_env: str = "MINIMAX_API_KEY",
         endpoint: str | None = None,
-        model_identifier: str = DEFAULT_MODEL,
+        model_identifier: str | None = None,
         timeout_seconds: float = 30.0,
         max_response_bytes: int = 4 * 1024 * 1024,
         transport: MiniMaxTransport | None = None,
     ) -> None:
         self._api_key_env = api_key_env
         self._endpoint = endpoint
-        self._model_identifier = model_identifier
+        # Model identifier resolution order:
+        # 1. Explicit ``model_identifier`` constructor argument.
+        # 2. ``MINIMAX_MODEL`` environment variable.
+        # 3. ``None`` — the adapter is not configured for any model.
+        #
+        # There is no hard-coded default. Per the refinement
+        # workplan the harness MUST NOT assume ``MiniMax-M3``
+        # because the live account may not expose it. The current
+        # official documentation names MiniMax M2.7 / M2.5 / M2.1 /
+        # M2 only.
+        resolved_model = model_identifier or os.environ.get(DEFAULT_MODEL_ENV)
+        self._model_identifier = resolved_model or ""
         self._timeout_seconds = float(timeout_seconds)
         self._max_response_bytes = int(max_response_bytes)
 
@@ -113,10 +128,13 @@ class MiniMaxAdapter(ModelAdapter):
         else:
             # Default: build the production HTTP transport. The
             # readiness probe below decides whether the adapter
-            # is actually live.
+            # is actually live. The endpoint defaults to the
+            # official OpenAI-compatible chat-completions endpoint
+            # ``https://api.minimax.io/v1/chat/completions`` (NOT
+            # the deprecated ``/v1/text/chatcompletion_v2``).
             self._transport = HttpMiniMaxTransport(
                 api_key_env=api_key_env,
-                endpoint=endpoint or "https://api.minimax.chat/v1/text/chatcompletion_v2",
+                endpoint=endpoint or DEFAULT_ENDPOINT,
                 timeout_seconds=timeout_seconds,
                 max_response_bytes=max_response_bytes,
             )
@@ -154,10 +172,14 @@ class MiniMaxAdapter(ModelAdapter):
         configured = bool(api_key)
         transport_is_live = isinstance(self._transport, HttpMiniMaxTransport)
 
+        # The struct enforces ``model_identifier`` min_length=1;
+        # an empty identifier is reported as the sentinel "unset".
+        model_id_for_struct = self._model_identifier or "unset"
+
         if not configured:
             return not_live(
                 reason=(f"environment variable {self._api_key_env!r} is unset"),
-                model_identifier=self._model_identifier,
+                model_identifier=model_id_for_struct,
             )
 
         if not self._model_identifier:
@@ -198,9 +220,51 @@ class MiniMaxAdapter(ModelAdapter):
         return MiniMaxRequest(
             model=self._model_identifier,
             messages=tuple(messages),
-            max_tokens=request.max_tokens,
+            max_completion_tokens=request.max_tokens,
             temperature=request.temperature,
-            response_format=_maybe_response_format(request.context),
+            stream=False,
+        )
+
+    def validate_against_account(
+        self,
+        *,
+        models_endpoint: str | None = None,
+        timeout_seconds: float | None = None,
+        client: httpx.Client | None = None,
+    ) -> tuple[bool, tuple[str, ...], str | None]:
+        """Validate the configured model against the live catalog.
+
+        Returns a 3-tuple ``(is_listed, available_models, error_message)``.
+
+        Per the refinement workplan this MUST be called by the
+        production startup path before accepting configuration.
+        The harness must NOT silently substitute one model for
+        another; if the configured model is absent, surface the
+        available list so the operator can choose deliberately.
+
+        When the adapter is using a fake transport (offline tests),
+        this method returns ``(False, (), "transport is not the
+        production HTTP transport")`` — the live catalog cannot
+        be validated against a fake.
+
+        When ``client`` is not supplied the helper reuses the
+        transport's own ``httpx.Client`` so production startup
+        uses a single connection pool for both catalog lookup and
+        chat completions. Tests can inject a ``MockTransport`` via
+        the adapter's ``transport`` constructor argument.
+        """
+        if not isinstance(self._transport, HttpMiniMaxTransport):
+            return (False, (), "transport is not the production HTTP transport")
+        if not self._model_identifier:
+            return (False, (), "no model identifier configured")
+        return validate_model_against_account(
+            configured_model=self._model_identifier,
+            api_key_env=self._api_key_env,
+            models_endpoint=models_endpoint or MODELS_ENDPOINT,
+            timeout_seconds=(
+                timeout_seconds if timeout_seconds is not None else self._timeout_seconds
+            ),
+            client=client if client is not None else self._transport.client,
         )
 
     def invoke(self, request: ModelRequest) -> ModelResponse:
@@ -251,16 +315,6 @@ class MiniMaxAdapter(ModelAdapter):
             requires_repair=False,
             duration_s=duration_s,
         )
-
-
-def _maybe_response_format(context: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Return the structured-output hint when the context requests it."""
-    if not isinstance(context, dict):
-        return None
-    response_format = context.get("response_format")
-    if isinstance(response_format, dict) and response_format:
-        return response_format
-    return None
 
 
 __all__ = ["FakeMiniMaxTransport", "MiniMaxAdapter"]
