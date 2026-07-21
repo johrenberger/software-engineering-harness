@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 # Ordering fix: import controller modules first to break the
 # pre-existing orchestrator↔controller circular-import trap.
 from seharness.controller.run_ledger import (  # noqa: F401
@@ -279,3 +281,265 @@ class TestPipelineResultCarriesContext:
 
         result = PipelineResult(run_id="r1", terminal_state="completed")
         assert result.context is None
+
+
+# ---------------------------------------------------------------------------
+# Missing-branch coverage for diff-cover (WP1.4 contract)
+# ---------------------------------------------------------------------------
+# These tests exercise the FAILED / SKIPPED / alternate branches of
+# each handler that doesn't get hit on the canonical happy path.
+# Without them, ``diff-cover --fail-under=80`` fails on PR2.
+
+
+class TestValidationSkippedBranchSetsExitCodeNone:
+    """Cluster WP1 / story WP1.4: when the plan has no validation
+    commands, ``validation_exit_code`` is explicitly ``None`` (not
+    left as the dataclass default), and the phase outcome is
+    ``SKIPPED``."""
+
+    def test_skipped_sets_exit_code_none(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Patch _PlanBuilder to return a plan with empty
+        validation_commands so the SKIPPED branch fires."""
+        from seharness.artifacts.traceability import Plan, Task
+        from seharness.orchestrator import orchestrator as orch_mod
+
+        # Build a plan with an empty validation_commands list so
+        # the handler's ``if not task.validation_commands`` branch
+        # is taken.
+        empty_plan = Plan(
+            plan_id="plan-empty",
+            tasks=(
+                Task(
+                    task_id="task-empty",
+                    objective="empty",
+                    requirement_traces=(),
+                    allowed_paths=("src/",),
+                    depends_on=(),
+                    validation_commands=(),  # ← forces SKIPPED branch
+                ),
+            ),
+        )
+
+        original = orch_mod._PlanBuilder.build
+        orch_mod._PlanBuilder.build = staticmethod(  # type: ignore[assignment]
+            lambda *, ctx: empty_plan
+        )
+        try:
+            orch, _ = _fresh_orchestrator(tmp_path)
+            ctx = _ctx(tmp_path)
+            run_dir = tmp_path / "runs" / "orch-wp1h01"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            outcome, new_ctx, _ = _phase_validation(
+                orch,
+                spec=_spec(PhaseName.VALIDATION),
+                ctx=ctx,
+                run_dir=run_dir,
+            )
+        finally:
+            orch_mod._PlanBuilder.build = original  # type: ignore[assignment]
+        assert outcome == PhaseOutcome.SKIPPED
+        assert new_ctx.validation_exit_code is None
+
+
+class TestReviewFailedBranchSetsVerdict:
+    """Cluster WP1 / story WP1.4: when the reviewer returns a non-approve
+    verdict, ``review_verdict`` is still populated (never ``None``)
+    and the phase outcome is ``FAILED``."""
+
+    def test_failed_branch_records_actual_verdict(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from seharness.orchestrator import orchestrator as orch_mod
+
+        # Patch _Reviewer.review to return a non-approve verdict.
+        original = orch_mod._Reviewer.review
+        orch_mod._Reviewer.review = staticmethod(  # type: ignore[assignment]
+            lambda *, run_dir, plan: "request_changes"
+        )
+        try:
+            orch, _ = _fresh_orchestrator(tmp_path)
+            ctx = _ctx(tmp_path)
+            run_dir = tmp_path / "runs" / "orch-wp1h01"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            outcome, new_ctx, detail = _phase_review(
+                orch,
+                spec=_spec(PhaseName.REVIEW),
+                ctx=ctx,
+                run_dir=run_dir,
+            )
+        finally:
+            orch_mod._Reviewer.review = original  # type: ignore[assignment]
+        assert outcome == PhaseOutcome.FAILED
+        assert new_ctx.review_verdict == "request_changes"
+        assert "request_changes" in detail
+
+
+class TestCIMonitorNoRunMethod:
+    """Cluster WP1 / story WP1.4: when the monitor lacks a ``run``
+    method the CI outcome is the literal ``"no_run_method"``."""
+
+    def test_ci_monitor_without_run_method(self, tmp_path: Path) -> None:
+        class _MonitorNoRun:
+            """A monitor that has no ``run`` method."""
+
+        orch, _ = _fresh_orchestrator(tmp_path)
+        # Reach into the orchestrator's private slot to inject a
+        # monitor that lacks ``run``.
+        orch._ci_monitor = _MonitorNoRun()  # type: ignore[assignment]
+        ctx = _ctx(tmp_path)
+        run_dir = tmp_path / "runs" / "orch-wp1h01"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        outcome, new_ctx, _ = _phase_ci(
+            orch,
+            spec=_spec(PhaseName.CI),
+            ctx=ctx,
+            run_dir=run_dir,
+        )
+        assert outcome == PhaseOutcome.OK
+        assert new_ctx.ci_outcome == "no_run_method"
+
+
+class TestCIMonitorNoViewFactory:
+    """Cluster WP1 / story WP1.4: monitor with ``run`` but no
+    ``_view_factory`` attribute sets ``ci_outcome='no_view_factory'``."""
+
+    def test_ci_monitor_without_view_factory(self, tmp_path: Path) -> None:
+        class _MonitorNoViewFactory:
+            def run(self) -> None:  # pragma: no cover - not called
+                return None
+
+        orch, _ = _fresh_orchestrator(tmp_path)
+        orch._ci_monitor = _MonitorNoViewFactory()  # type: ignore[assignment]
+        ctx = _ctx(tmp_path)
+        run_dir = tmp_path / "runs" / "orch-wp1h01"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        outcome, new_ctx, _ = _phase_ci(
+            orch,
+            spec=_spec(PhaseName.CI),
+            ctx=ctx,
+            run_dir=run_dir,
+        )
+        assert outcome == PhaseOutcome.OK
+        assert new_ctx.ci_outcome == "no_view_factory"
+
+
+class TestCIMonitorViewReturnsNone:
+    """Cluster WP1 / story WP1.4: monitor with ``run`` + ``_view_factory``
+    that returns ``None`` for the view sets ``ci_outcome='no_view'``."""
+
+    def test_ci_view_factory_returns_none(self, tmp_path: Path) -> None:
+        class _MonitorViewNone:
+            def run(self) -> None:  # pragma: no cover - not called
+                return None
+
+            def _view_factory(self):  # noqa: ANN202 - protocol method
+                return None
+
+        orch, _ = _fresh_orchestrator(tmp_path)
+        orch._ci_monitor = _MonitorViewNone()  # type: ignore[assignment]
+        ctx = _ctx(tmp_path)
+        run_dir = tmp_path / "runs" / "orch-wp1h01"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        outcome, new_ctx, _ = _phase_ci(
+            orch,
+            spec=_spec(PhaseName.CI),
+            ctx=ctx,
+            run_dir=run_dir,
+        )
+        assert outcome == PhaseOutcome.OK
+        assert new_ctx.ci_outcome == "no_view"
+
+
+class TestCINotReadyFailedBranch:
+    """Cluster WP1 / story WP1.4: when ``ReadyEvaluator`` returns
+    ``can_be_ready=False`` the CI outcome is ``'not_ready'`` and
+    the phase outcome is ``FAILED``."""
+
+    def test_ci_not_ready_outcome(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+
+        class _MonitorReady:
+            def run(self) -> None:  # pragma: no cover - not called
+                return None
+
+            def _view_factory(self):  # noqa: ANN202
+                # The view object is opaque to the handler; the
+                # ReadyEvaluator does all the decision logic.
+                return object()
+
+        class _NotReadyDecision:
+            can_be_ready = False
+            reasons = ("check pending",)
+
+        # Patch ReadyEvaluator to return the not-ready decision.
+        class _FakeReadyEvaluator:
+            def evaluate(self, view):  # noqa: ANN001, ANN201
+                return _NotReadyDecision()
+
+        # Patch the lazy import inside _phase_ci so ReadyEvaluator
+        # resolves to our fake.
+        import seharness.ci.readiness as readiness_mod
+
+        original_evaluator = readiness_mod.ReadyEvaluator
+        readiness_mod.ReadyEvaluator = _FakeReadyEvaluator  # type: ignore[misc]
+        try:
+            orch, _ = _fresh_orchestrator(tmp_path)
+            orch._ci_monitor = _MonitorReady()  # type: ignore[assignment]
+            ctx = _ctx(tmp_path)
+            run_dir = tmp_path / "runs" / "orch-wp1h01"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            outcome, new_ctx, _ = _phase_ci(
+                orch,
+                spec=_spec(PhaseName.CI),
+                ctx=ctx,
+                run_dir=run_dir,
+            )
+        finally:
+            readiness_mod.ReadyEvaluator = original_evaluator  # type: ignore[misc]
+        assert outcome == PhaseOutcome.FAILED
+        assert new_ctx.ci_outcome == "not_ready"
+
+
+class TestCIReadyBranch:
+    """Cluster WP1 / story WP1.4: when ``ReadyEvaluator`` returns
+    ``can_be_ready=True`` the CI outcome is ``'ready'`` and the
+    phase outcome is ``OK``. (Sanity check on the OK branch since
+    we're testing the FAILED sibling.)"""
+
+    def test_ci_ready_outcome(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _MonitorReady:
+            def run(self) -> None:  # pragma: no cover - not called
+                return None
+
+            def _view_factory(self):  # noqa: ANN202
+                return object()
+
+        class _ReadyDecision:
+            can_be_ready = True
+            reasons: tuple[str, ...] = ()
+
+        class _FakeReadyEvaluator:
+            def evaluate(self, view):  # noqa: ANN001, ANN201
+                return _ReadyDecision()
+
+        import seharness.ci.readiness as readiness_mod
+
+        original_evaluator = readiness_mod.ReadyEvaluator
+        readiness_mod.ReadyEvaluator = _FakeReadyEvaluator  # type: ignore[misc]
+        try:
+            orch, _ = _fresh_orchestrator(tmp_path)
+            orch._ci_monitor = _MonitorReady()  # type: ignore[assignment]
+            ctx = _ctx(tmp_path)
+            run_dir = tmp_path / "runs" / "orch-wp1h01"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            outcome, new_ctx, _ = _phase_ci(
+                orch,
+                spec=_spec(PhaseName.CI),
+                ctx=ctx,
+                run_dir=run_dir,
+            )
+        finally:
+            readiness_mod.ReadyEvaluator = original_evaluator  # type: ignore[misc]
+        assert outcome == PhaseOutcome.OK
+        assert new_ctx.ci_outcome == "ready"
