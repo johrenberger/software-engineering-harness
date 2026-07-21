@@ -55,11 +55,16 @@ from typing import Any, Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field
 
 from seharness.artifacts.traceability import Plan
+from seharness.config import RuntimeProfile
 from seharness.domain.enums import ProviderKind, ProviderName, RoutingRole
 from seharness.domain.requests import ModelRequest
 from seharness.domain.results import (
     ErrorKind,
     ModelResponse,
+)
+from seharness.models.readiness_validation import (
+    ReadinessDiagnostic,
+    validate_router_readiness,
 )
 from seharness.models.router import ModelRouter
 from seharness.orchestrator.types import RunContext
@@ -1078,7 +1083,23 @@ class ModelBackedServiceComposition:
         router: ModelRouter,
         budget: ServiceCallBudget | None = None,
         clock: Any = None,
+        runtime_profile: RuntimeProfile | None = None,
     ) -> None:
+        # Cluster N (PR3 / production-composition): readiness
+        # validation. The router's adapters are probed before any
+        # service is constructed so production startup fails
+        # closed when the MiniMax adapter is not actually live.
+        # The validator mirrors ``validate_runtime_profile_adapters``:
+        # PRODUCTION raises, DEVELOPMENT returns a diagnostic
+        # (exposed via ``last_readiness_diagnostic`` for the
+        # startup warning), TEST silently passes.
+        self._runtime_profile = runtime_profile
+        self.last_readiness_diagnostic: ReadinessDiagnostic | None = None
+        if runtime_profile is not None:
+            self.last_readiness_diagnostic = validate_router_readiness(
+                profile=runtime_profile,
+                router=router,
+            )
         self._router = router
         self._budget = budget or ServiceCallBudget()
         self._clock = clock or time.monotonic
