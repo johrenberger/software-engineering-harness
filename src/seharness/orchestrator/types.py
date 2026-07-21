@@ -19,6 +19,7 @@ from enum import StrEnum
 from typing import Any, NewType
 
 from seharness.config import RuntimeProfile
+from seharness.orchestrator.budgets import RunBudgets
 
 
 def _utcnow() -> datetime:
@@ -163,6 +164,18 @@ class OrchestratorConfig:
     # to get fail-closed adapter validation; see
     # :mod:`seharness.orchestrator.runtime_profile`.
     runtime_profile: RuntimeProfile = RuntimeProfile.DEVELOPMENT
+    # Cluster WP8 (story M): operational budgets. ``None`` means
+    # unlimited for that axis. A production deployment SHOULD set
+    # explicit ceilings; the orchestrator validates budgets at
+    # construction time per the runtime-profile rules below.
+    budgets: RunBudgets = field(default_factory=RunBudgets)
+    # Cluster WP8: lease TTL for safe multi-run execution. The
+    # default is 60 seconds (matches the heartbeat cadence).
+    lease_ttl_seconds: float = 60.0
+    # Cluster WP8: optional tracer sink. ``None`` means telemetry
+    # is disabled; pass a Tracer instance to enable OTLP-JSON
+    # export. The orchestrator wraps every phase handler in a span.
+    trace_sink: object = None
 
     def __post_init__(self) -> None:
         # dataclass(frozen=True) + ConfigDict is awkward; we just
@@ -171,3 +184,13 @@ class OrchestratorConfig:
             raise ValueError("max_remediation_attempts must be >= 1")
         if self.max_validation_attempts < 1:
             raise ValueError("max_validation_attempts must be >= 1")
+        if self.lease_ttl_seconds <= 0:
+            raise ValueError("lease_ttl_seconds must be > 0")
+        # Cluster WP8 (story M): production MUST set explicit
+        # budgets on at least one axis. A fully unlimited
+        # ``RunBudgets`` in production defeats the fail-closed
+        # contract.
+        if self.runtime_profile is RuntimeProfile.PRODUCTION and self.budgets.is_unlimited():
+            raise ValueError(
+                "PRODUCTION runtime profile requires explicit RunBudgets on at least one axis"
+            )
