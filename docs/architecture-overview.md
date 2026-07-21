@@ -25,7 +25,7 @@ into a *draft pull request* by composing the following subsystems:
 | **Observability** | `seharness.observability` | Trace records + secret redactor |
 | **Artifacts** | `seharness.artifacts` | SBOM + traceability manifests |
 | **Telegram** | `seharness.telegram` | Operator UI (slash commands + run buttons) |
-| **Security** | `seharness.security` | Suspicious-payload filter (cluster H, story H2) |
+| **Security** | `seharness.security` | Suspicious-payload filter + secret redactor (`docs/user/sandbox.md` for the threat model). |
 
 All of these subsystem boundaries are enforced by **typed protocols**
 in `src/seharness/<pkg>/types.py` and exercised by **mutation-killer
@@ -112,30 +112,30 @@ package under `src/seharness/` is documented.
 
 | Package | Role |
 |---|---|
-| `seharness.dashboard` | Live dashboard renderer + Pages server (G12) |
-| `seharness.pipeline` | Legacy vertical-slice pipeline (Cluster A thin adapter) |
-| `seharness.execution` | Task execution service (Cluster B) |
-| `seharness.repository` | Repository profiler (Cluster B/C-3) |
-| `seharness.phases` | Per-phase helper functions |
-| `seharness.review` | Reviewer (Cluster B-9) |
-| `seharness.delivery` | Branch/commit/PR backend abstractions |
-| `seharness.validation` | Validation runner (Cluster B-7) |
-| `seharness.domain` | Domain enums + dataclasses (RunState, etc.) |
-| `seharness.models` | Model adapters: `codex`, `minimax`, `fake` |
-| `seharness.telegram_runtime` | Bot runtime + command handlers (lower level than `telegram`) |
+| `seharness.dashboard` | Live dashboard renderer + Pages server (see `docs/engineering-dashboard.md`). |
+| `seharness.pipeline` | Legacy thin adapter for backward compatibility. |
+| `seharness.execution` | Task execution service. |
+| `seharness.repository` | Repository profiler. |
+| `seharness.phases` | Per-phase helper functions. |
+| `seharness.review` | Reviewer. |
+| `seharness.delivery` | Branch/commit/PR backend abstractions. |
+| `seharness.validation` | Validation runner. |
+| `seharness.domain` | Domain enums + dataclasses (RunState, etc.). |
+| `seharness.models` | Model adapters: `codex`, `minimax`, `fake`. |
+| `seharness.telegram_runtime` | Bot runtime + command handlers (lower level than `telegram`). |
 
 ### Controller (`src/seharness/controller/`)
 
 - **`application_service.py`** — `ControllerApplicationService` is the
   single entry point for "I want a feature implemented". It dispatches
   to the orchestrator when an orchestrator is wired in.
-- **`run_ledger.py`** — `RunLedger` records every state transition.
-  **Cluster E1** adds idempotency keys; **Cluster E2** adds optimistic
-  concurrency. Currently uses an in-memory dict.
+- **`run_ledger.py`** — `RunLedger` records every state transition with
+  idempotency keys and optimistic concurrency. `FileRunLedger`
+  persists across process restarts.
 - **`real_adapters.py`** — the production wiring (TaskExecutor →
   SubprocessSandbox, CiMonitor → PyGithub, etc.).
-- **`pause_resume.py`** — pause/resume support (used by E7 approval gates
-  when added).
+- **`pause_resume.py`** — pause/resume support (used by the human-
+  approval gates when added).
 
 ### Orchestrator (`src/seharness/orchestrator/`)
 
@@ -239,29 +239,85 @@ backend).
 
 ## What is NOT yet wired (Honesty matrix)
 
-These are intentional, not bugs. Each row links to the cluster story
-that will wire it up.
+These are intentional, not bugs. Each row links to the module or
+doc that will wire it up.
 
-| Capability | Status | Owner cluster |
+| Capability | Status | Owner |
 |---|---|---|
-| Idempotency keys on RunLedger | **DONE (B — caller plumbing)** | E1 (P1) |
-| Optimistic concurrency on RunLedger | **DONE (B — version counter + CAS)** | **E2** |
-| Cross-process cancel-resume (state model) | **DONE (B — phase + ctx persistence on `RunRecord` + `FileRunLedger`; `Orchestrator.start_run(resume_from_run_id=...)` seam; spec-drift guard on resume) | **E3** |
-| SQLite-backed durable ledger | NOT YET | B (P1) — currently in-memory only |
-| Cancellation propagation to subprocess | **DONE (E4a primitive + E4b orchestrator plumbing)** | **E4** |
-| Human-approval gates (pause + resume) | NOT YET | E7 (P1) |
+| Idempotency keys on RunLedger | **DONE** — caller plumbing for `feature_request` | `src/seharness/controller/run_ledger.py` |
+| Optimistic concurrency on RunLedger | **DONE** — version counter + CAS | `src/seharness/controller/run_ledger.py` |
+| Cross-process cancel-resume (state model) | **DONE** — phase + ctx persistence on `RunRecord` + `FileRunLedger`; `Orchestrator.start_run(resume_from_run_id=...)` seam; spec-drift guard on resume | `src/seharness/orchestrator/orchestrator.py` |
+| SQLite-backed durable ledger | NOT YET | (P1 follow-up) — currently in-memory only |
+| Cancellation propagation to subprocess | **DONE** — cancellation token + subprocess process group kill | `src/seharness/orchestrator/orchestrator.py` |
+| Worker leases + abandoned-run recovery | **DONE** — `LeaseStore` with TTL + `recover_expired` at start of every run | `src/seharness/orchestrator/leases.py` |
+| Per-axis budget tracking (model tokens, cost, time, retries, files, diff size) | **DONE** — `BudgetTracker` enforced at every phase boundary; production profile refuses unlimited budgets | `src/seharness/orchestrator/budgets.py` |
+| OTLP-shaped trace spans + secret redaction | **DONE** — `Tracer` + `SecretRedactor`; `NullTracer` is the in-process default | `src/seharness/orchestrator/telemetry.py`, `src/seharness/observability/redactor.py` |
+| Human-approval gates (pause + resume) | NOT YET — handler surface exists; policy layer is design-stage | (P1 follow-up) |
 | Schema migration framework | NOT YET | (separate future work; see [README §Status](https://github.com/johrenberger/software-engineering-harness#status)) |
-| Real Codex adapter | NOT YET (fake only) | F (P1) |
-| Real MiniMax adapter | NOT YET (fake only) | F (P1) |
-| **Rate-limit retry-with-backoff in ModelRouter** | **DONE** | **H1** |
-| **Suspicious-payload filtering** | **DONE** | **H2** |
-| **PyPI release automation (release.yml)** | **DONE** (PyPI publish is best-effort; GitHub Release always ships; defended by 13 contract tests across `test_release_soft_publish.py`, `test_release_assets_pattern.py`, and the upstream-pin-resolver in `test_g4_actions_sha_pinning.py`) | **G9** |
-| **Version drift check** | **DONE** | **G9** |
+| Real Codex adapter | NOT YET (fake only) | (P1 follow-up) |
+| Real MiniMax adapter | NOT YET (fake only) | (P1 follow-up) |
+| Rate-limit retry-with-backoff in ModelRouter | **DONE** | `src/seharness/models/router.py` |
+| Suspicious-payload filtering | **DONE** | `src/seharness/security/payload_filter.py` |
+| PyPI release automation (release.yml) | **DONE** — PyPI publish is best-effort; GitHub Release always ships; defended by 13 contract tests | `.github/workflows/release.yml` |
+| Version drift check | **DONE** | `src/seharness/release/version_check.py` |
 | Rate limiting on Telegram commands | NOT YET | (P2) |
 | Multi-user auth (beyond allowlist) | NOT YET | (P2) |
-| Distributed tracing (OTel) | NOT YET | (P2) |
-| Branch protection on main | NOT YET | G19 (P2) |
-| _Historical ref: G18 was the predecessor story to G9 (release automation); kept here for traceability._ | DONE | G9 (was G18) |
+| Distributed tracing (OTel wire protocol) | NOT YET — local JSONL only today | (P2) |
+| Branch protection on main | NOT YET | (P2) |
+
+## Production trust model
+
+The production profile (`seharness.orchestrator.runtime_profile.ProductionProfile`)
+is the **only** profile that drives a real LLM run. The trust model
+the harness enforces is:
+
+1. **Fail-closed on stubs.** A profile that names a stub adapter for
+   a critical phase (planning, implementation, validation, review,
+   delivery) refuses to start. The `ProductionProfile.fail_closed()`
+   validator raises `RuntimeError` if any critical phase is wired to
+   a fake. See `src/seharness/orchestrator/runtime_profile.py`.
+2. **Fail-closed on missing budgets.** The production profile refuses
+   to construct with `budgets=None` or with any axis set to `None`.
+   Operators MUST set per-axis ceilings (model tokens, cost, time,
+   retries, files, diff size) or the run is rejected before phase 0.
+3. **Sandbox deny-by-default.** The default `SandboxProfile` has
+   empty `allowed_paths`, empty `allowed_env`, `network_mode="none"`,
+   and a fixed deny list of canonical secret env vars (`OPENAI_API_KEY`,
+   `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `AWS_*`, `PATH`, `HOME`, ...).
+   Users can ADD to the deny list but cannot remove entries. See
+   `docs/user/sandbox.md`.
+4. **Lease-protected runs.** A run starts by acquiring a worker
+   lease (`LeaseStore.acquire`). A crashed worker's lease auto-expires
+   after `default_lease_ttl_seconds()`; `recover_expired()` clears
+   abandoned leases at every start so a new worker can resume.
+   Two concurrent workers cannot advance the same `run_id` + `revision`.
+5. **Budget enforcement at every phase.** `BudgetTracker.enforce()`
+   runs after each phase. Exhaustion translates to
+   `PhaseOutcome.BLOCKED` with a human-readable reason. The run
+   pauses and waits for an operator decision (extend budget, cancel,
+   or resume with a tighter scope).
+6. **Secret-redacted traces.** Every string field in every trace
+   event is scrubbed by `SecretRedactor` before it lands on disk
+   or in the OTLP payload. The sentinel `***REDACTED***` is grep-able.
+7. **No bypass of the orchestrator.** Every entry point (CLI,
+   Telegram, Dashboard, ControllerApplicationService) funnels through
+   `Orchestrator.start_run(...)`. The orchestrator is the only
+   component that emits pipeline events. This is the **layer-6
+   auto-merge prevention** rule, enforced by
+   `tests/unit/orchestrator/test_orchestrator_mutation_killers.py`.
+
+### What "fail-closed" does NOT mean
+
+* The harness does NOT refuse to start when an operator uses a stub
+  provider in **development** profile (the `DevelopmentProfile` is
+  the explicit, opt-in override for local testing).
+* The harness does NOT refuse to start when an operator runs without
+  a Telegram bot token (Telegram intake is optional; the orchestrator
+  can be driven via CLI or HTTP).
+* The harness does NOT refuse to start without network egress —
+  `SandboxProfile.network_mode="none"` is the default and the run
+  proceeds; only when the profile explicitly enables `bridge` mode
+  does the allowlist become active.
 
 ## Composition rule
 

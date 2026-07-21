@@ -1,4 +1,4 @@
-"""I2 — Architecture overview honesty contract tests.
+"""WP10 — Architecture overview honesty contract tests.
 
 Pin the structural commitments and honesty matrix of
 ``docs/architecture-overview.md``. These tests catch regressions where
@@ -141,59 +141,46 @@ def test_honesty_matrix_present(doc: str) -> None:
 
 
 def test_honesty_matrix_lists_idempotency(doc: str) -> None:
-    """The honesty matrix must mention E1 idempotency. As of PR #53
-    (Cluster E1), this row has shipped (option B — caller plumbing);
+    """The honesty matrix must mention idempotency. As of v0.2.0,
+    this row has shipped (caller plumbing + version counter + CAS);
     the row must reflect that WITH a scope qualifier so the doc
     remains honest about which sub-features are done.
     """
     assert "Idempotency" in doc
-    assert "E1" in doc
     # Honesty contract: a DONE entry MUST document the scope.
-    # Option B ships caller plumbing; persistence (option C) is still
-    # pending, so the doc must mention at least one of
-    # "caller plumbing" / "no persistence" / "B" as the qualifier.
+    # Caller plumbing + version counter + CAS; SQLite-backed durable
+    # ledger is still pending.
     assert any(
         marker in doc
         for marker in (
             "caller plumbing",
-            "no persistence",
-            "(B",
-            "(B \u2014",
-            "option B",
-            "B —",
+            "version counter",
+            "(in-memory",
+            "in-memory only",
         )
-    ), "E1 entry must document its scope (B = caller plumbing)"
+    ), "idempotency entry must document its scope (caller plumbing / version counter)"
 
 
-def test_honesty_matrix_marks_e4_cancellation_done(doc: str) -> None:
-    """Cluster E4 (E4a primitive + E4b orchestrator wiring) shipped in
-    PRs #49 (E4a) and #52 (E4b). The honesty matrix must reflect that.
-    """
-    assert "Cancellation propagation" in doc or "E4" in doc
-    # After the #52 merge the cancellation row should NOT say NOT YET.
-    # (E7/E3/F rows may still say NOT YET.)
+def test_honesty_matrix_marks_cancellation_done(doc: str) -> None:
+    """Cancellation propagation to subprocess shipped in v0.2.0.
+    The honesty matrix must reflect that."""
+    assert "Cancellation" in doc or "cancellation" in doc
+    # The cancellation row should NOT say NOT YET.
 
 
 def test_honesty_matrix_lists_concurrency(doc: str) -> None:
-    """E2 optimistic concurrency has shipped (PR #54, option B =
-    revision counter + CAS). The honesty matrix must reflect that
-    WITH a scope qualifier (B = version counter + CAS; no public
-    API threading yet).
-    """
+    """Optimistic concurrency has shipped (version counter + CAS).
+    The honesty matrix must reflect that WITH a scope qualifier."""
     assert "Optimistic concurrency" in doc or "optimistic" in doc.lower()
-    assert "E2" in doc
     # DONE entry must document scope.
     assert any(
         marker in doc
         for marker in (
             "version counter",
             "revision",
-            "(B \u2014",
-            "(B",
-            "option B",
-            "B \u2014",
+            "CAS",
         )
-    ), "E2 entry must document its scope (B = version counter + CAS)"
+    ), "concurrency entry must document its scope (version counter + CAS)"
 
 
 def test_honesty_matrix_lists_real_model_adapters(doc: str) -> None:
@@ -202,20 +189,23 @@ def test_honesty_matrix_lists_real_model_adapters(doc: str) -> None:
     assert "MiniMax" in doc
 
 
-def test_honesty_matrix_references_clusters(doc: str) -> None:
-    """Each row must reference an owner cluster.
+def test_honesty_matrix_references_owners(doc: str) -> None:
+    """Each row must reference an owner (module / doc).
 
-    As of PR #53 (Cluster E1 idempotency keys) and PR #52 (Cluster E4
-    cancel propagation), both E1 and E4 rows have shipped and now
-    appear in the DONE column. E2, E7, E3, F remain P1-and-NOT-YET;
-    G19 is P2.
+    WP10 stripped internal cluster/slice IDs from public docs and
+    replaced them with concrete file paths so operators can find the
+    owning module without knowing the internal tracking taxonomy.
     """
-    for cluster in ("E1", "E2", "E4", "E7", "G19"):
-        assert cluster in doc, f"doc honesty matrix must reference {cluster} as owner cluster"
-    # G18 is the historical predecessor story for G9 (release
-    # automation). Kept as a documented reference even though the
-    # release work landed under G9.
-    assert "G18" in doc, "doc honesty matrix must keep the historical G18 reference"
+    # Modules that should be cited as owners
+    for owner in (
+        "src/seharness/controller/run_ledger.py",
+        "src/seharness/orchestrator/orchestrator.py",
+        "src/seharness/orchestrator/leases.py",
+        "src/seharness/orchestrator/budgets.py",
+        "src/seharness/orchestrator/telemetry.py",
+        ".github/workflows/release.yml",
+    ):
+        assert owner in doc, f"doc honesty matrix must reference {owner} as owner"
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +222,7 @@ def test_doc_does_not_claim_pypi_published(doc: str) -> None:
     ]
     for phrase in forbidden:
         assert phrase.lower() not in doc.lower(), (
-            f"doc contains forbidden claim: {phrase!r} — we don't ship to PyPI yet (G18 follow-up)"
+            f"doc contains forbidden claim: {phrase!r} — we don't ship to PyPI yet (P2 follow-up)"
         )
 
 
@@ -246,7 +236,7 @@ def test_doc_does_not_claim_branch_protection(doc: str) -> None:
     for phrase in forbidden:
         assert phrase.lower() not in doc.lower(), (
             f"doc contains forbidden claim: {phrase!r} — branch protection "
-            f"is NOT YET configured (G19 follow-up)"
+            f"is NOT YET configured (P2 follow-up)"
         )
 
 
@@ -284,5 +274,5 @@ def test_doc_at_least_100_lines(doc: str) -> None:
 
 
 def test_doc_has_status_callout(doc: str) -> None:
-    """The doc should open with an Alpha/v0.1.0 status callout."""
-    assert "Alpha" in doc or "v0.1.0" in doc, "doc should open with explicit Alpha / v0.1.0 status"
+    """The doc should open with an Alpha/v0.2.0 status callout."""
+    assert "Alpha" in doc or "v0.2.0" in doc, "doc should open with explicit Alpha / v0.2.0 status"

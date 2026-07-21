@@ -4,11 +4,11 @@ This document is the canonical release runbook. Follow it from top to
 bottom; every step produces an artifact tracked in the project's
 release audit trail.
 
-> **Status:** Automated (cluster G story G9, v0.2.0). The tag-driven
-> pipeline at `.github/workflows/release.yml` handles steps 2–6 of the
-> release process end-to-end. This document captures the **operator
-> checklist** for cutting a release and the **manual fallback** for
-> emergencies when the workflow is unavailable.
+> **Status:** Automated (v0.2.0). The tag-driven pipeline at
+> `.github/workflows/release.yml` handles steps 2–6 of the release
+> process end-to-end. This document captures the **operator checklist**
+> for cutting a release and the **manual fallback** for emergencies
+> when the workflow is unavailable.
 >
 > **Operator model: tag = release.** Pushing a `v*` tag always
 > produces a public GitHub Release with wheel + sdist + SBOM +

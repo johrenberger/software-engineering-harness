@@ -1,4 +1,4 @@
-# Architecture — Canonical Orchestrator (Cluster A)
+# Architecture — Canonical Orchestrator
 
 This document describes the canonical workflow engine that
 ``Orchestrator`` provides and explains how every entry point
@@ -8,8 +8,8 @@ funnels through it.
 ## Goal
 
 A single, well-tested workflow engine that turns a feature request
-into a draft pull request by composing the existing slice-3..slice-10
-services in the SPEC §"Phase 8" order.
+into a draft pull request by composing the existing services in the
+canonical phase order.
 
 ## Phase sequence
 
@@ -43,21 +43,19 @@ state transition in the controller's ``RunLedger``.
                         ▼
 ┌────────────────────┐   ┌──────────────────────────┐   ┌──────────────────┐
 │  Telegram /feature │──▶│ ControllerApplicationSvc │──▶│   Orchestrator   │
-└────────────────────┘   │       (slice 12)         │   │   (Cluster A)    │
-                        └──────────────────────────┘   └──────────────────┘
+└────────────────────┘   └──────────────────────────┘   └──────────────────┘
 ┌────────────────────┐                                            │
 │  Dashboard /feat  │────────────────────────────────────────────┤
 └────────────────────┘                                            │
                         ┌──────────────────────────┐              │
                         │  VerticalSlicePipeline   │──────────────┘
-                        │   (slice 13 — now an     │   (thin adapter)
-                        │   adapter over orchestr) │
+                        │   (thin adapter over     │   (legacy)
+                        │   orchestrator)          │
                         └──────────────────────────┘
                                                                   │
                                                                   ▼
                                                 ┌──────────────────────────┐
                                                 │  Existing services       │
-                                                │  slice-3..slice-10       │
                                                 │  - RepositoryProfiler    │
                                                 │  - TaskExecutionService  │
                                                 │  - PullRequestClient     │
@@ -71,7 +69,7 @@ dashboard widget, E2E test — invokes either the
 ``Orchestrator.start_run(...)`` method directly, or the
 ``ControllerApplicationService.feature_request(...)`` method which
 delegates to the orchestrator when an ``Orchestrator`` instance is
-wired in (Cluster A story A3).
+wired in.
 
 ## Terminal states
 
@@ -94,7 +92,7 @@ boundary translation lives in
 ## Auto-merge prevention
 
 The orchestrator adds a **6th layer** to the auto-merge prevention
-contract (slices 10-13 shipped layers 1-5; Cluster A adds layer 6):
+contract (the previous slices shipped layers 1–5):
 
 > Layer 6 (Cluster A): ``Orchestrator`` exposes no ``merge*`` /
 > ``auto_merge*`` / ``gh_merge`` methods. The contract is enforced
@@ -120,28 +118,28 @@ The orchestrator writes the following files under
 
 ```
 <repo_path>/                             ← target repo (untouched after revert)
-<repo_profile.json>                      ← slice-3 repository profile
+<repo_profile.json>                      ← repository profile
 specification.json                       ← derived from feature description
-plan.json                                ← slice-5 Plan with one Task
-execution/<task_id>/red/{command,stdout,stderr,result}.json   ← slice-7 RED evidence
-execution/<task_id>/green/{command,stdout,stderr,result}.json ← slice-7 GREEN evidence
-execution/<task_id>/task-result.json     ← slice-7 TaskResult
-review-verdict.json                      ← slice-8 reviewer verdict
+plan.json                                ← Plan with one Task
+execution/<task_id>/red/{command,stdout,stderr,result}.json   ← RED evidence
+execution/<task_id>/green/{command,stdout,stderr,result}.json ← GREEN evidence
+execution/<task_id>/task-result.json     ← TaskResult
+review-verdict.json                      ← reviewer verdict
 ```
 
 The draft PR is issued via ``PullRequestClient``; the CI readiness
 check uses ``CiMonitor``; the run state is recorded in ``RunLedger``.
 
-## Deferred to other clusters
+## Deferred capabilities
 
-| Concern | Cluster |
+| Concern | Owner |
 |---|---|
-| Sandbox / isolated execution | C |
-| Real production adapters (TaskExecutor, CiMonitor, RunLedger) | B |
-| Deterministic replay on resume | E |
-| Real model adapters (Codex, MiniMax) | F |
-| Durable ledger on disk | B |
-| Concurrent-run safety | E |
+| Sandbox / isolated execution | `src/seharness/sandbox/` |
+| Real production adapters (TaskExecutor, CiMonitor, RunLedger) | `src/seharness/controller/real_adapters.py` |
+| Deterministic replay on resume | `Orchestrator.start_run(resume_from_run_id=...)` |
+| Real model adapters (Codex, MiniMax) | `src/seharness/models/` |
+| Durable ledger on disk | `FileRunLedger` (in-memory only today) |
+| Concurrent-run safety | `LeaseStore` (shipped v0.2.0) |
 
 ## See also
 

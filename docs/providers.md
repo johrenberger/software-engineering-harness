@@ -3,11 +3,11 @@
 This document describes how the software-engineering-harness
 selects, configures, and authenticates against model providers.
 
-> **Status:** v0.1 — current state (cluster F, story F1). The
-> README's "What's partial" table flags the multi-provider config
-> file format (`config/providers.toml`) as not yet finalized. This
-> document describes **what works today** and what is intentionally
-> not yet wired.
+> **Status:** v0.2 — provider / credential config (the env-var
+> contract is shipped; the multi-provider config file format
+> `config/providers.toml` is not yet finalized). This document
+> describes **what works today** and what is intentionally not
+> yet wired.
 
 ## TL;DR
 
@@ -31,10 +31,9 @@ identifiers are recognized today:
 | `minimax` | `LIVE` (HTTP) | Default planning + review (per SPEC §10). |
 | `codex` | `LOCAL` (subprocess) | Default implementation + remediation. |
 
-Both are *boundary* classes that fail closed in `invoke()` until a
-later slice wires the real transport. Until that slice lands, every
-model call returns a normalized `provider_failure` so callers see a
-single uniform error shape (see
+Both are *boundary* classes that fail closed in `invoke()` until the
+real transports land. Today, every model call returns a normalized
+`provider_failure` so callers see a single uniform error shape (see
 `src/seharness/models/minimax.py` and `src/seharness/models/codex.py`).
 
 This is a deliberate design choice: shipping the contract before
@@ -116,14 +115,14 @@ A few important caveats:
 
 ## Credential loading (not yet wired)
 
-> **Honesty:** As of v0.1, **there are no environment variables for
+> **Honesty:** As of v0.2, **there are no environment variables for
 > provider credentials**. The adapter boundaries fail closed, so no
 > real credentials are loaded anywhere in the codebase. The
 > `config/providers.toml` file format referenced in the README's
 > honesty matrix does not exist. Adding credential loading is a
-> follow-up slice (cluster F, stories F2–F8).
+> follow-up track (see the README's "What's partial" table).
 
-When the real transports land (F2+), the planned credential-loading
+When the real transports land, the planned credential-loading
 flow is:
 
 1. Look for `SEHARNESS_PROVIDER_<PROVIDER>_API_KEY` (e.g.
