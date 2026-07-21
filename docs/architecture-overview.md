@@ -243,10 +243,11 @@ that will wire it up.
 |---|---|---|
 | Idempotency keys on RunLedger | **DONE (B — caller plumbing)** | E1 (P1) |
 | Optimistic concurrency on RunLedger | **DONE (B — version counter + CAS)** | **E2** |
+| Cross-process cancel-resume (state model) | **DONE (B — phase + ctx persistence on `RunRecord` + `FileRunLedger`; `Orchestrator.start_run(resume_from_run_id=...)` seam; spec-drift guard on resume) | **E3** |
 | SQLite-backed durable ledger | NOT YET | B (P1) — currently in-memory only |
 | Cancellation propagation to subprocess | **DONE (E4a primitive + E4b orchestrator plumbing)** | **E4** |
 | Human-approval gates (pause + resume) | NOT YET | E7 (P1) |
-| Schema migration framework | NOT YET | E3 (P1) |
+| Schema migration framework | NOT YET | (separate future work; see [README §Status](https://github.com/johrenberger/software-engineering-harness#status)) |
 | Real Codex adapter | NOT YET (fake only) | F (P1) |
 | Real MiniMax adapter | NOT YET (fake only) | F (P1) |
 | **Rate-limit retry-with-backoff in ModelRouter** | **DONE** | **H1** |

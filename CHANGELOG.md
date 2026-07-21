@@ -61,6 +61,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no public API threading). Threading `expected_revision` into
   `Orchestrator` API and CLI is deferred to a follow-up if callers
   ask. 22 tests (14 in-memory ledger + 8 durable ledger round-trip).
+- **E3** (PR #58) — orchestrator state model: phase + ctx + feature_description persistence on `RunRecord`, so `/resume <run_id>` can pick up a paused run across a process restart.
+  - `RunRecord` gains `phase: str | None`, `ctx: dict[str, Any] | None`, `feature_description: str | None` (all `None` by default for back-compat).
+  - New `to_jsonable(value)` helper coerces Pydantic models + nested containers into JSON-friendly forms (handlers store ctx via `to_jsonable(ctx)`).
+  - New `RunLedger.record_phase(rid, *, phase, ctx, expected_revision=None)` advances the cursor atomically with E2 CAS. `FileRunLedger` mirrors the API and persists `phase` + `ctx` on the JSONL envelope (omitted when `None` to keep the format terse).
+  - `Orchestrator.start_run` gains `resume_from_run_id: str | None`. When set:
+    1. Looks up the persisted record; raises if unknown.
+    2. Spec-drift guard: if the persisted `feature_description` differs from the new one, refuses the resume (callers should pick a fresh run_id).
+    3. Refuses to resume from an unknown `phase` value (defensive against on-disk corruption).
+    4. Falls back to "rerun from scratch" when `phase` is `None` (pre-E3 record).
+    5. Re-uses the persisted `ctx` to rebuild `RunContext` and skips already-completed phases (continue semantics; not full replay).
+  - After every phase (success OR failure), `Orchestrator.start_run` now calls `record_phase` so the cursor advances in lockstep with state transitions.
+  - `Orchestrator.resume_run(run_id)` is upgraded: reads `feature_description` from the persisted record (caller no longer needs to remember it) and threads `resume_from_run_id=run_id` to `start_run`.
+  - 29 new tests (13 in-memory ledger, 6 durable ledger, 10 orchestrator incl. spec-drift + unknown-phase + cross-process-style round-trip).
+  - Honesty matrix E3 row: scope = B (in-process phase+ctx persistence + cross-process FileRunLedger durability; no SQLite yet — that's a Cluster B follow-up). "Schema migration framework" row removed (was mis-categorized).
 
 ## [0.2.0] - 2026-07-20
 

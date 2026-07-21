@@ -488,3 +488,204 @@ def test_revision_field_on_run_record_default() -> None:
         repository="r",
     )
     assert rec.revision == 1
+
+
+# ---------------------------------------------------------------------------
+# Cluster E3: state model — phase + ctx + feature_description persistence
+# ---------------------------------------------------------------------------
+
+
+def test_e3_default_phase_ctx_feature_description() -> None:
+    """Fresh RunRecord has ``phase=None``, ``ctx=None``,
+    ``feature_description=None``. Back-compat: existing callers
+    that don't pass E3 fields see no change.
+    """
+    rec = RunRecord(
+        run_id="r1",
+        state=RunState.RUNNING,
+        repository="repo",
+    )
+    assert rec.phase is None
+    assert rec.ctx is None
+    assert rec.feature_description is None
+
+
+def test_e3_to_jsonable_passes_through_primitives() -> None:
+    """``to_jsonable`` returns primitives unchanged."""
+    from seharness.controller.run_ledger import to_jsonable
+
+    assert to_jsonable(42) == 42
+    assert to_jsonable("hello") == "hello"
+    assert to_jsonable(None) is None
+    assert to_jsonable([1, 2, 3]) == [1, 2, 3]
+
+
+def test_e3_to_jsonable_coerces_pydantic_model() -> None:
+    """``to_jsonable`` calls ``model_dump()`` on Pydantic models."""
+    from pydantic import BaseModel
+
+    from seharness.controller.run_ledger import to_jsonable
+
+    class Thing(BaseModel):
+        x: int
+        name: str
+
+    t = Thing(x=42, name="alpha")
+    assert to_jsonable(t) == {"x": 42, "name": "alpha"}
+
+
+def test_e3_to_jsonable_walks_lists_and_dicts() -> None:
+    """``to_jsonable`` recurses into containers so nested Pydantic
+    models are also coerced (a common case: ``ctx.task_results``
+    containing a list of Pydantic task objects).
+    """
+    from pydantic import BaseModel
+
+    from seharness.controller.run_ledger import to_jsonable
+
+    class Item(BaseModel):
+        v: int
+
+    payload = {
+        "items": [Item(v=1), Item(v=2)],
+        "scalar": 7,
+        "nested": {"inner": Item(v=99)},
+    }
+    out = to_jsonable(payload)
+    assert out == {
+        "items": [{"v": 1}, {"v": 2}],
+        "scalar": 7,
+        "nested": {"inner": {"v": 99}},
+    }
+
+
+def test_e3_record_phase_default_revision_bumps() -> None:
+    """``record_phase`` advances revision and persists phase + ctx
+    (state stays RUNNING)."""
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo", feature_description="feat")
+    assert ledger.get("r1").revision == 1
+    result = ledger.record_phase("r1", phase="implementation", ctx={"task_results": [{"id": 1}]})
+    assert result is not None
+    assert result.phase == "implementation"
+    assert result.ctx == {"task_results": [{"id": 1}]}
+    assert result.state == RunState.RUNNING
+    assert result.revision == 2
+
+
+def test_e3_record_phase_empty_phase_raises() -> None:
+    """Defensive: empty phase string is rejected so the ledger
+    never stores a meaningless cursor.
+    """
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    with pytest.raises(ValueError, match="phase"):
+        ledger.record_phase("r1", phase="")
+
+
+def test_e3_record_phase_non_dict_ctx_raises() -> None:
+    """``ctx`` must be a dict (or None). Lists / scalars are rejected
+    so the JSONL envelope shape stays predictable.
+    """
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    with pytest.raises(ValueError, match="ctx"):
+        ledger.record_phase("r1", phase="implementation", ctx=["not", "a", "dict"])
+
+
+def test_e3_record_phase_with_expected_revision_succeeds() -> None:
+    """``record_phase(expected_revision=N)`` honours the E2 CAS check."""
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    # Revision 1 → record_phase advances to 2.
+    result = ledger.record_phase("r1", phase="implementation", expected_revision=1)
+    assert result is not None
+    assert result.revision == 2
+
+
+def test_e3_record_phase_with_stale_expected_revision_raises() -> None:
+    """Stale ``expected_revision`` raises OptimisticConcurrencyError
+    so concurrent writers can't clobber each other.
+    """
+    from seharness.controller.run_ledger import OptimisticConcurrencyError
+
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    ledger.record_phase("r1", phase="implementation")  # → rev 2
+    with pytest.raises(OptimisticConcurrencyError):
+        ledger.record_phase("r1", phase="validation", expected_revision=1)
+    # Ledger state untouched.
+    assert ledger.get("r1").phase == "implementation"
+
+
+def test_e3_mark_complete_preserves_phase_and_ctx() -> None:
+    """``mark_complete`` (an E2 transition) MUST preserve ``phase``
+    + ``ctx`` set by ``record_phase`` so the cursor survives
+    terminal-state transitions (for audit + replay-from-scratch).
+    """
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    ledger.record_phase("r1", phase="completed", ctx={"plan_id": 99})
+    final = ledger.mark_complete("r1")
+    assert final is not None
+    assert final.state == RunState.COMPLETE
+    assert final.phase == "completed"
+    assert final.ctx == {"plan_id": 99}
+
+
+def test_e3_record_start_replaces_phase_preserves_persisted() -> None:
+    """E1's re-keying path (record_start on an existing run_id)
+    must NOT wipe the persisted ``phase`` + ``ctx`` (E3) — a
+    re-record should be a write, not a reset. ``feature_description``
+    follows the E3 semantics: new value wins if supplied,
+    otherwise the prior value is preserved.
+    """
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo", feature_description="first")
+    ledger.record_phase("r1", phase="validation", ctx={"exit_code": 0})
+    # Re-record with no description → prior one preserved; phase + ctx
+    # also preserved (was previously lossy on E1's replace path).
+    again = ledger.record_start("r1", repository="repo")
+    assert again.feature_description == "first"
+    assert again.phase == "validation"
+    assert again.ctx == {"exit_code": 0}
+    assert again.revision == 3  # 1 (start) → 2 (record_phase) → 3 (re-record)
+
+
+def test_e3_record_start_feature_description_override() -> None:
+    """When a re-record supplies a new ``feature_description``, the
+    new value wins. ``phase`` + ``ctx`` are still preserved.
+    """
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo", feature_description="v1")
+    ledger.record_phase("r1", phase="implementation")
+    again = ledger.record_start("r1", repository="repo", feature_description="v2-override")
+    assert again.feature_description == "v2-override"
+    assert again.phase == "implementation"
+
+
+def test_e3_run_record_phase_field_in_asdict_payload() -> None:
+    """``_as_dict`` includes phase + ctx + feature_description when
+    they're set, omits them when None (keeps the on-disk format
+    terse for callers that haven't wired E3).
+    """
+    from seharness.controller.run_ledger import _as_dict
+
+    base = RunRecord(run_id="r1", state=RunState.RUNNING, repository="repo")
+    payload = _as_dict(base)
+    assert "phase" not in payload
+    assert "ctx" not in payload
+    assert "feature_description" not in payload
+
+    full = RunRecord(
+        run_id="r1",
+        state=RunState.RUNNING,
+        repository="repo",
+        phase="implementation",
+        ctx={"x": 1},
+        feature_description="feat",
+    )
+    payload_full = _as_dict(full)
+    assert payload_full["phase"] == "implementation"
+    assert payload_full["ctx"] == {"x": 1}
+    assert payload_full["feature_description"] == "feat"
