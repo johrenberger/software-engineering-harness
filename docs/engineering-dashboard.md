@@ -1,4 +1,4 @@
-# Engineering dashboard (G12)
+# Engineering dashboard
 
 A single-page engineering dashboard for the SEHarness project, served
 via GitHub Pages and updated on every push to `main`. No per-run pages.
@@ -16,17 +16,17 @@ that:
 
 ## Artifacts consumed
 
-The dashboard reads four CI artifacts already produced by our pipeline
-(G1a–G2 + G1c), plus a live fetch from the GitHub Actions REST API:
+The dashboard reads four CI artifacts already produced by our pipeline,
+plus a live fetch from the GitHub Actions REST API:
 
 | Artifact | Source step | Sections it feeds |
 |---|---|---|
-| `junit.xml` | pytest (G1a) | `totals`, `slowest` |
-| `flaky-tests.json` | flaky_plugin (G1c) | `flaky` |
-| `coverage.xml` | pytest --cov (G1a) | `coverage` |
-| `mutmut-junit.xml` | mutation-test (G2) | `mutation` |
+| `junit.xml` | pytest | `totals`, `slowest` |
+| `flaky-tests.json` | `pytest-flake-plugins` | `flaky` |
+| `coverage.xml` | pytest `--cov` | `coverage` |
+| `mutmut-junit.xml` | mutmut | `mutation` |
 | live `actions/runs` API | GH Actions API | `buildHistory` |
-| `dashboard/assets/history.jsonl` | G12b (this slice) | `trends` |
+| `dashboard/assets/history.jsonl` | trendline source | `trends` |
 
 All four artifacts are uploaded by `ci.yml` (30-day retention; see
 `.github/workflows/ci.yml` `upload-test-artifacts` and
@@ -54,7 +54,7 @@ All four artifacts are uploaded by `ci.yml` (30-day retention; see
    appears in the GH job summary, but the live site only updates on
    merge to `main`.
 
-## Files in this slice
+## Files in this layout
 
 ```
 dashboard/
@@ -113,10 +113,11 @@ is present.
 - **Auditability** — a pinned sha256 in the test guards against a
   compromised CDN push.
 
-## G12b: trendlines (this slice)
+## Trendlines
 
-The dashboard shows **point-in-time** metrics. G12b adds per-metric
-trendlines (last 30 runs) so you can spot regressions before they ship.
+The dashboard shows **point-in-time** metrics. The trendlines panel
+adds per-metric trendlines (last 30 runs) so you can spot regressions
+before they ship.
 
 ### How it works
 
@@ -163,10 +164,11 @@ Source). The dashboard.yml artifact IS the source of truth. Committing
 to main would re-trigger ci.yml + dashboard.yml in a loop. The
 fetch-from-live-URL pattern breaks the loop and keeps `main` clean.
 
-## Future slices
+## Future capabilities
 
-- **G12b**: trendlines (per-section sparkline over the last 30 days,
-  sourced from a `dashboard/history.jsonl` artifact).
-- **G12c**: per-PR drilldown (link out from each summary row to the
-  GH Actions run).
-- **G12d**: SLO badges (uptime %, MTBF, MTTR).
+- **Per-PR drilldown**: link out from each summary row to the
+  corresponding PR; needs a `provenance` row in `data.js`.
+- **SLO badges**: uptime %, MTBF, MTTR.
+- **Per-metric sparklines beyond 30 days**: today we keep the last
+  30 rows of `history.jsonl`; long-horizon charts would need a
+  rolled-up monthly aggregate.

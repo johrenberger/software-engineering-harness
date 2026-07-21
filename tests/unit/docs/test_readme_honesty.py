@@ -117,9 +117,11 @@ def test_readme_does_not_claim_pypi_publish_works(readme: str) -> None:
     assert pip_block, "pip install seharness should be in README (it's the install command)"
     caveat_present = bool(
         re.search(
-            r"PyPI.*?(not yet|planned|pending|future)|"
-            r"not.*?published.*?PyPI|"
-            r"G18",
+            r"PyPI.*?(not yet|planned|pending|future|best-effort|skips|conditional)"
+            r"|"
+            r"not.*?published.*?PyPI"
+            r"|"
+            r"requires one-time setup",
             readme,
             re.IGNORECASE,
         )

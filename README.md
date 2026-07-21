@@ -27,26 +27,26 @@ This section is the source of truth for what the harness actually does
 | Deterministic 12-phase pipeline (`feature_request` → `repository_discovery` → `specification` → `planning` → `implementation` → `validation` → `remediation` → `review` → `draft_pr` → `ci` → `ready` → `completed`) | 1874 unit + integration tests pass in <30 s; mutation-killer tests cover phase semantics. |
 | Telegram intake bot with 9 commands (`/start /help /status /runs /feature /pr /resume /cancel /dashboard`) | `tests/unit/telegram/` covers auth + dispatch + stub transport + mutation-killers. |
 | Two-runner model: `StubRunner` (in-memory) and `LocalCommandRunner` (subprocess, with timeout) | `tests/unit/orchestrator/test_runner_coverage.py` (100% coverage). |
-| Sandbox layer (Docker, subprocess, Noop) with threat-modeled isolation | Cluster C slices C1–C5; `examples/controller.sandbox.yaml` shows operator config. |
-| Run traces with secret redaction (`tests/unit/observability/test_redactor.py`) | Cluster E stories E5+E6; `docs/user/traces.md` documents the JSONL format. |
+| Sandbox layer (Docker, subprocess, Noop) with threat-modeled isolation | Threat-modeled isolation profile; `examples/controller.sandbox.yaml` shows operator config; see `docs/user/sandbox.md`. |
+| Run traces with secret redaction (`tests/unit/observability/test_redactor.py`) | `docs/user/traces.md` documents the JSONL format. |
 | Engineering dashboard published via GitHub Pages | `dashboard.yml` workflow runs on every push to `main`; live at <https://johrenberger.github.io/software-engineering-harness/>. |
-| SBOM (CycloneDX 1.6) + Sigstore-signed SLSA L1 provenance on every CI run | G7 cluster, `.github/workflows/ci.yml` produces both artifacts; `docs/releasing.md` documents verification. |
+| SBOM (CycloneDX 1.6) + Sigstore-signed SLSA L1 provenance on every CI run | `.github/workflows/ci.yml` produces both artifacts; `docs/releasing.md` documents verification. |
 | Dependabot for pip + GitHub Actions, weekly | `.github/dependabot.yml` + 16 contract tests. |
 | Coverage gate (`fail_under = 89`) + per-PR diff-cover | `tests/unit/ci/test_g1_lift_coverage_workflow.py` + `tests/unit/ci/test_g1b_diff_cover_workflow.py`. |
 | Mutation gate (`mutmut`) on changed files | `tests/unit/ci/test_g2s2_mutation_gate_workflow.py`; surfaces a per-PR percentage on the PR. |
-| Action SHA pinning across all CI workflows | G4 cluster; `.github/workflows/ci.yml` and `dashboard.yml` use 9 SHA-pinned `uses:` refs. |
-| Python 3.12 + 3.13 matrix CI (G3) | `.github/workflows/ci.yml`; `fail-fast: false`. |
+| Action SHA pinning across all CI workflows | `.github/workflows/ci.yml` and `dashboard.yml` use 9 SHA-pinned `uses:` refs; `tests/unit/ci/test_g4_actions_sha_pinning.py` verifies pins are not stale. |
+| Python 3.12 + 3.13 matrix CI | `.github/workflows/ci.yml`; `fail-fast: false`. |
 | Vulnerability reporting policy | `SECURITY.md`; private reporting via GitHub Security Advisories. |
 
 ### What's partial or planned ⚠️
 
 | Capability | Status | Tracking |
 |---|---|---|
-| **PyPI release** (`pip install seharness`) | **DONE (best-effort).** Soft-publish automation landed in v0.2.0 (PR #55): pushing a `v*` tag always produces a public GitHub Release with wheel + sdist + SBOM + Sigstore-provenance bundle attached. PyPI publish itself logs and skips unless the Trusted Publisher is configured. Install today: `pip install https://github.com/johrenberger/software-engineering-harness/releases/download/v0.2.0/seharness-0.2.0-py3-none-any.whl`. To enable `pip install seharness` on PyPI: one-time Trusted Publisher setup at <https://pypi.org/manage/account/publishing/>. | Cluster G9 (DONE soft-publish) + G18 (P2 if you want `pip install seharness`). |
-| **Cancelled-run resumability** (`/resume <run_id>`, `/cancel <run_id>`) | **DONE in-process + cross-process.** `/cancel <run_id>` flips the per-run `CancellationToken` and kills the subprocess process group (E4a + E4b, shipped in v0.2.0). `/resume <run_id>` picks up from the last completed phase using the persisted `phase` + `ctx` + `feature_description` on `RunRecord` (E3 state model — `Orchestrator.start_run(resume_from_run_id=...)`). The `FileRunLedger` carries the cursor across process restarts; spec-drift between the original and the resume is detected and rejected. | Cluster E stories E4a + E4b (DONE in v0.2.0); E3 state model shipped. |
-| **Human approval gates** between phases | The handler surface exists but the policy layer (which phases require approval, who can approve, what triggers a re-prompt) is design-stage. | Cluster E story E7 (P1). |
-| **Cluster F: provider/credential config** | F1 (provider docs + env-var credential contract) shipped in v0.2.0 (`docs/providers.md` + 13 contract tests). The multi-provider config file format (`config/providers.toml`) and the multi-credential loading flow (file → env → secrets manager) are not finalized. | Cluster F1 (DONE) + F2–F8 (P1). |
-| **Cluster H: hardening** | **DONE.** H1 (rate-limit retry-with-backoff) + H2 (`SuspiciousPayloadFilter` rejecting binary / encoded payloads) shipped before v0.2.0; defended by unit tests in `tests/unit/security/test_payload_filter.py` + `tests/unit/models/test_rate_limit_retry.py`. | Cluster H1 + H2 (DONE in v0.2.0). |
+| **PyPI release** (`pip install seharness`) | **DONE (best-effort).** Soft-publish automation landed in v0.2.0 (PR #55): pushing a `v*` tag always produces a public GitHub Release with wheel + sdist + SBOM + Sigstore-provenance bundle attached. PyPI publish itself logs and skips unless the Trusted Publisher is configured. Install today: `pip install https://github.com/johrenberger/software-engineering-harness/releases/download/v0.2.0/seharness-0.2.0-py3-none-any.whl`. To enable `pip install seharness` on PyPI: one-time Trusted Publisher setup at <https://pypi.org/manage/account/publishing/>. | `docs/releasing.md` + workflow `.github/workflows/release.yml`. |
+| **Cancelled-run resumability** (`/resume <run_id>`, `/cancel <run_id>`) | **DONE in-process + cross-process.** `/cancel <run_id>` flips the per-run `CancellationToken` and kills the subprocess process group (shipped in v0.2.0). `/resume <run_id>` picks up from the last completed phase using the persisted `phase` + `ctx` + `feature_description` on `RunRecord` (`Orchestrator.start_run(resume_from_run_id=...)`). The `FileRunLedger` carries the cursor across process restarts; spec-drift between the original and the resume is detected and rejected. | `src/seharness/controller/run_ledger.py` + tests in `tests/unit/controller/`. |
+| **Human approval gates** between phases | The handler surface exists but the policy layer (which phases require approval, who can approve, what triggers a re-prompt) is design-stage. | `tests/unit/orchestrator/test_wp8_operational_controls.py` (P1 follow-up). |
+| **Multi-provider credential config** | The provider docs + env-var credential contract shipped in v0.2.0 (`docs/providers.md` + 13 contract tests). The multi-provider config file format (`config/providers.toml`) and the multi-credential loading flow (file → env → secrets manager) are not finalized. | `docs/providers.md` (P1 follow-up). |
+| **Hardening: payload filter + rate-limit retry** | **DONE.** Rate-limit retry-with-backoff + `SuspiciousPayloadFilter` rejecting binary / encoded payloads shipped before v0.2.0; defended by unit tests in `tests/unit/security/test_payload_filter.py` + `tests/unit/models/test_rate_limit_retry.py`. | `src/seharness/security/payload_filter.py`. |
 | **Telegram live poll test** | Stub-transport tests cover the contract, but live `python-telegram-bot` polling against a real chat is integration-only and requires a bot token + chat id the CI environment does not have. | `tests/integration/telegram/test_live_poll.py` (P2 follow-up). |
 
 ### What we explicitly are NOT doing ❌
@@ -126,7 +126,7 @@ contract and `tests/unit/telegram/` for dispatch tests):
 |---------|-------------|
 | `/start` | Show help. |
 | `/help` | Show help. |
-| `/status` | Current slice + last green commit. |
+| `/status` | Last green commit on `main` and current orchestrator state. |
 | `/runs` | Recent run ids. |
 | `/feature <repo> <req>` | Start a feature run. |
 | `/pr <branch>` | Check PR readiness. |

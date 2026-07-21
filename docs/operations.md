@@ -6,10 +6,12 @@ release process in `docs/releasing.md` by focusing on **day-to-day operational
 signals**: where CI artifacts land, how to read them, and what to check when
 something breaks.
 
-> **Status:** v0.1 — minimal runbook (cluster I, story I3). Scope is
-> intentionally small: a single page covering CI artifact triage, dashboard
-> observability, and maintenance cadences. Expansion (separate runbook /
-> triage / observability docs) is a follow-up if the surface area grows.
+> **Status:** v0.2 — operator runbook. Scope is intentionally
+> focused: failure recovery, credential rotation, cancellation,
+> stuck workers, CI outages, and provider outages, in addition to
+> CI artifact triage, dashboard observability, and maintenance
+> cadences. Expansion (separate triage / observability docs) is a
+> follow-up if the surface area grows.
 
 ## Audience
 
@@ -125,20 +127,8 @@ looks stale or broken:
 
 ## Triage: a `.openclaw-runs/` directory is huge
 
-The orchestrator writes per-run evidence to `.openclaw-runs/orchestrator/<run_id>/`.
-Each run is bounded (a few MB) but accumulated across many runs they can
-fill the disk.
-
-There is no automatic cleanup yet (see E3 in the honesty matrix of
-`docs/architecture-overview.md`). To reclaim space manually:
-
-```bash
-# Delete runs older than 30 days
-find .openclaw-runs/ -maxdepth 2 -type d -mtime +30 -exec rm -rf {} +
-```
-
-Each run is independently self-contained (all artifacts + trace in one
-directory), so deleting old runs is safe.
+See the **Runbook: a `.openclaw-runs/` directory is huge** section
+below for the recovery procedure.
 
 ## Maintenance cadences
 
@@ -181,6 +171,194 @@ When the runbook above does not resolve the issue within ~30 minutes:
    fastest signal.
 3. If a security issue: follow `SECURITY.md` — do not file a public
    issue.
+
+## Operator runbooks
+
+This section expands the runbook for the failure modes that
+operators see in production but not in unit tests. Each subsection
+names the **symptom**, the **likely cause**, and the **recovery
+steps**.
+
+### Runbook: a phase failed and the run is paused
+
+**Symptom:** `/status` or the dashboard shows a run in
+`BLOCKED` outcome for one phase; the orchestrator logs say
+`PhaseOutcome.BLOCKED` with a `reason`.
+
+**Likely cause:** Either (a) `BudgetExhausted` was raised by
+`BudgetTracker.enforce()` at the phase boundary, or (b) the phase
+handler returned `BLOCKED` because of a deterministic check failure.
+
+**Recovery:**
+
+1. Read `run_dir/trace.jsonl` and look for the last `phase.<name>.end`
+   event. The `attributes.reason` field carries the human-readable
+   reason.
+2. If the cause is a budget, decide:
+   - **Extend the budget**: bump the relevant axis on the next
+     `OrchestratorConfig` and `/resume <run_id>`.
+   - **Cancel**: `/cancel <run_id>` and start a new run with a
+     tighter scope.
+3. If the cause is a deterministic check failure (e.g. validation
+   RED), inspect `run_dir/execution/<task_id>/red/` and fix the
+   underlying test.
+4. `/resume <run_id>` always picks up from the last completed phase.
+   Spec-drift between the original `feature_description` and the
+   resume's `feature_description` is detected and rejected.
+
+### Runbook: a worker is stuck (lease not renewed)
+
+**Symptom:** `LeaseStore` reports `LeaseConflict` on `acquire()`
+for a `run_id` that was running 5 minutes ago; `list_leases()`
+shows the lease is held by a worker that is no longer emitting
+heartbeats.
+
+**Likely cause:** The orchestrator process crashed (OOM, kernel
+panic, container restart) without calling `release()`. The lease
+is still held because `release()` did not run.
+
+**Recovery:**
+
+1. Confirm the worker is dead: `ps -ef | grep <worker_pid>`.
+2. Wait for the lease to expire. `default_lease_ttl_seconds()`
+   defaults to `ORCHESTRATOR_LEASE_TTL_SECONDS` (env override;
+   default 600 s).
+3. Or, force-expire the lease by deleting the lease store file:
+   `<exec_root.parent>/..<exec_root.name>_leases/<run_id>.json`.
+   The next `start_run` call will succeed.
+4. If the run was a long-running model inference, expect
+   token/cost consumption to be wasted; budget enforcement will
+   catch the next phase.
+
+### Runbook: credential rotation
+
+**Symptom:** A secret in `.env` or GitHub Secrets has been
+exposed (or is about to expire) and must be rotated.
+
+**Likely cause:** Scheduled rotation, incident response, or a
+Dependabot PR that bumped a vulnerable library.
+
+**Recovery:**
+
+1. Generate the new credential in the upstream system
+   (GitHub PAT page, OpenAI dashboard, Anthropic console).
+2. Update the secret in GitHub Secrets (`Settings → Secrets and
+   variables → Actions → New repository secret`).
+3. For the local `.env`, update the entry and restart any
+   running orchestrator.
+4. **Audit traces for the old credential**: search for the old
+   token in `.openclaw-runs/orchestrator/*/trace.jsonl`. If it
+   appears, the secret was leaked; treat the trace file as
+   compromised and rotate immediately.
+5. `SecretRedactor` scrubs known patterns at write-time, so a
+   literal token value WILL be replaced with `***REDACTED***`
+   before it hits disk. But if the token format is new and not
+   in the pattern list, add it to
+   `src/seharness/observability/redactor.py:_PATTERNS` and rerun
+   the unit tests.
+
+### Runbook: cancellation did not stop the run
+
+**Symptom:** `/cancel <run_id>` returned success but the run is
+still in `RUNNING` state 5 minutes later.
+
+**Likely cause:** The cancellation token was flipped, but the
+phase handler blocked on a long-running subprocess that did not
+honor the cancellation signal (e.g. a model inference that holds
+the event loop).
+
+**Recovery:**
+
+1. `ps -ef | grep <worker_pid>` and `kill -9 <worker_pid>`. The
+   subprocess process group is killed because the orchestrator
+   uses `os.setsid` and `process_group=True`.
+2. `/status <run_id>` should now show `CANCELLED`.
+3. If the run is stuck in `CANCELLED` (terminal), `/resume
+   <run_id>` will start a fresh lease and pick up from the last
+   completed phase.
+4. If the same hang happens on every run, the offending
+   adapter is blocking the event loop; file an issue with the
+   trace excerpt.
+
+### Runbook: CI outage (GitHub Actions down)
+
+**Symptom:** PRs are not getting CI feedback; `ci.yml` runs are
+not appearing on the PR.
+
+**Likely cause:** GitHub Actions incident; check
+<https://www.githubstatus.com/>.
+
+**Recovery:**
+
+1. If the outage is brief (< 30 min): wait. The orchestrator
+   does not depend on CI; only the **delivery** phase does.
+2. If the outage is longer: switch to local delivery by setting
+   `DELIVERY_BACKEND=local` in `.env`. The orchestrator will
+   create the branch + commit locally instead of pushing a PR.
+   The PR is created manually after GitHub is back.
+3. After GitHub recovers: re-trigger `ci.yml` via
+   `gh workflow run ci.yml --ref <branch>`. The readiness gate
+   will resume checking the PR's check status.
+
+### Runbook: provider outage (OpenAI / Anthropic / Codex down)
+
+**Symptom:** Every run fails in the same phase with `ModelError`
+or `Timeout`; the error message names the provider.
+
+**Likely cause:** Provider-side incident. Check the provider's
+status page.
+
+**Recovery:**
+
+1. If the outage is brief (< 5 min): the rate-limit retry-with-
+   backoff in `ModelRouter` will handle it. Do nothing.
+2. If the outage is longer: switch providers by setting
+   `MODEL_BACKUP=anthropic` (or vice-versa) in `.env`. The
+   `ModelRouter` will fall back to the secondary provider on
+   hard failures.
+3. If both providers are down: cancel in-flight runs
+   (`/cancel <run_id>`) and pause the intake bot by setting
+   `TELEGRAM_INTAKE_ENABLED=false`. Existing runs are safe to
+   resume later — the orchestrator checkpoints `phase` + `ctx`
+   on every phase boundary.
+4. After the outage: re-enable intake and `/resume` the paused
+   runs.
+
+### Runbook: PyPI Trusted Publisher misconfigured
+
+**Symptom:** A `v*` tag was pushed; the release exists on
+GitHub Releases; PyPI shows nothing.
+
+**Likely cause:** The PyPI Trusted Publisher for this project
+is not configured (or was rotated). See `docs/releasing.md`.
+
+**Recovery:**
+
+1. Check the workflow log for `publish-to-pypi` step; it logs
+   `PyPI publish skipped: Trusted Publisher not configured` if
+   this is the cause.
+2. Set up the Trusted Publisher at
+   <https://pypi.org/manage/account/publishing/>. The workflow
+   name is `release.yml`; the environment is `pypi`.
+3. Re-run the workflow on the same tag via `gh workflow run
+   release.yml --ref vX.Y.Z`. The publish step will now succeed.
+
+### Runbook: a `.openclaw-runs/` directory is huge
+
+The orchestrator writes per-run evidence to `.openclaw-runs/orchestrator/<run_id>/`.
+Each run is bounded (a few MB) but accumulated across many runs they can
+fill the disk.
+
+There is no automatic cleanup yet (see the honesty matrix of
+`docs/architecture-overview.md`). To reclaim space manually:
+
+```bash
+# Delete runs older than 30 days
+find .openclaw-runs/ -maxdepth 2 -type d -mtime +30 -exec rm -rf {} +
+```
+
+Each run is independently self-contained (all artifacts + trace in one
+directory), so deleting old runs is safe.
 
 ## See also
 
