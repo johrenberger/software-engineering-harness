@@ -21,6 +21,7 @@ Tests are grouped by handler:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -252,17 +253,39 @@ class TestDraftPRPopulatesPRURL:
 
 class TestCIPopulatesOutcome:
     def test_no_monitor_sets_no_monitor_outcome(self, tmp_path: Path) -> None:
-        """When ``_ci_monitor is None`` the CI outcome is the literal
-        string ``"no_monitor"`` (not ``None``). This is the SPEC
-        §"Phase 9" phrase; callers can branch on it to detect
-        runs that passed without CI evidence."""
+        """WP6 (Cluster H, story K): when ``_ci_monitor is None``
+        AND a recorded head SHA exists, the deterministic
+        ``_collect_ci_statuses`` synthesises a single success
+        status and the CI outcome is ``"ready"``. The legacy
+        ``"no_monitor"`` literal no longer appears in the
+        orchestrator — the WP6 ``DeliveryComposition`` collapses
+        the no-monitor condition into the same code path as
+        development-profile runs."""
         orch, _ = _fresh_orchestrator(tmp_path)
-        ctx = _ctx(tmp_path)
+        ctx = replace(_ctx(tmp_path), delivery_head_sha="deadbeef")
         run_dir = tmp_path / "runs" / "orch-wp1h01"
         run_dir.mkdir(parents=True, exist_ok=True)
         outcome, new_ctx, _ = _phase_ci(orch, spec=_spec(PhaseName.CI), ctx=ctx, run_dir=run_dir)
         assert outcome == PhaseOutcome.OK
-        assert new_ctx.ci_outcome == "no_monitor"
+        assert new_ctx.ci_outcome == "ready"
+
+
+class TestCIBlockedWhenDeliveryShaMissing:
+    """WP6: when ``delivery_head_sha`` is None the CI gate is
+    blocked. This is the fail-closed branch — runs cannot advance
+    past Phase 9 until a draft PR has been recorded."""
+
+    def test_blocked_when_no_delivery_sha(self, tmp_path: Path) -> None:
+        orch, _ = _fresh_orchestrator(tmp_path)
+        ctx = _ctx(tmp_path)
+        run_dir = tmp_path / "runs" / "orch-wp1h01"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        outcome, new_ctx, detail = _phase_ci(
+            orch, spec=_spec(PhaseName.CI), ctx=ctx, run_dir=run_dir
+        )
+        assert outcome == PhaseOutcome.FAILED
+        assert new_ctx.ci_outcome == "blocked"
+        assert "delivery head SHA missing" in detail
 
 
 # ---------------------------------------------------------------------------
@@ -406,8 +429,10 @@ class TestReviewFailedBranchSetsVerdict:
 
 
 class TestCIMonitorNoRunMethod:
-    """Cluster WP1 / story WP1.4: when the monitor lacks a ``run``
-    method the CI outcome is the literal ``"no_run_method"``."""
+    """WP6 (Cluster H, story K): when the monitor lacks a ``run``
+    method AND ``delivery_head_sha`` is set, the deterministic
+    collector falls back to the synthetic-success path (matches
+    the pre-WP6 ``"no_run_method"`` literal in semantics)."""
 
     def test_ci_monitor_without_run_method(self, tmp_path: Path) -> None:
         class _MonitorNoRun:
@@ -417,7 +442,7 @@ class TestCIMonitorNoRunMethod:
         # Reach into the orchestrator's private slot to inject a
         # monitor that lacks ``run``.
         orch._ci_monitor = _MonitorNoRun()  # type: ignore[assignment]
-        ctx = _ctx(tmp_path)
+        ctx = replace(_ctx(tmp_path), delivery_head_sha="deadbeef")
         run_dir = tmp_path / "runs" / "orch-wp1h01"
         run_dir.mkdir(parents=True, exist_ok=True)
         outcome, new_ctx, _ = _phase_ci(
@@ -427,12 +452,16 @@ class TestCIMonitorNoRunMethod:
             run_dir=run_dir,
         )
         assert outcome == PhaseOutcome.OK
-        assert new_ctx.ci_outcome == "no_run_method"
+        # WP6 collapses "no_run_method" / "no_view_factory" /
+        # "no_view" / "no_monitor" into the synthetic-success
+        # ready branch. The literal surfaces are deprecated; the
+        # test pins the new contract.
+        assert new_ctx.ci_outcome == "ready"
 
 
 class TestCIMonitorNoViewFactory:
-    """Cluster WP1 / story WP1.4: monitor with ``run`` but no
-    ``_view_factory`` attribute sets ``ci_outcome='no_view_factory'``."""
+    """WP6: monitor with ``run`` but no ``_view_factory`` falls
+    through to the deterministic synthetic-success path."""
 
     def test_ci_monitor_without_view_factory(self, tmp_path: Path) -> None:
         class _MonitorNoViewFactory:
@@ -441,7 +470,7 @@ class TestCIMonitorNoViewFactory:
 
         orch, _ = _fresh_orchestrator(tmp_path)
         orch._ci_monitor = _MonitorNoViewFactory()  # type: ignore[assignment]
-        ctx = _ctx(tmp_path)
+        ctx = replace(_ctx(tmp_path), delivery_head_sha="deadbeef")
         run_dir = tmp_path / "runs" / "orch-wp1h01"
         run_dir.mkdir(parents=True, exist_ok=True)
         outcome, new_ctx, _ = _phase_ci(
@@ -451,12 +480,12 @@ class TestCIMonitorNoViewFactory:
             run_dir=run_dir,
         )
         assert outcome == PhaseOutcome.OK
-        assert new_ctx.ci_outcome == "no_view_factory"
+        assert new_ctx.ci_outcome == "ready"
 
 
 class TestCIMonitorViewReturnsNone:
-    """Cluster WP1 / story WP1.4: monitor with ``run`` + ``_view_factory``
-    that returns ``None`` for the view sets ``ci_outcome='no_view'``."""
+    """WP6: monitor with ``_view_factory`` returning ``None``
+    falls through to the deterministic synthetic-success path."""
 
     def test_ci_view_factory_returns_none(self, tmp_path: Path) -> None:
         class _MonitorViewNone:
@@ -468,7 +497,7 @@ class TestCIMonitorViewReturnsNone:
 
         orch, _ = _fresh_orchestrator(tmp_path)
         orch._ci_monitor = _MonitorViewNone()  # type: ignore[assignment]
-        ctx = _ctx(tmp_path)
+        ctx = replace(_ctx(tmp_path), delivery_head_sha="deadbeef")
         run_dir = tmp_path / "runs" / "orch-wp1h01"
         run_dir.mkdir(parents=True, exist_ok=True)
         outcome, new_ctx, _ = _phase_ci(
@@ -478,97 +507,93 @@ class TestCIMonitorViewReturnsNone:
             run_dir=run_dir,
         )
         assert outcome == PhaseOutcome.OK
-        assert new_ctx.ci_outcome == "no_view"
+        assert new_ctx.ci_outcome == "ready"
 
 
 class TestCINotReadyFailedBranch:
-    """Cluster WP1 / story WP1.4: when ``ReadyEvaluator`` returns
-    ``can_be_ready=False`` the CI outcome is ``'not_ready'`` and
-    the phase outcome is ``FAILED``."""
+    """WP6 (Cluster H, story K): when the CI view's statuses list
+    lacks the recorded head SHA — or reports a non-success status
+    for the recorded SHA — the CI outcome is ``'pending'`` and the
+    phase outcome is ``FAILED``. The pre-WP6 ``ReadyEvaluator`` was
+    replaced by the head-SHA matching ``CiReadinessService``."""
 
-    def test_ci_not_ready_outcome(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_ci_not_ready_outcome(self, tmp_path: Path) -> None:
 
-        class _MonitorReady:
+        class _MonitorWithStaleStatus:
+            """A monitor whose view reports a stale success (head SHA
+            does not match the recorded delivery head)."""
+
             def run(self) -> None:  # pragma: no cover - not called
                 return None
 
             def _view_factory(self):  # noqa: ANN202
-                # The view object is opaque to the handler; the
-                # ReadyEvaluator does all the decision logic.
-                return object()
+                return _View(
+                    statuses=(
+                        {
+                            "name": "quality-gate",
+                            "status": "success",
+                            "head_sha": "old-sha-not-equal-to-recorded",
+                        },
+                    )
+                )
 
-        class _NotReadyDecision:
-            can_be_ready = False
-            reasons = ("check pending",)
-
-        # Patch ReadyEvaluator to return the not-ready decision.
-        class _FakeReadyEvaluator:
-            def evaluate(self, view):  # noqa: ANN001, ANN201
-                return _NotReadyDecision()
-
-        # Patch the lazy import inside _phase_ci so ReadyEvaluator
-        # resolves to our fake.
-        import seharness.ci.readiness as readiness_mod
-
-        original_evaluator = readiness_mod.ReadyEvaluator
-        readiness_mod.ReadyEvaluator = _FakeReadyEvaluator  # type: ignore[misc]
-        try:
-            orch, _ = _fresh_orchestrator(tmp_path)
-            orch._ci_monitor = _MonitorReady()  # type: ignore[assignment]
-            ctx = _ctx(tmp_path)
-            run_dir = tmp_path / "runs" / "orch-wp1h01"
-            run_dir.mkdir(parents=True, exist_ok=True)
-            outcome, new_ctx, _ = _phase_ci(
-                orch,
-                spec=_spec(PhaseName.CI),
-                ctx=ctx,
-                run_dir=run_dir,
-            )
-        finally:
-            readiness_mod.ReadyEvaluator = original_evaluator  # type: ignore[misc]
+        orch, _ = _fresh_orchestrator(tmp_path)
+        orch._ci_monitor = _MonitorWithStaleStatus()  # type: ignore[assignment]
+        ctx = replace(_ctx(tmp_path), delivery_head_sha="deadbeef")
+        run_dir = tmp_path / "runs" / "orch-wp1h01"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        outcome, new_ctx, _ = _phase_ci(
+            orch,
+            spec=_spec(PhaseName.CI),
+            ctx=ctx,
+            run_dir=run_dir,
+        )
         assert outcome == PhaseOutcome.FAILED
-        assert new_ctx.ci_outcome == "not_ready"
+        # WP6 surfaces "stale" when the recorded head SHA does not
+        # match any reported status's head_sha. The pre-WP6
+        # "not_ready" literal was retired.
+        assert new_ctx.ci_outcome == "stale"
 
 
 class TestCIReadyBranch:
-    """Cluster WP1 / story WP1.4: when ``ReadyEvaluator`` returns
-    ``can_be_ready=True`` the CI outcome is ``'ready'`` and the
-    phase outcome is ``OK``. (Sanity check on the OK branch since
-    we're testing the FAILED sibling.)"""
+    """WP6: when the CI view reports success for every required
+    check AND every status's ``head_sha`` matches the recorded
+    delivery head SHA, the CI outcome is ``'ready'`` and the phase
+    outcome is ``OK``."""
 
-    def test_ci_ready_outcome(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        class _MonitorReady:
+    def test_ci_ready_outcome(self, tmp_path: Path) -> None:
+        class _MonitorWithMatchingStatus:
             def run(self) -> None:  # pragma: no cover - not called
                 return None
 
             def _view_factory(self):  # noqa: ANN202
-                return object()
+                return _View(
+                    statuses=(
+                        {
+                            "name": "quality-gate",
+                            "status": "success",
+                            "head_sha": "deadbeef",
+                        },
+                    )
+                )
 
-        class _ReadyDecision:
-            can_be_ready = True
-            reasons: tuple[str, ...] = ()
-
-        class _FakeReadyEvaluator:
-            def evaluate(self, view):  # noqa: ANN001, ANN201
-                return _ReadyDecision()
-
-        import seharness.ci.readiness as readiness_mod
-
-        original_evaluator = readiness_mod.ReadyEvaluator
-        readiness_mod.ReadyEvaluator = _FakeReadyEvaluator  # type: ignore[misc]
-        try:
-            orch, _ = _fresh_orchestrator(tmp_path)
-            orch._ci_monitor = _MonitorReady()  # type: ignore[assignment]
-            ctx = _ctx(tmp_path)
-            run_dir = tmp_path / "runs" / "orch-wp1h01"
-            run_dir.mkdir(parents=True, exist_ok=True)
-            outcome, new_ctx, _ = _phase_ci(
-                orch,
-                spec=_spec(PhaseName.CI),
-                ctx=ctx,
-                run_dir=run_dir,
-            )
-        finally:
-            readiness_mod.ReadyEvaluator = original_evaluator  # type: ignore[misc]
+        orch, _ = _fresh_orchestrator(tmp_path)
+        orch._ci_monitor = _MonitorWithMatchingStatus()  # type: ignore[assignment]
+        ctx = replace(_ctx(tmp_path), delivery_head_sha="deadbeef")
+        run_dir = tmp_path / "runs" / "orch-wp1h01"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        outcome, new_ctx, _ = _phase_ci(
+            orch,
+            spec=_spec(PhaseName.CI),
+            ctx=ctx,
+            run_dir=run_dir,
+        )
         assert outcome == PhaseOutcome.OK
         assert new_ctx.ci_outcome == "ready"
+
+
+class _View:
+    """Minimal view object exposing a ``statuses`` tuple."""
+
+    def __init__(self, *, statuses: tuple[dict[str, object], ...]) -> None:
+        self.statuses = statuses

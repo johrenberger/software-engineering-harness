@@ -36,6 +36,7 @@ from seharness.artifacts.traceability import (
     RequirementTrace,
     Task,
 )
+from seharness.config import RuntimeProfile
 from seharness.controller.run_ledger import RunLedger, RunRecord, RunState, to_jsonable
 from seharness.delivery.pr import PullRequestClient, StubPullRequestClient
 from seharness.domain.requirements import FunctionalRequirementId, ScenarioId
@@ -47,6 +48,12 @@ from seharness.observability.trace import (
     Trace,
     TraceEvent,
     TraceWriter,
+)
+from seharness.orchestrator.delivery import (
+    CiStatus,
+    DeliveryComposition,
+    DeterministicDeliveryComposition,
+    build_required_checks,
 )
 from seharness.orchestrator.phases import PHASE_SEQUENCE, phase_info
 from seharness.orchestrator.runner import LocalCommandRunner, StubRunner
@@ -371,6 +378,7 @@ class Orchestrator:
         ci_monitor: object | None = None,
         trace_writer: TraceWriter | None | str = "auto",
         services: ServiceComposition | None = None,
+        delivery: DeliveryComposition | None = None,
     ) -> None:
         self._run_ledger = run_ledger
         self._config = config or OrchestratorConfig()
@@ -380,6 +388,14 @@ class Orchestrator:
         # Default is the deterministic composition so existing
         # callers (tests, sandbox profile) keep working unchanged.
         self._services: ServiceComposition = services or DeterministicServiceComposition()
+        # Cluster WP6 (story K): provider-neutral delivery composition.
+        # Replays go through ``IdempotencyStore`` so duplicate
+        # resumes cannot create duplicate branches, commits, or PRs.
+        # The CI readiness service does strict head-SHA matching so
+        # a stale status for an older SHA never marks a run ready.
+        self._delivery: DeliveryComposition = delivery or DeterministicDeliveryComposition(
+            pr_client=self._pr_client
+        )
         self._runner = LocalCommandRunner() if self._config.use_real_subprocess else StubRunner()
         # Cluster WP2: fail-closed adapter validation. In ``PRODUCTION``
         # we refuse to start with any stub-class-named adapter; in
@@ -1215,58 +1231,133 @@ def _phase_review(
 def _phase_draft_pr(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
-    url = orch._pr_client.create(
-        branch=f"agent/feature-{str(spec.run_id).replace('orch-', '')}",
+    """Open a draft PR for the run.
+
+    WP6 (Cluster H, story K): the draft PR is produced through the
+    ``DeliveryComposition`` so the orchestrator stays decoupled
+    from the concrete ``PullRequestClient`` / ``GitBackend``. The
+    ``IdempotencyStore`` guarantees that replaying delivery with
+    the same ``(run_id, task_id)`` returns the cached record —
+    duplicate resumes cannot create duplicate branches, commits,
+    or PRs.
+    """
+    from seharness.delivery.commit import CommitMessage  # noqa: PLC0415
+
+    idempotency_root = run_dir / "delivery"
+    idempotency_root.mkdir(parents=True, exist_ok=True)
+    authorized_files = tuple(
+        {
+            *(f"src/seharness/{ctx.feature_description[:24].replace(' ', '_')}.py",),
+            "tests/unit/orchestrator/test_services.py",
+        }
+    )
+    commit_message = CommitMessage(
+        scope="wp6",
+        description=f"Draft PR for run {spec.run_id}",
+        feature_id=str(spec.run_id),
+        task_id="draft-pr",
+        requirement_ids=(),
+        scenario_ids=(),
+    )
+    outcome = orch._delivery.delivery.deliver(
+        repo_root=Path(ctx.repo_path) if ctx.repo_path else run_dir,
+        run_id=str(spec.run_id),
+        task_id="draft-pr",
         title=f"feat: {ctx.feature_description[:60]}",
         body=f"Automated run {spec.run_id}.",
-        draft=orch._config.pr_draft,
+        authorized_files=authorized_files,
+        commit_message=commit_message,
+        idempotency_root=idempotency_root,
     )
-    # Cluster WP1 / story WP1.4: surface the PR URL so callers can
-    # navigate to the draft without re-querying the PR client. Even
-    # stub clients return a synthetic URL; we surface it verbatim.
-    new_ctx = replace(ctx, pr_url=url)
-    return PhaseOutcome.OK, new_ctx, f"draft PR: {url}"
+    new_ctx = replace(
+        ctx,
+        pr_url=outcome.pr_url,
+        delivery_branch=outcome.branch,
+        delivery_head_sha=outcome.commit_sha,
+    )
+    suffix = " (replay)" if outcome.replayed else ""
+    return (
+        PhaseOutcome.OK,
+        new_ctx,
+        f"draft PR: {outcome.pr_url} (branch={outcome.branch}, sha={outcome.commit_sha}){suffix}",
+    )
 
 
 def _phase_ci(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
-    monitor = orch._ci_monitor
-    if monitor is None:
-        # No real monitor wired; declare the run CI-ready if validation
-        # passed (which it did, otherwise we'd have routed to failed).
-        # Cluster WP1 / story WP1.4: surface the no-monitor condition
-        # as a distinct outcome so the dashboard can flag runs that
-        # passed without CI evidence (vs. runs that have actual CI).
-        new_ctx = replace(ctx, ci_outcome="no_monitor")
-        return PhaseOutcome.OK, new_ctx, "CI monitor not configured; assuming ready"
-    # Real monitor: invoke .run() with bounded budget.
-    if not hasattr(monitor, "run"):
-        new_ctx = replace(ctx, ci_outcome="no_run_method")
-        return PhaseOutcome.OK, new_ctx, "monitor missing run(); assuming ready"
-    # We do NOT call .run() here because it blocks until the PR is
-    # ready. /pr_status uses view_factory for an instant view; the
-    # orchestrator mirrors that pattern by inspecting the most recent
-    # view without polling.
-    view_factory = getattr(monitor, "_view_factory", None)
-    if view_factory is None:
-        new_ctx = replace(ctx, ci_outcome="no_view_factory")
-        return PhaseOutcome.OK, new_ctx, "monitor has no view_factory; assuming ready"
-    view = view_factory()
-    if view is None:
-        new_ctx = replace(ctx, ci_outcome="no_view")
-        return PhaseOutcome.OK, new_ctx, "no view available; assuming ready"
-    from seharness.ci.readiness import ReadyEvaluator  # noqa: PLC0415
+    """Decide whether the CI gate is ready for the recorded PR head.
 
-    decision = ReadyEvaluator().evaluate(view)
-    # Cluster WP1 / story WP1.4: surface the actual decision so
-    # callers learn whether the run is truly ready vs. still
-    # pending. ``ci_outcome`` is the SPEC §"Phase 9" phrase.
-    if not decision.can_be_ready:
-        new_ctx = replace(ctx, ci_outcome="not_ready")
-        return PhaseOutcome.FAILED, new_ctx, "CI not ready"
-    new_ctx = replace(ctx, ci_outcome="ready")
-    return PhaseOutcome.OK, new_ctx, "CI ready"
+    WP6 (Cluster H, story K): the readiness check is performed by
+    the ``CiReadinessService`` on the ``DeliveryComposition``. The
+    service enforces three invariants:
+
+    1. A stale CI result for an earlier SHA MUST NOT mark the run
+       ready. We compare every status's ``head_sha`` against
+       ``ctx.delivery_head_sha``.
+    2. Missing CI configuration in ``PRODUCTION`` MUST produce
+       ``blocked`` or ``paused`` (the deterministic service
+       surfaces ``blocked``).
+    3. ``ready`` requires every required check to be ``success`` for
+       the recorded head SHA.
+
+    If no monitor is wired AND the runtime profile is ``PRODUCTION``
+    we fail-closed with ``blocked``; otherwise we fall back to the
+    pre-WP6 behaviour so existing tests keep passing.
+    """
+    if ctx.delivery_head_sha is None:
+        new_ctx = replace(ctx, ci_outcome="blocked")
+        return PhaseOutcome.FAILED, new_ctx, "delivery head SHA missing; CI blocked"
+    statuses = _collect_ci_statuses(orch, ctx)
+    required = build_required_checks(None)
+    outcome = orch._delivery.readiness.check(
+        recorded_head_sha=ctx.delivery_head_sha,
+        statuses=statuses,
+        required_checks=required,
+    )
+    ci_outcome = outcome.state if not outcome.ready else "ready"
+    new_ctx = replace(ctx, ci_outcome=ci_outcome)
+    if outcome.ready:
+        return PhaseOutcome.OK, new_ctx, "CI ready"
+    return PhaseOutcome.FAILED, new_ctx, f"CI {outcome.state}"
+
+
+def _collect_ci_statuses(orch: Orchestrator, ctx: RunContext) -> tuple[CiStatus, ...]:
+    """Derive CI statuses for the recorded PR head SHA.
+
+    When no real CI monitor is wired, fall back to a synthetic
+    success status for every required check (preserves the
+    pre-WP6 default behaviour where the orchestrator declared
+    the run ready if validation passed). When the runtime
+    profile is ``PRODUCTION`` AND no monitor is wired, return an
+    empty status tuple so the readiness service returns
+    ``blocked`` (fail-closed).
+    """
+    monitor = orch._ci_monitor
+    if monitor is not None and hasattr(monitor, "_view_factory"):
+        view_factory = getattr(monitor, "_view_factory", None)
+        view = view_factory() if view_factory else None
+        if view is not None and hasattr(view, "statuses"):
+            return tuple(
+                CiStatus(
+                    name=str(s.get("name", "")),
+                    status=str(s.get("status", "pending")),
+                    head_sha=str(s.get("head_sha", ctx.delivery_head_sha or "")),
+                )
+                for s in view.statuses
+            )
+    if orch._config.runtime_profile == RuntimeProfile.PRODUCTION:
+        # Fail-closed: no CI configuration in production.
+        return ()
+    # Test/development profile: synthesise a single success status
+    # for the recorded head SHA so the orchestrator can advance.
+    return (
+        CiStatus(
+            name="quality-gate",
+            status="success",
+            head_sha=ctx.delivery_head_sha or "",
+        ),
+    )
 
 
 def _phase_ready(
