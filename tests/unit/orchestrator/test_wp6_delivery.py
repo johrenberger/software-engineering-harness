@@ -59,12 +59,16 @@ def _fresh_orchestrator(
     *,
     runtime_profile: RuntimeProfile = RuntimeProfile.TEST,
     delivery: object | None = None,
+    budgets: object | None = None,
 ) -> Orchestrator:
     ledger = RunLedger()
-    cfg = OrchestratorConfig(
-        execution_root=str(tmp_path / "runs"),
-        runtime_profile=runtime_profile,
-    )
+    cfg_kwargs: dict[str, object] = {
+        "execution_root": str(tmp_path / "runs"),
+        "runtime_profile": runtime_profile,
+    }
+    if budgets is not None:
+        cfg_kwargs["budgets"] = budgets
+    cfg = OrchestratorConfig(**cfg_kwargs)
     return Orchestrator(
         run_ledger=ledger,
         config=cfg,
@@ -255,7 +259,15 @@ class TestProductionFailClosed:
 
     def test_production_profile_without_monitor_routes_to_failed(self, tmp_path: Path) -> None:
         repo = _make_repo(tmp_path)
-        orch = _fresh_orchestrator(tmp_path, runtime_profile=RuntimeProfile.PRODUCTION)
+        # Cluster WP8 (story M): production requires explicit
+        # budgets on at least one axis; satisfy that here.
+        from seharness.orchestrator.budgets import RunBudgets
+
+        orch = _fresh_orchestrator(
+            tmp_path,
+            runtime_profile=RuntimeProfile.PRODUCTION,
+            budgets=RunBudgets(model_tokens=100_000),
+        )
         ctx = _ctx(repo, sha="some-sha")
         run_dir = tmp_path / "runs" / "orch-wp6-prod"
         run_dir.mkdir(parents=True)

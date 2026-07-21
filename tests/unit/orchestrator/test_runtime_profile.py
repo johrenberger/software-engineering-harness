@@ -100,7 +100,14 @@ class TestOrchestratorConfigDefault:
         assert cfg.runtime_profile == RuntimeProfile.DEVELOPMENT
 
     def test_explicit_production_profile_accepted(self) -> None:
-        cfg = OrchestratorConfig(runtime_profile=RuntimeProfile.PRODUCTION)
+        # Cluster WP8 (story M): production requires explicit
+        # budgets on at least one axis.
+        from seharness.orchestrator.budgets import RunBudgets
+
+        cfg = OrchestratorConfig(
+            runtime_profile=RuntimeProfile.PRODUCTION,
+            budgets=RunBudgets(model_tokens=100_000),
+        )
         assert cfg.runtime_profile == RuntimeProfile.PRODUCTION
 
 
