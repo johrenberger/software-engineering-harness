@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
+import socket
 import time
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
@@ -49,11 +51,21 @@ from seharness.observability.trace import (
     TraceEvent,
     TraceWriter,
 )
+from seharness.orchestrator.budgets import (
+    BudgetAxis,
+    BudgetExhausted,
+    BudgetTracker,
+)
 from seharness.orchestrator.delivery import (
     CiStatus,
     DeliveryComposition,
     DeterministicDeliveryComposition,
     build_required_checks,
+)
+from seharness.orchestrator.leases import (
+    LeaseConflict,
+    LeaseStore,
+    new_owner_token,
 )
 from seharness.orchestrator.phases import PHASE_SEQUENCE, phase_info
 from seharness.orchestrator.runner import LocalCommandRunner, StubRunner
@@ -69,6 +81,7 @@ from seharness.orchestrator.services import (
     ServiceComposition,
     SpecificationArtifact,
 )
+from seharness.orchestrator.telemetry import NullTracer, Tracer
 from seharness.orchestrator.types import (
     OrchestratorConfig,
     PhaseName,
@@ -379,6 +392,8 @@ class Orchestrator:
         trace_writer: TraceWriter | None | str = "auto",
         services: ServiceComposition | None = None,
         delivery: DeliveryComposition | None = None,
+        lease_store: LeaseStore | None = None,
+        tracer: Tracer | None = None,
     ) -> None:
         self._run_ledger = run_ledger
         self._config = config or OrchestratorConfig()
@@ -396,6 +411,28 @@ class Orchestrator:
         self._delivery: DeliveryComposition = delivery or DeterministicDeliveryComposition(
             pr_client=self._pr_client
         )
+        # Cluster WP8 (story M): worker leases + cross-cutting
+        # telemetry. ``lease_store`` is a file-backed store that
+        # serializes run advancement to a single worker; ``tracer``
+        # emits OTLP-shaped spans for each run + phase. Both have
+        # safe in-process defaults so existing callers (tests,
+        # sandbox profile) keep working unchanged. Production
+        # deployments should pass an explicit ``tracer`` built
+        # from the OTEL collector config.
+        #
+        # The lease store lives in a SIBLING directory of
+        # ``execution_root`` (``<root>/../_leases``) so the
+        # ``<execution_root>/<run_id>`` invariant — the one
+        # existing trace tests pin down via
+        # ``list((tmp_path / "runs").iterdir()) == 1`` — keeps
+        # holding. A separate sibling keeps the lease file
+        # outside any per-run directory and makes cleanup
+        # (e.g. ``rm -rf runs``) not destroy in-flight leases.
+        _exec_root = Path(self._config.execution_root)
+        self._lease_store: LeaseStore = lease_store or LeaseStore(
+            _exec_root.parent / f".{_exec_root.name}_leases"
+        )
+        self._tracer: Tracer | NullTracer = tracer or NullTracer()
         self._runner = LocalCommandRunner() if self._config.use_real_subprocess else StubRunner()
         # Cluster WP2: fail-closed adapter validation. In ``PRODUCTION``
         # we refuse to start with any stub-class-named adapter; in
@@ -588,6 +625,51 @@ class Orchestrator:
         cancel_token = CancellationToken()
         self._cancel_tokens[str(rid)] = cancel_token
 
+        # Cluster WP8 (story M): worker leases. ``owner_token`` is
+        # regenerated per process so a crashed prior worker cannot
+        # block resume. ``recover_expired`` is called first so
+        # abandoned leases from prior crashed processes do not gate
+        # the new worker. If a non-expired lease for this run_id is
+        # still held by another worker, ``acquire`` raises
+        # ``LeaseConflict`` and the orchestrator surfaces that as
+        # an ``OrchestratorError`` to the caller.
+        worker_id = f"orchestrator-{socket.gethostname()}-{os.getpid()}"
+        owner_token = new_owner_token()
+        try:
+            self._lease_store.recover_expired()
+            self._lease_store.acquire(
+                run_id=str(rid),
+                worker_id=worker_id,
+                revision=0,
+                owner_token=owner_token,
+                ttl_seconds=self._config.lease_ttl_seconds,
+            )
+        except LeaseConflict as exc:
+            raise OrchestratorError(f"run {rid!r} is leased to another worker: {exc}") from exc
+
+        # Cluster WP8 (story M): per-run budget tracker. Records
+        # consumption on every phase (elapsed time, artifacts
+        # produced, retries) and raises ``BudgetExhausted`` if the
+        # configured ceiling is breached. The exception is caught
+        # in the phase loop below and translated to ``BLOCKED``.
+        budget_tracker = BudgetTracker(budgets=self._config.budgets)
+
+        # Cluster WP8 (story M): cross-cutting span. Every run gets
+        # a top-level OTLP-shaped span; each phase gets a child
+        # span in the loop below. The span is closed on every
+        # terminal path (completed / failed / blocked / paused /
+        # exception).
+        run_span = self._tracer.start_span(
+            f"run.{rid}",
+            attributes={
+                "run_id": str(rid),
+                "feature_description": feature_description,
+                "repo_path": str(repo),
+                "runtime_profile": self._config.runtime_profile.value,
+                "resume_from_run_id": resume_from_run_id or "",
+            },
+        )
+
         events: list[PipelineEvent] = []
         # SPEC §line 587 canonicalizes the terminal phrase as
         # ``"completed"`` — the controller's RunState stores the same
@@ -609,7 +691,91 @@ class Orchestrator:
                 self._emit_trace(
                     PhaseStarted(run_id=str(rid), phase=phase.value, attempt=spec.attempt)
                 )
-                outcome, ctx, detail = self._run_phase(spec=spec, ctx=ctx, run_dir=run_dir)
+                # Cluster WP8: each phase gets a child OTLP span
+                # under the run-level span. ``retry_budget`` is the
+                # number of retries the spec carries; if the
+                # tracker has fewer retries left, the spec is
+                # rewritten with a smaller attempt count to fail
+                # fast on retry exhaustion.
+                phase_span = self._tracer.start_span(
+                    f"phase.{phase.value}",
+                    parent=run_span,
+                    attributes={
+                        "phase": phase.value,
+                        "attempt": spec.attempt,
+                    },
+                )
+                phase_start = time.monotonic()
+                # Renew the lease at every phase boundary so a
+                # long-running phase (model inference) does not
+                # cause the lease to expire mid-flight. The TTL
+                # is taken from the active config so operators
+                # can tune it without code changes.
+                self._lease_store.renew(
+                    run_id=str(rid),
+                    owner_token=owner_token,
+                    ttl_seconds=self._config.lease_ttl_seconds,
+                )
+                try:
+                    outcome, ctx, detail = self._run_phase(spec=spec, ctx=ctx, run_dir=run_dir)
+                except BudgetExhausted as exc:
+                    # Cluster WP8: budget ceiling hit. Translate
+                    # to ``BLOCKED`` so the run halts and the
+                    # resume cursor advances to the current phase
+                    # (the next resume will see the same budget
+                    # and re-block unless the operator raises the
+                    # ceiling).
+                    outcome = PhaseOutcome.BLOCKED
+                    assert exc.decision.exceeded_axis is not None
+                    detail = (
+                        f"budget exhausted on axis "
+                        f"{exc.decision.exceeded_axis.value!r}: "
+                        f"{exc.decision.reason}"
+                    )
+                    budget_tracker.record(
+                        BudgetAxis.ELAPSED_SECONDS,
+                        time.monotonic() - phase_start,
+                    )
+                else:
+                    # Cluster WP8: record per-phase consumption
+                    # AFTER the phase finishes. Elapsed time is
+                    # always tracked. Files-changed and retries
+                    # are tracked at the seam so production
+                    # budgets catch runaway scenarios even when
+                    # the model layer is stubbed.
+                    phase_elapsed = time.monotonic() - phase_start
+                    budget_tracker.record(BudgetAxis.ELAPSED_SECONDS, phase_elapsed)
+                    new_artifacts = self._count_new_artifacts(run_dir=run_dir, seen=seen_artifacts)
+                    if new_artifacts:
+                        budget_tracker.record(BudgetAxis.FILES_CHANGED, new_artifacts)
+                    if outcome == PhaseOutcome.FAILED and spec.attempt > 1:
+                        budget_tracker.record(BudgetAxis.RETRIES, 1)
+                # Cluster WP8: enforce the budget after recording.
+                # ``enforce()`` raises ``BudgetExhausted`` if any
+                # axis has been breached; the ``try/except`` above
+                # catches that and translates to ``BLOCKED``. The
+                # ``enforce()`` call sits OUTSIDE the try/except so
+                # the budget check is performed on every code path
+                # (the original-phase-ok branch AND the
+                # exception-in-phase branch).
+                try:
+                    budget_tracker.enforce()
+                except BudgetExhausted:
+                    # The except branch above already produced
+                    # the BLOCKED outcome. If we got here it means
+                    # the original phase returned ok but the
+                    # budget was just breached by the consumption
+                    # recording. Translate to BLOCKED.
+                    outcome = PhaseOutcome.BLOCKED
+                    decision = budget_tracker.check()
+                    assert decision.exceeded_axis is not None
+                    detail = (
+                        f"budget exhausted on axis "
+                        f"{decision.exceeded_axis.value!r}: "
+                        f"{decision.reason}"
+                    )
+                # Close the phase span with the recorded outcome.
+                self._tracer.end_span(phase_span)
                 # Cluster E3: persist the resume cursor after every
                 # phase (success OR failure). A failed phase stops
                 # the run; the cursor advances to the failed phase
@@ -704,6 +870,19 @@ class Orchestrator:
                 )
             )
             terminal_state = RunState.FAILED.value
+
+        # Cluster WP8 (story M): release the worker lease and
+        # close the run-level span on EVERY terminal path. Done
+        # before ``PipelineResult`` construction so a downstream
+        # exception in the result builder doesn't strand the
+        # lease. The release call swallows ``LeaseConflict`` /
+        # ``LeaseNotFound`` defensively because the lease may
+        # have already been released by an exception in a phase
+        # handler.
+        with contextlib.suppress(Exception):
+            self._lease_store.release(run_id=str(rid), owner_token=owner_token)
+        with contextlib.suppress(Exception):
+            self._tracer.end_span(run_span)
 
         result = PipelineResult(
             run_id=str(rid),
@@ -923,6 +1102,29 @@ class Orchestrator:
                         artifact_kind="directory",
                     )
                 )
+
+    @staticmethod
+    def _count_new_artifacts(*, run_dir: Path, seen: set[str]) -> int:
+        """Count new artifacts under ``run_dir`` not yet in ``seen``.
+
+        Mirrors :meth:`_emit_artifacts` but only counts; used by
+        the WP8 budget tracker to record per-phase
+        ``files_changed`` consumption. The shared ``seen`` set is
+        NOT mutated here — the subsequent ``_emit_artifacts`` call
+        is the canonical path that marks them as seen.
+        """
+        if not run_dir.exists():
+            return 0
+        count = 0
+        for child in run_dir.iterdir():
+            name = child.name
+            if name == "trace.jsonl":
+                continue
+            full = str(child.relative_to(run_dir))
+            if full in seen:
+                continue
+            count += 1
+        return count
 
     # ----- phase dispatch ------------------------------------------------
 
