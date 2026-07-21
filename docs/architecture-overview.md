@@ -1,8 +1,11 @@
 # Architecture Overview — Service Graph
 
-> **Status:** Alpha (v0.1.0). The architecture is **intentionally
+> **Status:** Alpha (v0.2.0). The architecture is **intentionally
 > layered but not yet complete** — see the **"What is NOT yet wired"
-> matrix** at the bottom.
+> matrix** at the bottom. The version was bumped from v0.1.0 to v0.2.0
+> with the orchestrator state-model + cross-process cancel/resume work
+> (PRs #53–#58); see `docs/evidence/tier-1-retrospective.md` for the
+> release history.
 
 This document is the system-level map for the `seharness` package.
 For the orchestrator internals, see [`docs/architecture.md`](architecture.md).
