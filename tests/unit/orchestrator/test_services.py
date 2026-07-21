@@ -53,6 +53,7 @@ from seharness.orchestrator.services import (
     ImplementationOutcome,
     ImplementationService,
     ModelBackedImplementationService,
+    ModelBackedPlanningService,
     ModelBackedRemediationService,
     ModelBackedReviewService,
     ModelBackedServiceComposition,
@@ -434,10 +435,21 @@ class TestModelBackedSpecificationService:
     ) -> None:
         router = _fake_router()
 
+        # Cluster N PR4 (spec-plan): the model's parsed payload
+        # must satisfy SpecificationSchema — the discovered
+        # repo profile name, repository instructions, and
+        # validation commands are required, and unknown commands
+        # are rejected. The test fixture mirrors what a
+        # schema-compliant live MiniMax call would return.
         def _fake_invoke(request: ModelRequest) -> ModelResponse:
             return _ok_response(
                 provider=ProviderName.MINIMAX,
-                parsed={"spec_version": 1, "description": "x"},
+                parsed={
+                    "discovered_repo_profile_name": "software-engineering-harness",
+                    "repository_instructions": ("AGENTS.md",),
+                    "validation_commands": ("test", "lint"),
+                    "description": "x",
+                },
             )
 
         monkeypatch.setattr(router, "invoke", _fake_invoke)
@@ -453,6 +465,12 @@ class TestModelBackedSpecificationService:
         payload = json.loads(spec_path.read_text())
         assert payload["provider"] == "minimax"
         assert payload["model"] == "test-model"
+        # Cluster N PR4: the schema-validated fields are
+        # persisted in the artifact too, so downstream phases
+        # can read them without re-parsing.
+        assert payload["discovered_repo_profile_name"] == ("software-engineering-harness")
+        assert payload["repository_instructions"] == ["AGENTS.md"]
+        assert payload["validation_commands"] == ["test", "lint"]
         assert service.last_evidence is not None
         assert service.last_evidence.role == RoutingRole.PLANNING
 
@@ -840,3 +858,183 @@ class TestVerdictToLegacyMapping:
 
         v = ReviewVerdict(status="changes_requested", approval=False, summary="fix")
         assert _verdict_to_legacy(v) == "request_changes"
+
+
+# ---------------------------------------------------------------------------
+# Cluster N PR4 — ModelBackedPlanningService
+# ---------------------------------------------------------------------------
+
+
+class TestModelBackedPlanningService:
+    """Cluster N PR4 (spec-plan): ``ModelBackedPlanningService``
+    validates the model's parsed output against ``PlanSchema`` and
+    surfaces ``error_kind=malformed_output`` on schema/policy
+    mismatch. The ``build()`` method delegates to the
+    deterministic ``_PlanBuilder.build`` for the rich Plan shape
+    (requirement traces, validation commands from discovery)."""
+
+    def test_validates_plan_schema_and_passes_through(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        router = _fake_router()
+
+        def _fake_invoke(request: ModelRequest) -> ModelResponse:
+            return _ok_response(
+                provider=ProviderName.MINIMAX,
+                parsed={
+                    "plan_id": "plan-spec-plan",
+                    "tasks": [
+                        {
+                            "task_id": "t1",
+                            "task_objective": "add readiness gate",
+                            "allowed_paths": ["src/"],
+                            "order_index": 0,
+                        },
+                    ],
+                },
+            )
+
+        monkeypatch.setattr(router, "invoke", _fake_invoke)
+        service = ModelBackedPlanningService(
+            router=router,
+            policy_allowed_paths=("src/", "tests/"),
+        )
+        plan = service.build(ctx=_ctx(tmp_path))
+        # The validated PlanSchema is cached on the service.
+        assert service.last_plan is not None
+        assert service.last_plan.plan_id == "plan-spec-plan"
+        # The build() method returns the rich Plan from the
+        # deterministic builder (requirement traces, validation
+        # commands). Cluster N keeps the seam narrow; PR #77
+        # wires model-produced tasks into the rich Plan shape.
+        assert plan.plan_id.startswith("plan-")
+        assert len(plan.tasks) >= 1
+
+    def test_rejects_plan_with_unknown_validation_command_via_police(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Even though the schema rejects unknown commands at the
+        spec layer, the plan layer additionally enforces the
+        policy allowed_paths. A task whose ``allowed_paths``
+        includes an out-of-policy entry is rejected."""
+
+        router = _fake_router()
+
+        def _fake_invoke(request: ModelRequest) -> ModelResponse:
+            return _ok_response(
+                provider=ProviderName.MINIMAX,
+                parsed={
+                    "plan_id": "plan-bad",
+                    "tasks": [
+                        {
+                            "task_id": "t1",
+                            "task_objective": "deploy",
+                            "allowed_paths": ["deploy/"],  # outside policy
+                            "order_index": 0,
+                        },
+                    ],
+                },
+            )
+
+        monkeypatch.setattr(router, "invoke", _fake_invoke)
+        service = ModelBackedPlanningService(
+            router=router,
+            policy_allowed_paths=("src/", "tests/"),
+        )
+        with pytest.raises(RuntimeError, match="plan malformed"):
+            service.build(ctx=_ctx(tmp_path))
+        assert service.last_evidence is not None
+        assert service.last_evidence.error_kind == "malformed_output"
+
+    def test_rejects_malformed_plan_payload(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A plan payload that fails ``PlanSchema`` validation
+        surfaces ``malformed_output`` per cluster N error
+        translation."""
+
+        router = _fake_router()
+
+        def _fake_invoke(request: ModelRequest) -> ModelResponse:
+            return _ok_response(
+                provider=ProviderName.MINIMAX,
+                parsed={"plan_id": "plan-x"},  # missing tasks
+            )
+
+        monkeypatch.setattr(router, "invoke", _fake_invoke)
+        service = ModelBackedPlanningService(
+            router=router,
+            policy_allowed_paths=("src/", "tests/"),
+        )
+        with pytest.raises(RuntimeError, match="plan malformed"):
+            service.build(ctx=_ctx(tmp_path))
+        assert service.last_evidence is not None
+        assert service.last_evidence.error_kind == "malformed_output"
+
+    def test_rejects_provider_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Provider-level errors (timeout, 5xx) are NOT
+        schema-mismatch errors; they propagate as-is with their
+        original error_kind."""
+
+        router = _fake_router()
+
+        def _fake_invoke(request: ModelRequest) -> ModelResponse:
+            return _err_response(kind="timeout", message="provider timed out")
+
+        monkeypatch.setattr(router, "invoke", _fake_invoke)
+        service = ModelBackedPlanningService(
+            router=router,
+            policy_allowed_paths=("src/", "tests/"),
+        )
+        with pytest.raises(RuntimeError, match="timeout"):
+            service.build(ctx=_ctx(tmp_path))
+        assert service.last_evidence is not None
+        assert service.last_evidence.error_kind == "timeout"
+
+
+class TestSpecificationServiceRaisesMalformedOutput:
+    """Cluster N PR4: ``ModelBackedSpecificationService.produce``
+    surfaces ``malformed_output`` on schema mismatch (per the
+    cluster-N error translation map)."""
+
+    def test_raises_malformed_output_on_schema_mismatch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        router = _fake_router()
+
+        def _fake_invoke(request: ModelRequest) -> ModelResponse:
+            # Missing ``discovered_repo_profile_name``; schema
+            # should reject.
+            return _ok_response(
+                provider=ProviderName.MINIMAX,
+                parsed={"description": "x"},
+            )
+
+        monkeypatch.setattr(router, "invoke", _fake_invoke)
+        service = ModelBackedSpecificationService(router=router)
+        with pytest.raises(RuntimeError, match="specification malformed"):
+            service.produce(ctx=_ctx(tmp_path), run_dir=tmp_path / "x")
+        assert service.last_evidence is not None
+        assert service.last_evidence.error_kind == "malformed_output"
+
+    def test_raises_malformed_output_on_unknown_command(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        router = _fake_router()
+
+        def _fake_invoke(request: ModelRequest) -> ModelResponse:
+            return _ok_response(
+                provider=ProviderName.MINIMAX,
+                parsed={
+                    "discovered_repo_profile_name": "x",
+                    "description": "y",
+                    "validation_commands": ("rm -rf /",),  # unknown
+                },
+            )
+
+        monkeypatch.setattr(router, "invoke", _fake_invoke)
+        service = ModelBackedSpecificationService(router=router)
+        with pytest.raises(RuntimeError, match="specification malformed"):
+            service.produce(ctx=_ctx(tmp_path), run_dir=tmp_path / "x")
+        assert service.last_evidence is not None
+        assert service.last_evidence.error_kind == "malformed_output"
