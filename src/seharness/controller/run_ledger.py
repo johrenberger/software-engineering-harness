@@ -93,6 +93,31 @@ def _utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
+def to_jsonable(value: Any) -> Any:
+    """Coerce a value into a JSON-serializable form.
+
+    Cluster E3: ``RunRecord.ctx`` MUST round-trip through JSON
+    (the FileRunLedger persists it on the JSONL envelope). This
+    helper handles the common case where ctx contains a Pydantic
+    model (or a list / dict of them). Other values pass through
+    unchanged — if a value isn't JSON-serializable the downstream
+    ``json.dumps`` will raise with a clear error.
+
+    Recognised transformations:
+    - ``pydantic.BaseModel`` (and subclasses) → ``model_dump()``
+    - ``list`` / ``tuple`` / ``set`` → recursively coerced
+    - ``dict`` → recursively coerced (keys must be strings)
+    - Anything else: returned as-is.
+    """
+    if isinstance(value, BaseModel):
+        return value.model_dump()
+    if isinstance(value, (list, tuple, set)):
+        return [to_jsonable(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): to_jsonable(v) for k, v in value.items()}
+    return value
+
+
 class RunRecord(BaseModel):
     """A single run record. Frozen.
 
@@ -107,6 +132,16 @@ class RunRecord(BaseModel):
     ``record_start`` ``run_id`` replacement (preserving the E1
     re-keying contract: a caller who read the record at revision N
     must CAS against N+1 after a re-key). New records start at 1.
+
+    Cluster E3 (story E3): carries ``phase`` + ``ctx`` so a run can
+    be resumed from its last successful phase across a process
+    restart. ``phase`` is the name of the last completed phase (or
+    ``None`` for a fresh run). ``ctx`` is the JSON-serializable
+    orchestrator context accumulated by phase handlers; handlers
+    must call :func:`to_jsonable` to coerce Pydantic models before
+    assigning to ``ctx``. ``feature_description`` is also persisted
+    so the resume seam can detect spec drift between the original
+    run and the resume request.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -117,6 +152,10 @@ class RunRecord(BaseModel):
     started_at: str = Field(default_factory=lambda: _utcnow().isoformat())
     idempotency_key: str = Field(default="")
     revision: int = Field(default=1, ge=1)
+    # Cluster E3: persistence for cross-process resume.
+    phase: str | None = Field(default=None)
+    ctx: dict[str, Any] | None = Field(default=None)
+    feature_description: str | None = Field(default=None)
 
 
 class RunLedger:
@@ -166,7 +205,14 @@ class RunLedger:
     def __contains__(self, run_id: object) -> bool:
         return isinstance(run_id, str) and run_id in self._records
 
-    def record_start(self, run_id: str, *, repository: str, idempotency_key: str = "") -> RunRecord:
+    def record_start(
+        self,
+        run_id: str,
+        *,
+        repository: str,
+        idempotency_key: str = "",
+        feature_description: str | None = None,
+    ) -> RunRecord:
         if not run_id:
             raise ValueError("run_id must be non-empty")
         if not repository:
@@ -191,6 +237,7 @@ class RunLedger:
             state=RunState.RUNNING,
             repository=repository,
             idempotency_key=idempotency_key,
+            feature_description=feature_description,
             # New record: revision 1. On replace (same run_id) the
             # bumped revision is applied below so the E1 re-keying
             # path stays visible to holders of the old revision.
@@ -204,7 +251,20 @@ class RunLedger:
             old = self._records[run_id]
             if old.idempotency_key and old.idempotency_key != idempotency_key:
                 self._key_index.pop(old.idempotency_key, None)
-            rec = rec.model_copy(update={"revision": old.revision + 1})
+            # Cluster E3: also carry over phase + ctx so a re-record
+            # of the same run_id doesn't accidentally wipe the resume
+            # state (E1's replace path was previously lossy on those
+            # fields — we fix that here).
+            rec = rec.model_copy(
+                update={
+                    "revision": old.revision + 1,
+                    "phase": old.phase,
+                    "ctx": old.ctx,
+                    "feature_description": feature_description
+                    if feature_description is not None
+                    else old.feature_description,
+                }
+            )
             self._records[run_id] = rec
         else:
             self._records[run_id] = rec
@@ -213,6 +273,43 @@ class RunLedger:
             self._key_index[idempotency_key] = run_id
         self._evict()
         return rec
+
+    # ----- Cluster E3: phase + ctx persistence ----------------------
+    #
+    # ``record_phase`` lets the orchestrator persist the resume cursor
+    # (last-completed phase + accumulated context) in the same atomic
+    # step as the state transition. ``ctx`` MUST be JSON-serializable
+    # — callers should pass ``to_jsonable(ctx)`` if the dict contains
+    # Pydantic models. The state stays ``RUNNING``; use ``mark_paused``
+    # or ``mark_blocked`` to halt.
+
+    def record_phase(
+        self,
+        run_id: str,
+        *,
+        phase: str,
+        ctx: dict[str, Any] | None = None,
+        expected_revision: int | None = None,
+    ) -> RunRecord | None:
+        """Cluster E3: record the last-completed phase + updated ctx.
+
+        ``phase`` is the name of the phase that just finished (or is
+        currently in progress). ``ctx`` is the orchestrator context
+        accumulated so far (JSON-serializable). The record's state
+        stays ``RUNNING``; revision bumps on every call so concurrent
+        callers see the change.
+        """
+        if not phase:
+            raise ValueError("phase must be non-empty")
+        if ctx is not None and not isinstance(ctx, dict):
+            raise ValueError("ctx must be a dict (or None)")
+        return self._update_state(
+            run_id,
+            RunState.RUNNING,
+            expected_revision=expected_revision,
+            phase=phase,
+            ctx=ctx,
+        )
 
     # ----- Cluster E2: optimistic concurrency ----------------------
     #
@@ -317,7 +414,17 @@ class RunLedger:
         *,
         expected_revision: int | None = None,
         expected_state: RunState | None = None,
+        phase: str | None = None,
+        ctx: dict[str, Any] | None = None,
     ) -> RunRecord | None:
+        """Internal: apply a state transition with E2 CAS + E3 phase/ctx.
+
+        The ``phase`` and ``ctx`` kwargs let callers (typically
+        :meth:`record_phase`) update the resume cursor in the same
+        atomic step as the state transition. When ``None`` the
+        previous values are preserved (back-compat for callers that
+        don't care about E3 persistence).
+        """
         rec = self._records.get(run_id)
         if rec is None:
             return None
@@ -347,6 +454,13 @@ class RunLedger:
             started_at=rec.started_at,
             idempotency_key=rec.idempotency_key,
             revision=rec.revision + 1,
+            # Cluster E3: carry forward + apply new values. ``phase``
+            # and ``ctx`` default to the previous values when the
+            # caller doesn't override them, so partial updates don't
+            # wipe resume state.
+            phase=phase if phase is not None else rec.phase,
+            ctx=ctx if ctx is not None else rec.ctx,
+            feature_description=rec.feature_description,
         )
         self._records[run_id] = updated
         return updated
@@ -361,9 +475,22 @@ class RunLedger:
 
 
 def _as_dict(record: RunRecord) -> dict[str, Any]:
-    return {
+    """Serialise a RunRecord to a JSON-ready dict.
+
+    Cluster E3: ``phase`` + ``ctx`` + ``feature_description`` are
+    included when set, omitted otherwise (keeps the on-disk format
+    terse for callers that haven't wired E3 yet).
+    """
+    payload: dict[str, Any] = {
         "run_id": record.run_id,
         "state": record.state.value,
         "repository": record.repository,
         "started_at": record.started_at,
     }
+    if record.feature_description is not None:
+        payload["feature_description"] = record.feature_description
+    if record.phase is not None:
+        payload["phase"] = record.phase
+    if record.ctx is not None:
+        payload["ctx"] = record.ctx
+    return payload

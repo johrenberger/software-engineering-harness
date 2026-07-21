@@ -43,7 +43,7 @@ This section is the source of truth for what the harness actually does
 | Capability | Status | Tracking |
 |---|---|---|
 | **PyPI release** (`pip install seharness`) | **DONE (best-effort).** Soft-publish automation landed in v0.2.0 (PR #55): pushing a `v*` tag always produces a public GitHub Release with wheel + sdist + SBOM + Sigstore-provenance bundle attached. PyPI publish itself logs and skips unless the Trusted Publisher is configured. Install today: `pip install https://github.com/johrenberger/software-engineering-harness/releases/download/v0.2.0/seharness-0.2.0-py3-none-any.whl`. To enable `pip install seharness` on PyPI: one-time Trusted Publisher setup at <https://pypi.org/manage/account/publishing/>. | Cluster G9 (DONE soft-publish) + G18 (P2 if you want `pip install seharness`). |
-| **Cancelled-run resumability** (`/resume <run_id>`, `/cancel <run_id>`) | `/cancel <run_id>` works **in-process** (Cluster E stories E4a + E4b shipped in v0.2.0: per-run `CancellationToken` registry in `Orchestrator`; `LocalCommandRunner` propagates SIGTERM/SIGKILL via process group). Cross-process cancel-resume (the `/resume <run_id>` Telegram handler that can pick up a cancelled run after a process restart) is the next pick — needs the orchestrator state model to persist to durable storage. **In progress: E3 (state model).** | Cluster E stories E4a + E4b (DONE in v0.2.0); E3 (state model) is the open follow-up. |
+| **Cancelled-run resumability** (`/resume <run_id>`, `/cancel <run_id>`) | **DONE in-process + cross-process.** `/cancel <run_id>` flips the per-run `CancellationToken` and kills the subprocess process group (E4a + E4b, shipped in v0.2.0). `/resume <run_id>` picks up from the last completed phase using the persisted `phase` + `ctx` + `feature_description` on `RunRecord` (E3 state model — `Orchestrator.start_run(resume_from_run_id=...)`). The `FileRunLedger` carries the cursor across process restarts; spec-drift between the original and the resume is detected and rejected. | Cluster E stories E4a + E4b (DONE in v0.2.0); E3 state model shipped. |
 | **Human approval gates** between phases | The handler surface exists but the policy layer (which phases require approval, who can approve, what triggers a re-prompt) is design-stage. | Cluster E story E7 (P1). |
 | **Cluster F: provider/credential config** | F1 (provider docs + env-var credential contract) shipped in v0.2.0 (`docs/providers.md` + 13 contract tests). The multi-provider config file format (`config/providers.toml`) and the multi-credential loading flow (file → env → secrets manager) are not finalized. | Cluster F1 (DONE) + F2–F8 (P1). |
 | **Cluster H: hardening** | **DONE.** H1 (rate-limit retry-with-backoff) + H2 (`SuspiciousPayloadFilter` rejecting binary / encoded payloads) shipped before v0.2.0; defended by unit tests in `tests/unit/security/test_payload_filter.py` + `tests/unit/models/test_rate_limit_retry.py`. | Cluster H1 + H2 (DONE in v0.2.0). |
@@ -130,8 +130,8 @@ contract and `tests/unit/telegram/` for dispatch tests):
 | `/runs` | Recent run ids. |
 | `/feature <repo> <req>` | Start a feature run. |
 | `/pr <branch>` | Check PR readiness. |
-| `/resume <run_id>` | Resume a paused run. *(See Status ⚠️: cross-process resume pending E3.)* |
-| `/cancel <run_id>` | Cancel a running run. *(In-process cancel works since v0.2.0; cross-process cancel pending E3.)* |
+| `/resume <run_id>` | Resume a paused run. *(Works across process restarts since E3.)* |
+| `/cancel <run_id>` | Cancel a running run. *(In-process since v0.2.0; cross-process cancel-resume supported since E3.)* |
 | `/dashboard` | Text dashboard summary. |
 
 ### Run the dashboard server

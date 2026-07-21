@@ -26,16 +26,17 @@ from __future__ import annotations
 import contextlib
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from seharness.artifacts.traceability import (
     Plan,
     RequirementTrace,
     Task,
 )
-from seharness.controller.run_ledger import RunLedger, RunRecord, RunState
+from seharness.controller.run_ledger import RunLedger, RunRecord, RunState, to_jsonable
 from seharness.delivery.pr import PullRequestClient, StubPullRequestClient
 from seharness.domain.requirements import FunctionalRequirementId, ScenarioId
 from seharness.observability.trace import (
@@ -240,6 +241,7 @@ class Orchestrator:
         repo_path: str,
         run_id: RunId | None = None,
         idempotency_key: str = "",
+        resume_from_run_id: str | None = None,
     ) -> PipelineResult:
         """Execute the full phase sequence and return the result.
 
@@ -271,6 +273,47 @@ class Orchestrator:
                     f"run_id {existing.run_id!r}; call resume_run on that "
                     f"run or pick a fresh key."
                 )
+        # Cluster E3: resume seam. If ``resume_from_run_id`` is set,
+        # look up the persisted record in the (durable) ledger and
+        # verify the spec matches. The phase loop below will skip
+        # phases already completed by the prior run.
+        resume_phase_index = 0
+        resumed_from: RunRecord | None = None
+        if resume_from_run_id is not None:
+            resumed_from = self._run_ledger.get(resume_from_run_id)
+            if resumed_from is None:
+                raise OrchestratorError(
+                    f"resume_from_run_id {resume_from_run_id!r} not found in ledger"
+                )
+            # Cluster E3: spec-drift guard. If the persisted
+            # ``feature_description`` is set AND differs from the new
+            # one, refuse the resume — the caller may have changed
+            # the spec mid-flight and we want a fresh run, not a
+            # confused mid-run.
+            if (
+                resumed_from.feature_description is not None
+                and resumed_from.feature_description != feature_description
+            ):
+                raise OrchestratorError(
+                    f"resume_from_run_id {resume_from_run_id!r} has "
+                    f"feature_description {resumed_from.feature_description!r} "
+                    f"but caller passed {feature_description!r}; spec drift "
+                    f"detected. Pick a fresh run_id to start over."
+                )
+            # Compute the phase loop index to skip completed phases.
+            # When ``resumed_from.phase`` is ``None`` (no prior phase
+            # recorded — e.g. the prior run was an old pre-E3 run),
+            # fall back to index 0 (start from scratch), which
+            # preserves back-compat for old ledger records.
+            if resumed_from.phase is not None:
+                try:
+                    resume_phase_index = PHASE_SEQUENCE.index(PhaseName(resumed_from.phase)) + 1
+                except ValueError:
+                    raise OrchestratorError(
+                        f"resume_from_run_id {resume_from_run_id!r} has "
+                        f"unknown phase {resumed_from.phase!r}; refusing "
+                        f"to resume from an unknown phase."
+                    ) from None
         repo = Path(repo_path).resolve()
         run_dir = Path(self._config.execution_root) / str(rid)
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -298,9 +341,26 @@ class Orchestrator:
             feature_description=feature_description,
             repo_path=str(repo),
         )
-        # Record the run start in the shared ledger.
+        # Cluster E3: when resuming, rebuild the ctx from the
+        # persisted snapshot so subsequent phases see the prior
+        # run's accumulated state. ``to_jsonable`` was applied at
+        # write time; we just need to construct a fresh
+        # ``RunContext`` from the dict.
+        if resumed_from is not None and resumed_from.ctx is not None:
+            ctx = _ctx_from_persisted(
+                run_id=rid,
+                persisted=resumed_from.ctx,
+                fallback_feature=feature_description,
+                fallback_repo=str(repo),
+            )
+        # Record the run start in the shared ledger. Cluster E3:
+        # ``feature_description`` is persisted on the ledger record so
+        # the resume seam can verify spec-match.
         self._run_ledger.record_start(
-            str(rid), repository=str(repo), idempotency_key=idempotency_key
+            str(rid),
+            repository=str(repo),
+            idempotency_key=idempotency_key,
+            feature_description=feature_description,
         )
         # E4b: register a fresh cancellation token for this run.
         # ``cancel_run`` looks it up + flips it; the runner watches it.
@@ -319,12 +379,25 @@ class Orchestrator:
         # each phase (Cluster E story E5).
         seen_artifacts: set[str] = set()
         try:
-            for phase in PHASE_SEQUENCE:
+            # Cluster E3: when resuming, slice the phase sequence so
+            # already-completed phases are skipped (their work was
+            # captured in the persisted ctx).
+            phases_to_run = PHASE_SEQUENCE[resume_phase_index:]
+            for phase in phases_to_run:
                 spec = PhaseSpec(run_id=rid, phase=phase)
                 self._emit_trace(
                     PhaseStarted(run_id=str(rid), phase=phase.value, attempt=spec.attempt)
                 )
                 outcome, ctx, detail = self._run_phase(spec=spec, ctx=ctx, run_dir=run_dir)
+                # Cluster E3: persist the resume cursor after every
+                # phase (success OR failure). A failed phase stops
+                # the run; the cursor advances to the failed phase
+                # so the next resume picks up from there.
+                self._run_ledger.record_phase(
+                    str(rid),
+                    phase=phase.value,
+                    ctx=_ctx_to_persisted(ctx),
+                )
                 events.append(
                     PipelineEvent(
                         phase=phase.value,
@@ -422,9 +495,19 @@ class Orchestrator:
     def resume_run(self, run_id: str) -> PipelineResult:
         """Resume a paused/failed run from the last successful phase.
 
-        Cluster A ships a minimal implementation: re-run from scratch
-        with the same feature description reconstructed from the
-        ledger. Cluster E (story E1) adds deterministic replay.
+        Cluster E3: uses the new ``start_run(resume_from_run_id=...)``
+        seam so the run continues from where it stopped (using the
+        persisted ``phase`` + ``ctx`` from the ledger). Pre-E3, this
+        method re-ran the run from scratch with a synthetic feature
+        description; that path is gone now and replaced by the
+        spec-match guard in ``start_run``.
+
+        Caller behaviour:
+        - ``feature_description`` is read from the persisted record
+          (so the Telegram handler / CLI doesn't need to remember it).
+        - If the persisted record predates E3 (``feature_description``
+          is ``None``), we fall back to ``f"resume:{run_id}"`` for
+          back-compat; spec-drift detection is skipped in that case.
         """
         rec = self._run_ledger.get(run_id)
         if rec is None:
@@ -433,15 +516,15 @@ class Orchestrator:
             raise OrchestratorError(
                 f"run {run_id} is in terminal state {rec.state.value}; cannot resume"
             )
-        # Mark resume in the ledger (best-effort — Cluster A keeps it
-        # simple).
+        # Mark resume in the ledger (the CAS-friendly way). This bumps
+        # revision so concurrent watchers see the change.
         self._run_ledger.mark_resume(run_id)
-        # Reconstruct and re-run. A future slice will replay the
-        # ledger's event log instead.
+        feature = rec.feature_description or f"resume:{run_id}"
         return self.start_run(
-            feature_description=f"resume:{run_id}",
+            feature_description=feature,
             repo_path=rec.repository,
             run_id=RunId(run_id),
+            resume_from_run_id=run_id,
         )
 
     def cancel_run(self, run_id: str) -> None:
@@ -855,3 +938,74 @@ _PHASE_HANDLERS: dict[PhaseName, _PhaseHandler] = {
 
 
 __all__ = ["Orchestrator", "OrchestratorError", "PipelineEvent", "PipelineResult"]
+
+
+# ---------------------------------------------------------------------------
+# Cluster E3: ctx <-> persisted dict helpers
+# ---------------------------------------------------------------------------
+#
+# ``RunContext`` is a frozen dataclass with JSON-friendly fields
+# (strs, ints, tuples of dicts, datetime). We use ``dataclasses.asdict``
+# on the way in (with the datetime coerced to ISO format) and the
+# ``RunContext`` constructor on the way out. ``to_jsonable`` handles
+# any nested Pydantic models the phase handlers stuffed into ctx.
+
+
+def _ctx_to_persisted(ctx: RunContext) -> dict[str, Any]:
+    """Serialise a ``RunContext`` to a JSON-friendly dict.
+
+    Cluster E3: called after each phase to capture the resume
+    cursor. The ``to_jsonable`` helper coerces any Pydantic models
+    phase handlers stored in ``ctx.task_results`` or elsewhere.
+    """
+    raw = asdict(ctx)
+    # asdict serialises ``datetime`` to a vanilla ``datetime`` object
+    # (not a string). Coerce to ISO format so ``json.dumps`` is happy.
+    started = raw.get("started_at")
+    if started is not None and hasattr(started, "isoformat"):
+        raw["started_at"] = started.isoformat()
+    result: dict[str, Any] = to_jsonable(raw)
+    return result
+
+
+def _ctx_from_persisted(
+    *,
+    run_id: RunId,
+    persisted: dict[str, Any],
+    fallback_feature: str,
+    fallback_repo: str,
+) -> RunContext:
+    """Rebuild a ``RunContext`` from a persisted dict.
+
+    Cluster E3: called at the start of ``start_run`` when the caller
+    passes ``resume_from_run_id``. Fields missing from the persisted
+    snapshot fall back to the fresh-run defaults so older E3 records
+    that lack a field still load cleanly.
+    """
+    started_raw = persisted.get("started_at")
+    if started_raw is None:
+        started = datetime.now(tz=UTC)
+    elif isinstance(started_raw, str):
+        # fromisoformat handles the standard ``...+00:00`` form we
+        # wrote on the way in. Strip trailing ``Z`` if present
+        # (older Python versions don't accept it).
+        normalised = started_raw.replace("Z", "+00:00")
+        started = datetime.fromisoformat(normalised)
+    else:
+        # Backstop: a non-string value should never land here, but
+        # if it does we surface it via ``now()`` rather than crash.
+        started = datetime.now(tz=UTC)
+    return RunContext(
+        run_id=run_id,
+        feature_description=persisted.get("feature_description", fallback_feature),
+        repo_path=persisted.get("repo_path", fallback_repo),
+        profile_path=persisted.get("profile_path"),
+        specification_path=persisted.get("specification_path"),
+        plan_id=persisted.get("plan_id"),
+        task_results=tuple(persisted.get("task_results", ())),
+        validation_exit_code=persisted.get("validation_exit_code"),
+        review_verdict=persisted.get("review_verdict"),
+        pr_url=persisted.get("pr_url"),
+        ci_outcome=persisted.get("ci_outcome"),
+        started_at=started,
+    )

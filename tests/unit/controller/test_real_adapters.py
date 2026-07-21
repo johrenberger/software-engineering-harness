@@ -502,3 +502,97 @@ def test_file_run_ledger_replay_preserves_revision(tmp_path: Path) -> None:
     assert rec is not None
     assert rec.state == RunState.RUNNING
     assert rec.revision == 3
+
+
+# ---------------------------------------------------------------------------
+# E3 — FileRunLedger phase + ctx + feature_description round-trip
+# ---------------------------------------------------------------------------
+
+
+def test_file_run_ledger_record_phase_persists_and_replays(tmp_path: Path) -> None:
+    """``record_phase`` writes the new phase + ctx to the JSONL
+    envelope and a fresh ``FileRunLedger`` replaying the same file
+    reconstructs them."""
+    path = _mk(tmp_path)
+    a = FileRunLedger(path=path)
+    a.record_start("r1", repository="/repo", feature_description="add auth")
+    a.record_phase("r1", phase="implementation", ctx={"task_results": [{"id": 1}]})
+    a.record_phase("r1", phase="validation", ctx={"exit_code": 0})
+    # Spin up a fresh ledger pointed at the same file; replay should
+    # see the latest phase + ctx (last-write-wins).
+    b = FileRunLedger(path=path)
+    rec = b.get("r1")
+    assert rec is not None
+    assert rec.phase == "validation"
+    assert rec.ctx == {"exit_code": 0}
+    assert rec.feature_description == "add auth"
+    assert rec.revision == 3
+
+
+def test_file_run_ledger_phase_none_omitted_from_jsonl(tmp_path: Path) -> None:
+    """When ``phase`` is None the JSONL line MUST omit it (matches
+    the E1 idempotency_key style — keeps the format terse for
+    callers that haven't wired E3 yet).
+    """
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("r1", repository="/repo")
+    line = json.loads(path.read_text().strip().split("\n")[0])
+    assert "phase" not in line
+    assert "ctx" not in line
+    assert "feature_description" not in line
+
+
+def test_file_run_ledger_phase_present_in_jsonl(tmp_path: Path) -> None:
+    """When ``record_phase`` fires, the phase + ctx are written to
+    the JSONL envelope. ``record_phase`` lines are written via
+    ``_update_state`` so they appear as ``kind='transition'``.
+    """
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("r1", repository="/repo")
+    ledger.record_phase("r1", phase="specification", ctx={"spec_id": 7})
+    lines = [json.loads(line) for line in path.read_text().strip().split("\n")]
+    assert len(lines) == 2
+    assert lines[1]["kind"] == "transition"
+    assert lines[1]["phase"] == "specification"
+    assert lines[1]["ctx"] == {"spec_id": 7}
+
+
+def test_file_run_ledger_replay_preserves_phase_across_restarts(tmp_path: Path) -> None:
+    """Simulates a process restart: write some phases, close the
+    ledger, reopen it, confirm the cursor survives.
+    """
+    path = _mk(tmp_path)
+    a = FileRunLedger(path=path)
+    a.record_start("r1", repository="/repo", feature_description="feat")
+    a.record_phase("r1", phase="implementation", ctx={"x": 1})
+    a.record_phase("r1", phase="validation", ctx={"x": 2})
+    # ``del a`` simulates the process exiting; the file on disk
+    # is the only state.
+    del a
+    b = FileRunLedger(path=path)
+    rec = b.get("r1")
+    assert rec is not None
+    assert rec.phase == "validation"
+    assert rec.ctx == {"x": 2}
+
+
+def test_file_run_ledger_record_phase_empty_phase_raises(tmp_path: Path) -> None:
+    """Defensive: empty phase is rejected before touching the file."""
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("r1", repository="/repo")
+    with pytest.raises(ValueError, match="phase"):
+        ledger.record_phase("r1", phase="")
+
+
+def test_file_run_ledger_record_phase_non_dict_ctx_raises(tmp_path: Path) -> None:
+    """``ctx`` must be a dict (or None) so the on-disk format
+    stays predictable.
+    """
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("r1", repository="/repo")
+    with pytest.raises(ValueError, match="ctx"):
+        ledger.record_phase("r1", phase="implementation", ctx=[1, 2, 3])

@@ -322,9 +322,16 @@ class _LedgerLine:
     # preserves monotonic revision. Defaults to 1 (the start-of-record
     # case), so older files that lack the field reconstruct cleanly.
     revision: int = 1
+    # Cluster E3: optional phase + ctx + feature_description carried
+    # on the start/transition lines so a replay reconstructs the
+    # resume cursor. Defaults match the RunRecord defaults so older
+    # files that lack the fields rebuild cleanly.
+    phase: str | None = None
+    ctx: dict[str, Any] | None = None
+    feature_description: str | None = None
 
     def to_jsonl(self) -> str:
-        payload: dict[str, str | int | None] = {
+        payload: dict[str, Any] = {
             "kind": self.kind,
             "run_id": self.run_id,
             "state": self.state,
@@ -334,6 +341,12 @@ class _LedgerLine:
         }
         if self.idempotency_key:
             payload["idempotency_key"] = self.idempotency_key
+        if self.phase is not None:
+            payload["phase"] = self.phase
+        if self.ctx is not None:
+            payload["ctx"] = self.ctx
+        if self.feature_description is not None:
+            payload["feature_description"] = self.feature_description
         return json.dumps(payload, sort_keys=True)
 
 
@@ -385,6 +398,12 @@ class FileRunLedger:
                         started_at=entry.get("timestamp") or datetime.now(tz=UTC).isoformat(),
                         idempotency_key=entry.get("idempotency_key", "") or "",
                         revision=int(entry.get("revision") or 1),
+                        # Cluster E3: rebuild phase + ctx + description
+                        # from the start line. ``None`` for older files
+                        # that pre-date E3.
+                        phase=entry.get("phase"),
+                        ctx=entry.get("ctx"),
+                        feature_description=entry.get("feature_description"),
                     )
                 elif kind == "transition":
                     rec = self._index.get(run_id)
@@ -395,6 +414,12 @@ class FileRunLedger:
                     # write wins so concurrent writers can't roll
                     # back via a stale replay order.
                     new_rev = int(entry.get("revision") or rec.revision + 1)
+                    # Cluster E3: phase + ctx are carried on transition
+                    # lines too (so ``record_phase`` survives a replay).
+                    # Fall back to the previous record's values when
+                    # the transition line is older / doesn't carry them.
+                    new_phase = entry.get("phase")
+                    new_ctx = entry.get("ctx")
                     self._index[run_id] = RunRecord(
                         run_id=run_id,
                         state=RunState(state),
@@ -402,6 +427,9 @@ class FileRunLedger:
                         started_at=rec.started_at,
                         idempotency_key=rec.idempotency_key,
                         revision=new_rev,
+                        phase=new_phase if new_phase is not None else rec.phase,
+                        ctx=new_ctx if new_ctx is not None else rec.ctx,
+                        feature_description=rec.feature_description,
                     )
 
     # ---- append ---------------------------------------------------------
@@ -412,7 +440,14 @@ class FileRunLedger:
 
     # ---- record API (mirrors in-memory RunLedger) -----------------------
 
-    def record_start(self, run_id: str, *, repository: str, idempotency_key: str = "") -> RunRecord:
+    def record_start(
+        self,
+        run_id: str,
+        *,
+        repository: str,
+        idempotency_key: str = "",
+        feature_description: str | None = None,
+    ) -> RunRecord:
         existing = self._index.get(run_id)
         if existing is not None:
             # Cluster E1 + E2: re-keying or re-record bumps revision
@@ -432,6 +467,15 @@ class FileRunLedger:
                 started_at=_utcnow_iso(),
                 idempotency_key=idempotency_key,
                 revision=existing.revision + 1,
+                # Cluster E3: preserve prior phase + ctx + description
+                # on a re-record so we don't accidentally wipe the
+                # resume cursor (E1's replace path was previously
+                # lossy on those fields).
+                phase=existing.phase,
+                ctx=existing.ctx,
+                feature_description=feature_description
+                if feature_description is not None
+                else existing.feature_description,
             )
         else:
             rec = RunRecord(
@@ -440,6 +484,7 @@ class FileRunLedger:
                 repository=repository,
                 started_at=_utcnow_iso(),
                 idempotency_key=idempotency_key,
+                feature_description=feature_description,
                 # revision defaults to 1
             )
         self._index[run_id] = rec
@@ -452,6 +497,9 @@ class FileRunLedger:
                 timestamp=_utcnow_iso(),
                 idempotency_key=idempotency_key,
                 revision=rec.revision,
+                phase=rec.phase,
+                ctx=rec.ctx,
+                feature_description=rec.feature_description,
             )
         )
         return rec
@@ -463,8 +511,10 @@ class FileRunLedger:
         *,
         expected_revision: int | None = None,
         expected_state: RunState | None = None,
+        phase: str | None = None,
+        ctx: dict[str, Any] | None = None,
     ) -> RunRecord | None:
-        """Cluster E2: same CAS contract as in-memory ``RunLedger``."""
+        """Cluster E2 CAS + Cluster E3 phase/ctx persistence."""
         rec = self._index.get(run_id)
         if rec is None:
             return None
@@ -492,6 +542,10 @@ class FileRunLedger:
             started_at=rec.started_at,
             idempotency_key=rec.idempotency_key,
             revision=rec.revision + 1,
+            # Cluster E3: carry forward + apply new values.
+            phase=phase if phase is not None else rec.phase,
+            ctx=ctx if ctx is not None else rec.ctx,
+            feature_description=rec.feature_description,
         )
         self._index[run_id] = updated
         self._append(
@@ -503,9 +557,32 @@ class FileRunLedger:
                 timestamp=_utcnow_iso(),
                 idempotency_key=rec.idempotency_key,
                 revision=updated.revision,
+                phase=updated.phase,
+                ctx=updated.ctx,
             )
         )
         return updated
+
+    def record_phase(
+        self,
+        run_id: str,
+        *,
+        phase: str,
+        ctx: dict[str, Any] | None = None,
+        expected_revision: int | None = None,
+    ) -> RunRecord | None:
+        """Cluster E3: persist the resume cursor in the durable ledger."""
+        if not phase:
+            raise ValueError("phase must be non-empty")
+        if ctx is not None and not isinstance(ctx, dict):
+            raise ValueError("ctx must be a dict (or None)")
+        return self._update_state(
+            run_id,
+            RunState.RUNNING,
+            expected_revision=expected_revision,
+            phase=phase,
+            ctx=ctx,
+        )
 
     def mark_complete(
         self,
