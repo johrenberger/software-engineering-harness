@@ -283,8 +283,9 @@ def test_crash_injection_resumes_idempotently(tmp_path: Path) -> None:
         pytest.skip("draft_pr phase not reached on replay")
     replay_detail = pr_phases2[0].detail
     # Same branch + sha = idempotent replay.
-    assert original_detail.split("branch=", 1)[1].split(",", 1)[0] == (
-        replay_detail.split("branch=", 1)[1].split(",", 1)[0]
+    assert (
+        original_detail.split("branch=", 1)[1].split(",", 1)[0]
+        == (replay_detail.split("branch=", 1)[1].split(",", 1)[0])
     )
     assert "(replay)" in replay_detail
 
@@ -300,11 +301,7 @@ def test_artifacts_contain_structured_data(tmp_path: Path) -> None:
     result = wired.run()
     run_dir = wired.tmp_path / "runs" / result.run_id
     files = [p for p in run_dir.rglob("*") if p.is_file()]
-    json_files = [
-        p
-        for p in files
-        if p.suffix == ".json" and p.name != "summary.txt"
-    ]
+    json_files = [p for p in files if p.suffix == ".json" and p.name != "summary.txt"]
     assert json_files, "expected at least one JSON artifact"
     for jf in json_files:
         try:
