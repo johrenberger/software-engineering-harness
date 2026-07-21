@@ -14,7 +14,7 @@ framework the code happens to import.
 from __future__ import annotations
 
 import re
-import subprocess
+import subprocess  # nosec B404 - controlled use of git rev-parse / status
 import tomllib
 from dataclasses import dataclass
 from datetime import datetime
@@ -419,7 +419,7 @@ def _detect_git_state(path: Path) -> tuple[str, bool]:
     if not (path / ".git").exists():
         return "", False
     try:
-        head = subprocess.run(
+        head = subprocess.run(  # nosec B603 B607 - argv is a fixed literal; no shell
             ["git", "-C", str(path), "rev-parse", "HEAD"],
             check=False,
             capture_output=True,
@@ -432,7 +432,7 @@ def _detect_git_state(path: Path) -> tuple[str, bool]:
         return "", False
     commit = head.stdout.strip()
     try:
-        status = subprocess.run(
+        status = subprocess.run(  # nosec B603 B607 - argv is a fixed literal; no shell
             ["git", "-C", str(path), "status", "--porcelain"],
             check=False,
             capture_output=True,

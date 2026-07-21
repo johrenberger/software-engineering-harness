@@ -63,6 +63,13 @@ from seharness.orchestrator.types import (
     RunId,
     new_run_id,
 )
+from seharness.repository.conventions import CommandResolver, Gate
+from seharness.repository.discovery import (
+    RepositoryError,
+    RepositoryProfile,
+    derive_allowed_paths,
+    inspect_repository,
+)
 from seharness.sandbox.cancellation import CancellationToken
 
 
@@ -117,63 +124,141 @@ class OrchestratorError(RuntimeError):
 
 
 class _PlanBuilder:
-    """Builds a slice-5 ``Plan`` from a RunContext.
+    """Builds a slice-5 ``Plan`` from a RunContext + discovered profile.
 
-    Deterministic: the same feature description always produces the
-    same plan_id. Cluster F replaces this with a model-driven planner.
+    Cluster WP4 / story WP4.5: instead of hard-coding Python /
+    ``pytest`` / FR-1 / SCN-1 / a single task with hard-coded
+    allowed paths, the builder now reads the
+    :class:`RepositoryProfile` written by
+    :class:`_RepoProfiler` and derives ``allowed_paths`` from the
+    detected source/test roots and ``validation_commands`` from
+    the per-gate :class:`CommandResolver`.
+
+    Determinism: the same (run_id, profile) pair always produces
+    the same plan_id and task_id. The cluster F / slice-7 model
+    planner replaces this with an LLM-driven build; the seam is
+    kept narrow so existing tests that monkeypatch
+    ``_PlanBuilder.build`` continue to work.
     """
 
     @staticmethod
     def build(*, ctx: RunContext) -> Plan:
         # Derive a deterministic plan_id from the run id.
-        plan_id = f"plan-{ctx.run_id.replace('orch-', '')}"
-        req_id = FunctionalRequirementId("FR-1")
-        scenario_id = ScenarioId("SCN-1")
+        slug = ctx.run_id.replace("orch-", "")
+        plan_id = f"plan-{slug}"
+        # Cluster WP4: requirement/scenario ids are derived from
+        # the detected language so multi-language projects don't
+        # all collapse into FR-1 / SCN-1.
+        lang = "python"
+        profile: RepositoryProfile | None = _PlanBuilder._load_profile(ctx)
+        if profile is not None:
+            lang = profile.detected_language or lang
+        req_id = FunctionalRequirementId(f"FR-{lang}-1")
+        scenario_id = ScenarioId(f"SCN-{lang}-1")
         trace = RequirementTrace(
             requirement_id=req_id,
             scenario_ids=(scenario_id,),
         )
+        # Cluster WP4: derive allowed_paths + validation_commands
+        # from the discovered profile. Fall back to safe defaults
+        # when no profile is available (legacy callers that build
+        # a RunContext without going through _phase_repository_discovery).
+        if profile is not None:
+            allowed_paths = derive_allowed_paths(profile)
+            if not allowed_paths:
+                allowed_paths = ("src/", "tests/", "docs/")
+            validation_commands = (
+                CommandResolver(profile).resolve(Gate.TEST).get(Gate.TEST, ("pytest --no-cov -q",))
+            )
+            if not validation_commands:
+                validation_commands = ("pytest --no-cov -q",)
+        else:
+            allowed_paths = ("src/", "tests/", "docs/")
+            validation_commands = ("pytest --no-cov -q",)
         # Make the task ID deterministic too.
-        task_id = f"task-{ctx.run_id.replace('orch-', '')}"
+        task_id = f"task-{slug}"
         task = Task(
             task_id=task_id,
             objective=ctx.feature_description[:200],
             requirement_traces=(trace,),
-            allowed_paths=("src/", "tests/", "docs/"),
+            allowed_paths=allowed_paths,
             depends_on=(),
-            validation_commands=("pytest --no-cov -q",),
+            validation_commands=validation_commands,
         )
         return Plan(plan_id=plan_id, tasks=(task,))
 
+    @staticmethod
+    def _load_profile(ctx: RunContext) -> RepositoryProfile | None:
+        """Load the RepositoryProfile written by _phase_repository_discovery.
+
+        Returns ``None`` when ``ctx.profile_path`` is unset or the
+        artifact cannot be parsed; callers fall back to the legacy
+        hard-coded defaults.
+        """
+        if not ctx.profile_path:
+            return None
+        path = Path(ctx.profile_path)
+        if not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+        try:
+            return RepositoryProfile.model_validate(data)
+        except ValueError:
+            return None
+
 
 class _RepoProfiler:
-    """Deterministic repository profiler — slice 3 service surface.
+    """Repository profiler — cluster WP4 / story WP4.1.
 
-    Writes a ``repo-profile.json`` artifact into the run directory so
-    downstream phases have a real, inspectable result. Cluster F
-    replaces this with the full slice-3 ``RepositoryProfiler``.
+    Thin wrapper around :func:`inspect_repository` from
+    :mod:`seharness.repository.discovery`. Writes a
+    ``repo-profile.json`` artifact into the run directory and
+    returns the path.
+
+    Cluster WP4 / story WP4.1 replaces the earlier 19-line stub
+    (which only listed top-level files and guessed ``python``/
+    ``rust`` from extensions) with the full slice-3 inspector so
+    the planner can read language, package manager, source/test
+    roots, conventions, CI workflows, instruction files,
+    monorepo flag, and base git commit from the artifact instead
+    of re-deriving them.
     """
 
     @staticmethod
     def profile(*, repo_path: Path, run_dir: Path) -> Path:
         run_dir.mkdir(parents=True, exist_ok=True)
-        files: list[str] = []
-        if repo_path.exists():
-            for child in sorted(repo_path.iterdir()):
-                if child.is_file():
-                    files.append(child.name)
-        # Find language hint from file extensions.
-        extensions = {f.rsplit(".", 1)[-1] for f in files if "." in f}
-        language = "python" if "py" in extensions else ("rust" if "rs" in extensions else "unknown")
-        profile: dict[str, object] = {
-            "repo_path": str(repo_path),
-            "files": files,
-            "extensions": sorted(extensions),
-            "language": language,
-            "profiled_at": time.time(),
-        }
+        try:
+            repo_profile = inspect_repository(repo_path)
+        except RepositoryError:
+            # Defensive: the inspector only raises when the path is
+            # missing or not a directory. We still want the
+            # orchestrator to record *something* so downstream
+            # phases can surface a structured error rather than
+            # crashing on JSON load.
+            repo_profile = RepositoryProfile(
+                name=repo_path.name,
+                path=str(repo_path.resolve()),
+                base_commit="",
+                python_version_constraint="",
+                package_manager="unknown",
+                source_roots=(),
+                test_roots=(),
+                framework_indicators=(),
+                validation_commands=(),
+                ci_workflows=(),
+                architecture_summary="",
+                conventions=(),
+                baseline_validation_status="unknown",
+                instruction_files=(),
+                is_monorepo=False,
+                git_dirty=False,
+                detected_language="unknown",
+            )
         out = run_dir / "repo-profile.json"
-        out.write_text(json.dumps(profile, indent=2, sort_keys=True) + "\n")
+        out.write_text(repo_profile.model_dump_json(indent=2) + "\n")
         return out
 
 
