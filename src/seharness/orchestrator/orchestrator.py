@@ -1082,6 +1082,19 @@ def _phase_implementation(
         },
     )
     new_ctx = replace(ctx, task_results=new_task_results)
+    # WP5 (story I): unauthorized changes block delivery. The
+    # ``TaskExecutionService`` already invokes
+    # ``revert_unauthorized`` and returns the reverted paths in
+    # ``result.violations``; if anything was reverted (or any other
+    # path authorization rule fired) the phase outcome is FAILED so
+    # the orchestrator routes to ``failed`` / ``blocked`` rather than
+    # completing a run that touched files outside ``allowed_paths``.
+    if result.violations:
+        return (
+            PhaseOutcome.FAILED,
+            new_ctx,
+            f"unauthorized changes blocked: {list(result.violations)}",
+        )
     return (
         PhaseOutcome.OK,
         new_ctx,
@@ -1092,6 +1105,19 @@ def _phase_implementation(
 def _phase_validation(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
+    # WP5 (story I): if remediation exhausted its budget, skip
+    # validation and route to FAILED. The downstream controller then
+    # transitions to ``failed`` / ``blocked`` rather than
+    # ``completed`` — WP5 acceptance criterion: "Remediation
+    # exhaustion produces ``failed`` or ``blocked``, never
+    # ``completed``."
+    if ctx.remediation_exhausted:
+        new_ctx = replace(ctx, validation_exit_code=None)
+        return (
+            PhaseOutcome.FAILED,
+            new_ctx,
+            "remediation exhausted: skipping validation",
+        )
     plan = _PlanBuilder.build(ctx=ctx)
     task = plan.tasks[0]
     if not task.validation_commands:
@@ -1127,20 +1153,32 @@ def _phase_remediation(
     # gate passed (matches the legacy behaviour) and the model-backed
     # composition classifies any prior implementation error via the
     # ``ErrorKind`` mapping in :mod:`seharness.orchestrator.services`.
+    #
+    # WP5 (story I): ``max_remediation_attempts`` is the bounded
+    # budget. We increment ``ctx.remediation_attempts`` BEFORE
+    # invoking the service so the first call counts; once the budget
+    # is exhausted we route to ``failed`` / ``blocked`` rather than
+    # silently completing a run that hit remediation cap.
     plan = _PlanBuilder.build(ctx=ctx)
-    # If we have no recorded prior outcome we just acknowledge the
-    # remediation gate passed — the orchestrator will not call this
-    # service with a real ``prior_outcome`` until a later PR wires
-    # ``ImplementationOutcome`` into the run ledger. The protocol
-    # already exists; this phase handler stays simple for now.
+    next_attempt = ctx.remediation_attempts + 1
+    new_ctx = replace(ctx, remediation_attempts=next_attempt)
+    if next_attempt > orch._config.max_remediation_attempts:
+        # WP5 acceptance: "Remediation exhaustion produces ``failed``
+        # or ``blocked``, never ``completed``."
+        exhausted_ctx = replace(new_ctx, remediation_exhausted=True)
+        return (
+            PhaseOutcome.FAILED,
+            exhausted_ctx,
+            f"remediation exhausted after {ctx.remediation_attempts} attempts",
+        )
     if plan.tasks:
         _ = orch._services.remediation.remediate(
-            ctx=ctx,
+            ctx=new_ctx,
             plan=plan,
             task_id=plan.tasks[0].task_id,
             prior_outcome=_ZERO_OUTCOME,
         )
-    return PhaseOutcome.OK, ctx, "no outstanding violations"
+    return PhaseOutcome.OK, new_ctx, f"remediation attempt {next_attempt} recorded"
 
 
 def _phase_review(

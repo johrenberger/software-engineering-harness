@@ -262,6 +262,19 @@ def revert_unauthorized(
         content = snapshot.content_bytes(rel_posix)
         if content is None:
             raise RuntimeError(f"snapshot is missing content for {rel_posix}; cannot revert safely")
+        # WP5 (story I): only revert when the on-disk content differs
+        # from the snapshot. The pre-PR5 implementation reverted every
+        # unauthorized file unconditionally, which made the
+        # ``result.violations`` list noisy with no-op writes and made
+        # the orchestrator's "unauthorized changes block delivery"
+        # check misfire on legitimate pre-existing files outside
+        # ``allowed_paths``. The semantic the SPEC requires is
+        # "unauthorized *changes* block delivery" — unchanged files
+        # outside ``allowed_paths`` are a workflow configuration
+        # problem, not a security violation.
+        current = full.read_bytes()
+        if current == content:
+            continue
         full.write_bytes(content)
         reverted.append(full)
     return tuple(reverted)

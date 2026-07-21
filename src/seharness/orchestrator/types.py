@@ -125,6 +125,12 @@ class RunContext:
     pr_url: str | None = None
     ci_outcome: str | None = None
     started_at: datetime = field(default_factory=_utcnow)
+    # WP5 (Cluster H, story I): remediation bookkeeping. ``remediation_attempts``
+    # increments every time ``_phase_remediation`` runs; ``remediation_exhausted``
+    # is set when the bounded budget is consumed so the orchestrator routes
+    # the run to ``failed`` / ``blocked`` instead of ``completed``.
+    remediation_attempts: int = 0
+    remediation_exhausted: bool = False
 
 
 @dataclass(frozen=True)
