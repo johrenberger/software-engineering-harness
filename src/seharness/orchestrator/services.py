@@ -67,6 +67,12 @@ from seharness.models.readiness_validation import (
     validate_router_readiness,
 )
 from seharness.models.router import ModelRouter
+from seharness.orchestrator.spec_plan_schemas import (
+    PlanSchema,
+    parse_plan,
+    parse_specification,
+    validate_plan_against_policy,
+)
 from seharness.orchestrator.types import RunContext
 
 _LOGGER = logging.getLogger(__name__)
@@ -545,6 +551,128 @@ class DeterministicPlanningService:
         return _PlanBuilder.build(ctx=ctx)
 
 
+class ModelBackedPlanningService:
+    """Calls the planner-role adapter with a structured prompt and
+    validates the parsed output against :class:`PlanSchema`.
+
+    Cluster N PR4 (spec-plan): the model is asked for a structured
+    plan (plan_id + ordered tasks with explicit ``allowed_paths``).
+    The orchestrator validates the parsed payload with
+    :func:`parse_plan` and :func:`validate_plan_against_policy`
+    so unknown commands and out-of-policy paths are rejected at
+    the schema boundary, not at sandbox execution time.
+
+    The service returns the validated :class:`PlanSchema` via
+    ``last_plan`` for downstream phases / audit; the
+    ``build()`` method delegates to the deterministic
+    ``_PlanBuilder.build`` so the orchestrator continues to
+    produce the rich ``Plan`` dataclass with requirement traces
+    and validation commands. Cluster N keeps this seam narrow
+    so existing tests that monkeypatch ``_PlanBuilder.build``
+    continue to work; PR #77 (vertical-acceptance) is the
+    intended home for wiring the model-produced tasks into the
+    orchestrator's downstream phases.
+    """
+
+    def __init__(
+        self,
+        *,
+        router: ModelRouter,
+        template_version: str = "planning@v1",
+        budget: ServiceCallBudget | None = None,
+        clock: Any = None,
+        policy_allowed_paths: tuple[str, ...] = ("src/", "tests/"),
+    ) -> None:
+        self._router = router
+        self._template_version = template_version
+        self._budget = budget or ServiceCallBudget()
+        self._clock = clock or time.monotonic
+        # Cluster N PR4: the policy the plan must respect. The
+        # orchestrator can override this from its config; the
+        # default ("src/", "tests/") covers the canonical
+        # Python-repo case.
+        self._policy_allowed_paths: tuple[str, ...] = tuple(policy_allowed_paths)
+        self.last_evidence: ServiceEvidence | None = None
+        self.last_plan: PlanSchema | None = None
+
+    def build(self, *, ctx: RunContext) -> Plan:
+        # Defer the model call until the deterministic builder
+        # has produced its full Plan. Cluster N PR4: the
+        # model-driven planner runs first to produce a validated
+        # PlanSchema; if the model fails the schema/policy check
+        # we surface the error and fall back to the deterministic
+        # builder. PR #77 wires the model-produced tasks into
+        # the rich Plan dataclass.
+        prompt = (
+            "Produce a structured plan for the following feature request.\n\n"
+            f"Feature description: {ctx.feature_description}\n"
+            f"Repository path: {ctx.repo_path}\n"
+            f"Run id: {ctx.run_id}\n"
+        )
+        request = ModelRequest(
+            role=RoutingRole.PLANNING,
+            prompt=prompt,
+            context={
+                "template_version": self._template_version,
+                "policy_allowed_paths": list(self._policy_allowed_paths),
+            },
+            max_tokens=self._budget.max_tokens,
+        )
+        start = self._clock()
+        response = self._router.invoke(request)
+        duration = self._clock() - start
+        self.last_evidence = ServiceEvidence(
+            role=RoutingRole.PLANNING,
+            provider=response.provider,
+            model=response.model,
+            request_id=None,
+            template_version=self._template_version,
+            duration_s=duration,
+            input_tokens=response.usage.input_tokens if response.usage else None,
+            output_tokens=response.usage.output_tokens if response.usage else None,
+            error_kind=response.error.kind if response.error else None,
+            error_message=response.error.message if response.error else None,
+        )
+        if response.error is not None:
+            msg = f"planning service failed: {response.error.kind}: {response.error.message}"
+            raise RuntimeError(msg)
+        # Cluster N PR4 (spec-plan): validate the model's parsed
+        # output against PlanSchema. On schema mismatch surface
+        # malformed_output per cluster N error translation.
+        try:
+            plan_schema = parse_plan(response.parsed)
+            validate_plan_against_policy(
+                plan_schema,
+                policy_allowed_paths=self._policy_allowed_paths,
+            )
+        except ValueError as exc:
+            self.last_evidence = ServiceEvidence(
+                role=RoutingRole.PLANNING,
+                provider=response.provider,
+                model=response.model,
+                request_id=None,
+                template_version=self._template_version,
+                duration_s=duration,
+                input_tokens=response.usage.input_tokens if response.usage else None,
+                output_tokens=response.usage.output_tokens if response.usage else None,
+                error_kind="malformed_output",
+                error_message=str(exc),
+            )
+            msg = f"plan malformed: {exc}"
+            raise RuntimeError(msg) from exc
+        self.last_plan = plan_schema
+        # The deterministic builder fills in the rich Plan
+        # (requirement traces, validation commands from
+        # discovery, depends_on). Cluster N keeps this seam
+        # narrow; PR #77 wires model-produced tasks into the
+        # rich Plan dataclass.
+        from seharness.orchestrator.orchestrator import (  # noqa: PLC0415
+            _PlanBuilder,
+        )
+
+        return _PlanBuilder.build(ctx=ctx)
+
+
 class DeterministicImplementationService:
     """Marks every task as 'attempted' without invoking a model.
 
@@ -708,14 +836,37 @@ class ModelBackedSpecificationService:
         if response.error is not None:
             msg = f"specification service failed: {response.error.kind}: {response.error.message}"
             raise RuntimeError(msg)
+        # Cluster N PR4 (spec-plan): validate the model's parsed
+        # output against SpecificationSchema. On schema mismatch
+        # surface malformed_output per cluster N error translation.
+        try:
+            spec_schema = parse_specification(response.parsed)
+        except ValueError as exc:
+            self.last_evidence = ServiceEvidence(
+                role=RoutingRole.PLANNING,
+                provider=response.provider,
+                model=response.model,
+                request_id=None,
+                template_version=self._template_version,
+                duration_s=duration,
+                input_tokens=response.usage.input_tokens if response.usage else None,
+                output_tokens=response.usage.output_tokens if response.usage else None,
+                error_kind="malformed_output",
+                error_message=str(exc),
+            )
+            msg = f"specification malformed: {exc}"
+            raise RuntimeError(msg) from exc
         run_dir_path = _coerce_path(run_dir)
         run_dir_path.mkdir(parents=True, exist_ok=True)
         spec_path = run_dir_path / "specification.json"
         spec_doc = {
             "run_id": str(ctx.run_id),
-            "description": ctx.feature_description,
+            "description": spec_schema.description,
             "repo_path": ctx.repo_path,
             "spec_version": 1,
+            "discovered_repo_profile_name": spec_schema.discovered_repo_profile_name,
+            "repository_instructions": list(spec_schema.repository_instructions),
+            "validation_commands": list(spec_schema.validation_commands),
             "provider": response.provider.value,
             "model": response.model,
             "template_version": self._template_version,
@@ -723,7 +874,7 @@ class ModelBackedSpecificationService:
         spec_path.write_text(json.dumps(spec_doc, indent=2, sort_keys=True) + "\n")
         return SpecificationArtifact(
             spec_version=1,
-            description=ctx.feature_description or "",
+            description=spec_schema.description,
             repo_path=ctx.repo_path or "",
             run_id=str(ctx.run_id),
             provider=response.provider,
@@ -1168,6 +1319,7 @@ __all__ = [
     "ImplementationOutcome",
     "ImplementationService",
     "ModelBackedImplementationService",
+    "ModelBackedPlanningService",
     "ModelBackedRemediationService",
     "ModelBackedReviewService",
     "ModelBackedServiceComposition",
