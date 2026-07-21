@@ -1072,7 +1072,56 @@ _PHASE_HANDLERS: dict[PhaseName, _PhaseHandler] = {
 }
 
 
-__all__ = ["Orchestrator", "OrchestratorError", "PipelineEvent", "PipelineResult"]
+# ---------------------------------------------------------------------------
+# Cluster WP1 / story WP1.5 — OrchestrationService Protocol
+# ---------------------------------------------------------------------------
+#
+# The controller layer (slice 11) used to dispatch to ``Orchestrator``
+# via ``isinstance(self._task_executor, Orchestrator)``, which
+# hard-couples the controller to the concrete ``Orchestrator`` class.
+# ``OrchestrationService`` is the structural interface the controller
+# (and any future wiring layer) depends on. ``Orchestrator``
+# implements it implicitly; test doubles can implement it explicitly.
+#
+# Methods mirror ``Orchestrator.start_run`` / ``.resume_run`` /
+# ``.cancel_run``. The Protocol is intentionally narrow — adding a
+# method here is a deliberate API change that callers must support.
+
+
+class OrchestrationService(Protocol):
+    """Structural interface to the orchestrator.
+
+    Implemented by :class:`Orchestrator`; test doubles may implement
+    the same interface for stubbed dispatch in the controller. The
+    controller accepts any conformer; production deployments must
+    use :class:`Orchestrator` so the WP2 fail-closed validator
+    catches accidentally-wired stubs.
+
+    Cluster WP1 / story WP1.5.
+    """
+
+    def start_run(  # mirror Orchestrator signature
+        self,
+        *,
+        feature_description: str,
+        repo_path: str,
+        run_id: RunId | None = None,
+        idempotency_key: str = "",
+        resume_from_run_id: str | None = None,
+    ) -> PipelineResult: ...
+
+    def resume_run(self, run_id: str) -> PipelineResult: ...
+
+    def cancel_run(self, run_id: str) -> None: ...
+
+
+__all__ = [
+    "OrchestrationService",
+    "Orchestrator",
+    "OrchestratorError",
+    "PipelineEvent",
+    "PipelineResult",
+]
 
 
 # ---------------------------------------------------------------------------

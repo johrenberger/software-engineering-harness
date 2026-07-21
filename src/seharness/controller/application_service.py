@@ -22,14 +22,11 @@ Protocol's ``object`` return type. Slice 12 contract.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import Any, Protocol
 
-from ..orchestrator import Orchestrator
+from ..orchestrator import OrchestrationService
 from ..telegram.service import FeatureRequest
 from .run_ledger import RunLedger
-
-if TYPE_CHECKING:
-    pass
 
 _RUNS_LIMIT = 50
 
@@ -37,8 +34,21 @@ _RUNS_LIMIT = 50
 class FeatureExecutor(Protocol):
     """Protocol for the ``/feature`` executor.
 
-    The canonical implementation is ``Orchestrator`` (Cluster A); the
-    slice-12 ``StubFeatureExecutor`` is retained for unit tests.
+    The canonical implementation is ``OrchestrationService`` (i.e.
+    ``Orchestrator`` — Cluster A); the slice-12
+    ``StubFeatureExecutor`` is retained for unit tests.
+
+    Cluster WP1 / story WP1.5: this Protocol mirrors the
+    ``OrchestrationService`` Protocol from the orchestrator module.
+    The two are intentionally separate: ``FeatureExecutor`` exposes
+    the dict-shaped legacy surface (``execute``/``resume``/``cancel``
+    returning ``dict``), while ``OrchestrationService`` exposes the
+    orchestrator's native ``start_run``/``resume_run``/``cancel_run``
+    returning ``PipelineResult``. The controller dispatches between
+    the two surfaces based on the executor's type. A future refactor
+    could collapse these into one Protocol; we keep them separate
+    today so the legacy ``StubFeatureExecutor`` path keeps working
+    without forcing every test to migrate.
     """
 
     def execute(self, request: FeatureRequest) -> dict[str, Any]: ...
@@ -98,9 +108,19 @@ class ControllerApplicationService:
     Implements the ``ApplicationService`` Protocol via structural
     conformance. NO merge methods.
 
-    **Cluster A:** ``task_executor`` should be an ``Orchestrator``;
-    ``StubFeatureExecutor`` remains available for tests that don't
-    need the full orchestrator.
+    **Cluster A:** ``task_executor`` should be a
+    :class:`~seharness.orchestrator.OrchestrationService` (i.e.
+    ``Orchestrator``); ``StubFeatureExecutor`` remains available for
+    tests that don't need the full orchestrator.
+
+    **Cluster WP1 / story WP1.5:** the dispatch logic in
+    ``feature_request`` / ``resume`` / ``cancel`` no longer uses
+    ``isinstance(self._task_executor, Orchestrator)``. Instead we
+    probe for the ``OrchestrationService`` surface (``start_run`` /
+    ``resume_run`` / ``cancel_run`` methods). This decouples the
+    controller from the concrete ``Orchestrator`` class — any
+    conformer (test doubles, future replacement engines) works as
+    long as it satisfies :class:`OrchestrationService`.
     """
 
     def __init__(
@@ -114,14 +134,38 @@ class ControllerApplicationService:
         self._ci_monitor = ci_monitor
         self._run_ledger = run_ledger
 
+    # --- dispatch helpers ----------------------------------------------
+
+    def _orchestration_service(self) -> OrchestrationService | None:
+        """Return the task executor as an OrchestrationService, or None.
+
+        Cluster WP1 / story WP1.5: structural dispatch replaces the
+        previous ``isinstance(self._task_executor, Orchestrator)``
+        check. We probe the three OrchestrationService methods; if
+        any are missing the executor is treated as a legacy
+        ``StubFeatureExecutor`` (whose ``execute`` / ``resume`` /
+        ``cancel`` methods return dicts directly).
+        """
+        executor = self._task_executor
+        for method in ("start_run", "resume_run", "cancel_run"):
+            if not hasattr(executor, method):
+                return None
+        # Cast through Any because Protocol conformance is structural;
+        # mypy would otherwise need an explicit isinstance.
+        return executor  # type: ignore[return-value]
+
     # --- /feature --------------------------------------------------------
 
     def feature_request(self, request: FeatureRequest) -> dict[str, Any]:
-        # Cluster A: delegate to the canonical orchestrator when wired.
-        # ``Orchestrator`` satisfies the FeatureExecutor Protocol via
-        # duck typing (start_run/resume_run/cancel_run methods).
-        if isinstance(self._task_executor, Orchestrator):
-            pipeline = self._task_executor.start_run(
+        # Cluster WP1 / story WP1.5: dispatch via the
+        # OrchestrationService Protocol instead of
+        # ``isinstance(self._task_executor, Orchestrator)``. This
+        # decouples the controller from the concrete Orchestrator
+        # class and lets any conformer (test doubles, future
+        # replacement engines) work.
+        orch = self._orchestration_service()
+        if orch is not None:
+            pipeline = orch.start_run(
                 feature_description=request.description,
                 repo_path=request.repository_url,
             )
@@ -153,8 +197,11 @@ class ControllerApplicationService:
     # --- /resume ---------------------------------------------------------
 
     def resume(self, run_id: str) -> dict[str, Any]:
-        if isinstance(self._task_executor, Orchestrator):
-            pipeline = self._task_executor.resume_run(run_id)
+        # Cluster WP1 / story WP1.5: dispatch via the
+        # OrchestrationService Protocol.
+        orch = self._orchestration_service()
+        if orch is not None:
+            pipeline = orch.resume_run(run_id)
             # Cluster WP1 / story WP1.3: propagate the resumed
             # pipeline terminal state so callers learn whether the
             # resume itself succeeded or re-failed.
@@ -175,8 +222,11 @@ class ControllerApplicationService:
     # --- /cancel ---------------------------------------------------------
 
     def cancel(self, run_id: str) -> dict[str, Any]:
-        if isinstance(self._task_executor, Orchestrator):
-            self._task_executor.cancel_run(run_id)
+        # Cluster WP1 / story WP1.5: dispatch via the
+        # OrchestrationService Protocol.
+        orch = self._orchestration_service()
+        if orch is not None:
+            orch.cancel_run(run_id)
             return {"ok": True, "run_id": run_id}
         raw = self._task_executor.cancel(run_id)
         coerced = _coerce_result(raw)
