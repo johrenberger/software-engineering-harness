@@ -126,6 +126,20 @@ class ControllerApplicationService:
                 repo_path=request.repository_url,
             )
             run_id: str = pipeline.run_id
+            # Cluster WP1 / story WP1.3: propagate the pipeline
+            # terminal state. ``ok=False`` is returned for
+            # failed/blocked/cancelled so callers can branch without
+            # re-querying the ledger. The legacy always-ok=True path
+            # would silently mask delivery failures from the CLI /
+            # Telegram handlers.
+            terminal = pipeline.terminal_state
+            ok = terminal == "completed"
+            return {
+                "ok": ok,
+                "run_id": run_id,
+                "repository": request.repository_url,
+                "terminal_state": terminal,
+            }
         else:
             raw = self._task_executor.execute(request)
             coerced = _coerce_result(raw)
@@ -141,7 +155,17 @@ class ControllerApplicationService:
     def resume(self, run_id: str) -> dict[str, Any]:
         if isinstance(self._task_executor, Orchestrator):
             pipeline = self._task_executor.resume_run(run_id)
-            return {"ok": True, "run_id": run_id, "result": {"events": len(pipeline.events)}}
+            # Cluster WP1 / story WP1.3: propagate the resumed
+            # pipeline terminal state so callers learn whether the
+            # resume itself succeeded or re-failed.
+            terminal = pipeline.terminal_state
+            ok = terminal == "completed"
+            return {
+                "ok": ok,
+                "run_id": run_id,
+                "terminal_state": terminal,
+                "result": {"events": len(pipeline.events)},
+            }
         raw = self._task_executor.resume(run_id)
         coerced = _coerce_result(raw)
         self._run_ledger.mark_resume(run_id)

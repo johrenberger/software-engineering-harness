@@ -24,7 +24,7 @@ This section is the source of truth for what the harness actually does
 
 | Capability | Verified by |
 |---|---|
-| Deterministic 6-phase pipeline (spec → implement → test → review → document → release) | 1874 unit + integration tests pass in <30 s; mutation-killer tests cover phase semantics. |
+| Deterministic 12-phase pipeline (`feature_request` → `repository_discovery` → `specification` → `planning` → `implementation` → `validation` → `remediation` → `review` → `draft_pr` → `ci` → `ready` → `completed`) | 1874 unit + integration tests pass in <30 s; mutation-killer tests cover phase semantics. |
 | Telegram intake bot with 9 commands (`/start /help /status /runs /feature /pr /resume /cancel /dashboard`) | `tests/unit/telegram/` covers auth + dispatch + stub transport + mutation-killers. |
 | Two-runner model: `StubRunner` (in-memory) and `LocalCommandRunner` (subprocess, with timeout) | `tests/unit/orchestrator/test_runner_coverage.py` (100% coverage). |
 | Sandbox layer (Docker, subprocess, Noop) with threat-modeled isolation | Cluster C slices C1–C5; `examples/controller.sandbox.yaml` shows operator config. |
@@ -175,7 +175,7 @@ seharness --help
 ```
 src/seharness/
 ├── cli.py                 # `seharness` entry point
-├── orchestrator/          # 6-phase pipeline + runners
+├── orchestrator/          # 12-phase pipeline + runners
 ├── telegram/              # Telegram service + transport (protocol + stub)
 ├── telegram_runtime/      # python-telegram-bot wiring + dispatch
 ├── controller/            # Application service + run ledger

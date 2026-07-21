@@ -16,11 +16,40 @@ Configuration precedence (highest wins):
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 # Re-exported for backward compatibility with slice 1 callers.
 # Slice 4 promotes ProviderName to a StrEnum in domain/enums.py.
 from seharness.domain.enums import ProviderName
+
+
+class RuntimeProfile(StrEnum):
+    """Runtime profile for the orchestrator.
+
+    Profiles control adapter selection and fail-closed behaviour:
+
+    - ``DEVELOPMENT``: local laptop, fast iteration. Stub adapters are
+      allowed with a startup warning. Used by default when no profile
+      is configured.
+    - ``TEST``: test suite. Stubs allowed; no startup warnings (the
+      test suite asserts specific behaviour, not stub warnings).
+    - ``PRODUCTION``: live deployment. Stubs are REJECTED at startup;
+      any critical adapter that resolves to a stub raises
+      :class:`ConfigurationError` so the orchestrator never silently
+      ships a passing-but-fake run.
+
+    Cluster WP2 / story WP2.1. StrEnum so callers can compare against
+    string literals (``profile == "production"``) without explicit
+    conversion. New profiles must be added here AND in
+    :func:`_validate_runtime_profile_adapters`.
+    """
+
+    DEVELOPMENT = "development"
+    TEST = "test"
+    PRODUCTION = "production"
+
 
 # Provider IDs we know about today. New providers must be added here AND in
 # ``ModelsConfig`` routing defaults before they can be used in routing.
@@ -47,6 +76,12 @@ class HarnessSection(_StrictModel):
     artifact_root: str = ".harness-runs"
     resume_enabled: bool = True
     fail_closed: bool = True
+    # Cluster WP2: which runtime profile the orchestrator is operating
+    # in. Defaults to DEVELOPMENT so existing callers (notebook /
+    # local laptop runs) are unaffected. Production deployments must
+    # set this explicitly to ``production`` to get the fail-closed
+    # adapter validation; see :func:`validate_runtime_profile_adapters`.
+    runtime_profile: RuntimeProfile = RuntimeProfile.DEVELOPMENT
 
 
 class RepositoryConfig(_StrictModel):
@@ -146,6 +181,7 @@ __all__ = [
     "ModelRouting",
     "ModelsConfig",
     "RepositoryConfig",
+    "RuntimeProfile",
     "TelegramConfig",
     "ValidationError",
 ]

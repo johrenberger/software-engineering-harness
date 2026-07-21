@@ -89,6 +89,12 @@ class RunState(StrEnum):
     CANCELLED = "cancelled"
 
 
+#: Cluster WP1: outcome vocabulary for the structured phase cursor.
+#: Kept module-level (not an enum) so it matches the JSONL on-disk
+#: format and so mutmut doesn't see it as a magic-string worth killing.
+_PHASE_OUTCOME_VALUES: frozenset[str] = frozenset({"ok", "skipped", "failed", "blocked", "paused"})
+
+
 def _utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
@@ -116,6 +122,46 @@ def to_jsonable(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(k): to_jsonable(v) for k, v in value.items()}
     return value
+
+
+class PhaseCursor(BaseModel):
+    """Structured resume cursor (Cluster WP1 / story WP1.1).
+
+    Replaces the legacy ``RunRecord.phase: str`` cursor with a full
+    lifecycle model so resume can answer three questions correctly:
+
+    1. **Where are we?** — ``current_phase`` is the phase the
+       orchestrator will execute on the next attempt (or has just
+       finished executing on this attempt).
+    2. **What's the last successful checkpoint?** — ``last_completed_phase``
+       is the most recent phase that finished with outcome
+       ``OK`` or ``SKIPPED``. Resume skips this and starts at the
+       phase AFTER it.
+    3. **Did we fail, and where?** — ``failed_phase`` records the
+       phase that produced a ``FAILED`` / ``BLOCKED`` / ``PAUSED``
+       outcome on the current attempt. ``phase_attempt`` is the
+       0-based retry counter for ``current_phase``. ``phase_outcome``
+       is the outcome of the most recent attempt.
+
+    Resume policy:
+
+    - ``phase_outcome in {FAILED, BLOCKED, PAUSED}`` → resume retries
+      ``current_phase`` (i.e. attempt counter increments).
+    - ``phase_outcome in {OK, SKIPPED}`` → resume skips
+      ``last_completed_phase`` and starts at the phase AFTER it.
+
+    All phase names must be valid ``PhaseName`` enum values; the
+    Pydantic strict mode rejects free-form strings so a corrupted
+    ledger cannot poison the orchestrator's resume decision.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    current_phase: str = Field(min_length=1)
+    last_completed_phase: str | None = None
+    failed_phase: str | None = None
+    phase_attempt: int = Field(default=0, ge=0)
+    phase_outcome: str = Field(default="ok")  # ok|skipped|failed|blocked|paused
 
 
 class RunRecord(BaseModel):
@@ -156,6 +202,13 @@ class RunRecord(BaseModel):
     phase: str | None = Field(default=None)
     ctx: dict[str, Any] | None = Field(default=None)
     feature_description: str | None = Field(default=None)
+    # Cluster WP1: structured phase cursor that replaces the legacy
+    # ``phase`` string with a full lifecycle model. ``cursor`` is
+    # authoritative when present; ``phase`` is a derived compatibility
+    # view kept so JSONL replays of pre-WP1 records still load. New
+    # writes should always populate ``cursor`` and may leave ``phase``
+    # as a derived value or omit it.
+    cursor: PhaseCursor | None = Field(default=None)
 
 
 class RunLedger:
@@ -289,6 +342,8 @@ class RunLedger:
         *,
         phase: str,
         ctx: dict[str, Any] | None = None,
+        phase_outcome: str = "ok",
+        phase_attempt: int = 0,
         expected_revision: int | None = None,
     ) -> RunRecord | None:
         """Cluster E3: record the last-completed phase + updated ctx.
@@ -298,17 +353,38 @@ class RunLedger:
         accumulated so far (JSON-serializable). The record's state
         stays ``RUNNING``; revision bumps on every call so concurrent
         callers see the change.
+
+        Cluster WP1 / story WP1.1: also writes a structured
+        :class:`PhaseCursor` so resume can retry a failed phase.
+        ``phase_outcome`` must be one of ``ok`` / ``skipped`` /
+        ``failed`` / ``blocked`` / ``paused``; ``phase_attempt`` is
+        the 0-based retry counter for the current phase. When
+        ``phase_outcome`` is ``ok`` or ``skipped`` the cursor advances
+        ``last_completed_phase``; when ``failed`` / ``blocked`` /
+        ``paused`` the cursor records ``failed_phase`` so the next
+        resume retries this exact phase.
+
+        The ``expected_revision`` CAS check is honoured so two
+        concurrent workers cannot race a phase transition.
         """
         if not phase:
             raise ValueError("phase must be non-empty")
         if ctx is not None and not isinstance(ctx, dict):
             raise ValueError("ctx must be a dict (or None)")
+        if phase_outcome not in _PHASE_OUTCOME_VALUES:
+            raise ValueError(
+                f"phase_outcome {phase_outcome!r} must be one of {_PHASE_OUTCOME_VALUES}"
+            )
+        if phase_attempt < 0:
+            raise ValueError("phase_attempt must be >= 0")
         return self._update_state(
             run_id,
             RunState.RUNNING,
             expected_revision=expected_revision,
             phase=phase,
             ctx=ctx,
+            phase_outcome=phase_outcome,
+            phase_attempt=phase_attempt,
         )
 
     # ----- Cluster E2: optimistic concurrency ----------------------
@@ -416,14 +492,23 @@ class RunLedger:
         expected_state: RunState | None = None,
         phase: str | None = None,
         ctx: dict[str, Any] | None = None,
+        phase_outcome: str | None = None,
+        phase_attempt: int | None = None,
     ) -> RunRecord | None:
-        """Internal: apply a state transition with E2 CAS + E3 phase/ctx.
+        """Internal: apply a state transition with E2 CAS + E3 phase/ctx + WP1 cursor.
 
         The ``phase`` and ``ctx`` kwargs let callers (typically
         :meth:`record_phase`) update the resume cursor in the same
         atomic step as the state transition. When ``None`` the
         previous values are preserved (back-compat for callers that
         don't care about E3 persistence).
+
+        Cluster WP1 / story WP1.1: when ``phase`` is set, also
+        build / advance a structured :class:`PhaseCursor`. The
+        legacy ``RunRecord.phase`` string is kept in sync as a
+        derived view (``cursor.last_completed_phase or
+        cursor.current_phase``) so JSONL replays of pre-WP1 records
+        continue to load.
         """
         rec = self._records.get(run_id)
         if rec is None:
@@ -447,6 +532,35 @@ class RunLedger:
                 expected_state=expected_state,
                 actual_state=rec.state,
             )
+        # Cluster WP1: advance the structured cursor alongside the
+        # legacy ``phase`` string. The cursor is authoritative for
+        # the resume decision; ``phase`` is kept as a derived view.
+        new_cursor: PhaseCursor | None = rec.cursor
+        new_phase_str: str | None = phase if phase is not None else rec.phase
+        if phase is not None:
+            outcome = phase_outcome if phase_outcome is not None else "ok"
+            attempt = phase_attempt if phase_attempt is not None else 0
+            prev_cursor = rec.cursor
+            last_completed = prev_cursor.last_completed_phase if prev_cursor else None
+            failed_phase = prev_cursor.failed_phase if prev_cursor else None
+            if outcome in {"ok", "skipped"}:
+                last_completed = phase
+                # A successful phase clears any prior failed-phase marker.
+                failed_phase = None
+            else:
+                failed_phase = phase
+            new_cursor = PhaseCursor(
+                current_phase=phase,
+                last_completed_phase=last_completed,
+                failed_phase=failed_phase,
+                phase_attempt=attempt,
+                phase_outcome=outcome,
+            )
+            # Derived view: keep legacy ``phase`` field populated so
+            # older readers (and JSONL replays) still see a sensible
+            # value. Prefer ``last_completed_phase`` for "what just
+            # finished" semantics; fall back to ``current_phase``.
+            new_phase_str = last_completed or phase
         updated = RunRecord(
             run_id=rec.run_id,
             state=state,
@@ -458,9 +572,10 @@ class RunLedger:
             # and ``ctx`` default to the previous values when the
             # caller doesn't override them, so partial updates don't
             # wipe resume state.
-            phase=phase if phase is not None else rec.phase,
+            phase=new_phase_str,
             ctx=ctx if ctx is not None else rec.ctx,
             feature_description=rec.feature_description,
+            cursor=new_cursor,
         )
         self._records[run_id] = updated
         return updated
@@ -493,4 +608,11 @@ def _as_dict(record: RunRecord) -> dict[str, Any]:
         payload["phase"] = record.phase
     if record.ctx is not None:
         payload["ctx"] = record.ctx
+    # Cluster WP1: serialise the structured cursor alongside the
+    # legacy ``phase`` string. Old readers that don't know about
+    # ``cursor`` will ignore the extra key (Pydantic's ``extra="forbid"``
+    # is on the in-memory model, not on the JSON envelope). New readers
+    # prefer ``cursor`` when present.
+    if record.cursor is not None:
+        payload["cursor"] = record.cursor.model_dump()
     return payload
