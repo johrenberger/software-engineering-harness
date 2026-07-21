@@ -47,7 +47,10 @@ from seharness.models.minimax import MiniMaxAdapter
 from seharness.models.minimax_transport import (
     DEFAULT_ENDPOINT,
     DEFAULT_MAX_RESPONSE_BYTES,
+    DEFAULT_MODEL_ENV,
     DEFAULT_TIMEOUT_SECONDS,
+    DEPRECATED_LEGACY_ENDPOINT,
+    MODELS_ENDPOINT,
     FakeMiniMaxTransport,
     HttpMiniMaxTransport,
     MiniMaxMessage,
@@ -56,9 +59,8 @@ from seharness.models.minimax_transport import (
     MiniMaxTransportError,
     MiniMaxTransportResponse,
     RecordingMiniMaxTransport,
-)
-from seharness.models.minimax_transport import (
-    DEFAULT_MODEL as DEFAULT_MINIMAX_MODEL,
+    parse_model_catalog,
+    validate_model_against_account,
 )
 from seharness.models.output_repair import (
     ReattemptCallable,
@@ -121,9 +123,11 @@ __all__ = [
     "DEFAULT_ENDPOINT",
     "DEFAULT_FALLBACK",
     "DEFAULT_MAX_RESPONSE_BYTES",
-    "DEFAULT_MINIMAX_MODEL",
+    "DEFAULT_MODEL_ENV",
     "DEFAULT_ROUTING",
     "DEFAULT_TIMEOUT_SECONDS",
+    "DEPRECATED_LEGACY_ENDPOINT",
+    "MODELS_ENDPOINT",
     "CodexAdapter",
     "ErrorKind",
     "FakeMiniMaxTransport",
@@ -154,6 +158,8 @@ __all__ = [
     "StructuredOutputRepair",
     "get_adapter",
     "not_live",
+    "parse_model_catalog",
     "register_adapter",
     "registered_providers",
+    "validate_model_against_account",
 ]
