@@ -255,7 +255,13 @@ doc that will wire it up.
 | Human-approval gates (pause + resume) | NOT YET — handler surface exists; policy layer is design-stage | (P1 follow-up) |
 | Schema migration framework | NOT YET | (separate future work; see [README §Status](https://github.com/johrenberger/software-engineering-harness#status)) |
 | Real Codex adapter | NOT YET (fake only) | (P1 follow-up) |
-| Real MiniMax adapter | NOT YET (fake only) | (P1 follow-up) |
+| Real MiniMax adapter | **DONE** (cluster N) — HTTP transport, default OpenAI-compatible endpoint `https://api.minimax.io/v1/chat/completions`; capability-based readiness; live-smoke gated on `RUN_MINIMAX_LIVE_TEST`; vertical acceptance remains DRAFT until credentialed operator review | `src/seharness/models/minimax.py`, `src/seharness/models/minimax_transport.py`, `src/seharness/models/readiness_validation.py` |
+| Specification schema + plan schema | **DONE** (cluster N) — `SpecificationSchema` requires `discovered_repo_profile_name`; `PlanSchema` enforces `allowed_paths` per task; `validate_plan_against_policy(...)` rejects out-of-policy plans | `src/seharness/orchestrator/spec_plan_schemas.py` |
+| Production-composition readiness gate | **DONE** (cluster N) — `ModelBackedServiceComposition.runtime_profile=` parameter calls `validate_router_readiness(...)` BEFORE wiring any service; production profile fails closed when any wired adapter is not live | `src/seharness/models/readiness_validation.py`, `src/seharness/orchestrator/services.py` |
+| Controlled-patch generation | **DONE** (cluster N) — `SandboxPatchApplier` with injectable `SupportsGitApply` Protocol; purity + policy checks; default `_SubprocessGitApply` runner for production | `src/seharness/orchestrator/controlled_patches.py` |
+| Red→Green remediation cycle | **DONE** (cluster N) — `run_red_green_cycle(...)` injects fake transports; `MiniMaxBudgetTracker` wraps WP8 `BudgetTracker` with narrower axis surface (`MODEL_TOKENS`, `MODEL_COST_USD`, `ELAPSED_SECONDS`) | `src/seharness/orchestrator/red_green_cycle.py`, `src/seharness/orchestrator/minimax_budget_tracker.py` |
+| Independent review service | **DONE** (cluster N) — `IndependentMiniMaxReviewService` accepts a SEPARATE `review_router`; `ForbiddenTokenReviewPromptVerifier` proves no implementation history in prompt; `assert_review_blocks_completion(...)` pins rejection blocks delivery; malformed output NEVER approves | `src/seharness/orchestrator/independent_review.py` |
+| Vertical acceptance evidence | **DONE** (cluster N) — `docs/vertical-acceptance.md` documents 9-stage acceptance walkthrough against credentialed live run; PR #77 STAYS DRAFT until credentialed operator review | `docs/vertical-acceptance.md` |
 | Rate-limit retry-with-backoff in ModelRouter | **DONE** | `src/seharness/models/router.py` |
 | Suspicious-payload filtering | **DONE** | `src/seharness/security/payload_filter.py` |
 | PyPI release automation (release.yml) | **DONE** — PyPI publish is best-effort; GitHub Release always ships; defended by 13 contract tests | `.github/workflows/release.yml` |
@@ -305,6 +311,16 @@ the harness enforces is:
    component that emits pipeline events. This is the **layer-6
    auto-merge prevention** rule, enforced by
    `tests/unit/orchestrator/test_orchestrator_mutation_killers.py`.
+8. **Capability-based adapter readiness (cluster N).** Production
+   composition wiring calls
+   `validate_router_readiness(...)` against every wired adapter's
+   `readiness()` capability struct BEFORE constructing a service.
+   If any wired adapter is not live (missing API key, wrong endpoint,
+   transport not the production HTTP transport, model id not in the
+   account catalog), production refuses to start. The capability
+   model replaces class-name detection — see
+   `src/seharness/models/provider_readiness.py` and
+   `src/seharness/models/readiness_validation.py`.
 
 ### What "fail-closed" does NOT mean
 
