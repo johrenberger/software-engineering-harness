@@ -125,6 +125,13 @@ class RunContext:
     pr_url: str | None = None
     ci_outcome: str | None = None
     started_at: datetime = field(default_factory=_utcnow)
+    # WP6 (Cluster H, story K): delivery bookkeeping. The orchestrator
+    # records the branch it created and the exact head SHA it pushed
+    # so the CI readiness phase can verify that every required check
+    # ran against the recorded SHA. Replaying delivery with the same
+    # SHA returns the cached record (no duplicate commit/PR).
+    delivery_branch: str | None = None
+    delivery_head_sha: str | None = None
     # WP5 (Cluster H, story I): remediation bookkeeping. ``remediation_attempts``
     # increments every time ``_phase_remediation`` runs; ``remediation_exhausted``
     # is set when the bounded budget is consumed so the orchestrator routes
