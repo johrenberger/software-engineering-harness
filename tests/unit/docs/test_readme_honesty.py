@@ -62,9 +62,24 @@ def test_status_section_names_pypi_as_not_yet_published(readme: str) -> None:
 
 
 def test_status_section_acknowledges_alpha_status(readme: str) -> None:
-    """v0.1.0 / Alpha framing must be present so users calibrate expectations."""
-    assert "0.1.0" in readme
-    assert "Alpha" in readme or "alpha" in readme
+    """The README must explicitly call out the current dev-status (Alpha)
+    so users calibrate expectations. We assert ``Alpha`` is present and
+    that a SemVer tag (X.Y.Z) appears somewhere in the framing — the
+    exact version string advances as we ship, so the test is
+    version-agnostic but still pins the framing.
+    """
+    assert "Alpha" in readme or "alpha" in readme, (
+        "README must acknowledge the project's Alpha development status "
+        "so users calibrate expectations."
+    )
+    # The leading-paragraph framing should name a SemVer version. We
+    # accept any vX.Y.Z (the exact number advances each release); the
+    # test simply guards against silently dropping the version marker.
+    import re
+
+    assert re.search(r"v?\d+\.\d+\.\d+", readme), (
+        "README must name the current SemVer version in its framing."
+    )
 
 
 def test_readme_links_to_priority_tracker(readme: str) -> None:
