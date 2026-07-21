@@ -17,7 +17,7 @@ selects, configures, and authenticates against model providers.
 | **Provider credentials** | none required today — adapters fail closed | ✅ correct (no creds to leak) |
 | **`config/providers.toml` file** | not used; only `harness.yaml` is consulted | ⚠️ not yet |
 | **Env-var credential loading** (`SEHARNESS_PROVIDER_*_API_KEY`) | not wired | ⚠️ not yet |
-| **Live MiniMax HTTP client** | boundary class registered, `invoke()` fails closed | ⚠️ not yet |
+| **Live MiniMax HTTP client** | **DONE** (cluster N) — `HttpMiniMaxTransport` against `https://api.minimax.io/v1` (default OpenAI-compatible) + `MODELS_ENDPOINT` for `validate_model_against_account(...)`; bearer token read from env at call time; `__repr__` excludes endpoint; test-only `RecordingMiniMaxTransport` for offline replay | `src/seharness/models/minimax_transport.py` |
 | **Live Codex subprocess transport** | boundary class registered, `invoke()` fails closed | ⚠️ not yet |
 | **`delivery` routing slot** | default is `minimax` (per `router.py`); not in the example YAML above | ⚠️ partial |
 
@@ -31,16 +31,23 @@ identifiers are recognized today:
 | `minimax` | `LIVE` (HTTP) | Default planning + review (per SPEC §10). |
 | `codex` | `LOCAL` (subprocess) | Default implementation + remediation. |
 
-Both are *boundary* classes that fail closed in `invoke()` until the
-real transports land. Today, every model call returns a normalized
-`provider_failure` so callers see a single uniform error shape (see
-`src/seharness/models/minimax.py` and `src/seharness/models/codex.py`).
+`MiniMaxAdapter` (`src/seharness/models/minimax.py`) is now backed by
+the real `HttpMiniMaxTransport` (`src/seharness/models/minimax_transport.py`).
+The transport protocol is runtime-checkable; `FakeMiniMaxTransport`
+plus `RecordingMiniMaxTransport` round out the cluster N fixture
+suite. Bearer tokens are read from env at call time, never stored
+as fields; `__repr__` excludes endpoint URLs.
 
-This is a deliberate design choice: shipping the contract before
-shipping the transport means the router, fallback logic, and repair
-logic can all be tested with the deterministic `FakeModelAdapter`
-without network dependencies. See the architecture overview for the
-full model-layer layering.
+`CodexAdapter` (`src/seharness/models/codex.py`) still fails closed
+in `invoke()`; the cluster-N work did not modify it.
+
+Capability-based readiness replaces class-name detection:
+`MiniMaxAdapter.readiness()` (`src/seharness/models/provider_readiness.py`)
+returns a structured `ProviderReadiness` struct evaluated at
+construction. Production wiring calls
+`validate_router_readiness(...)` (`src/seharness/models/readiness_validation.py`)
+to fail-closed when an adapter reports not-live. See the architecture
+overview for the full model-layer layering.
 
 ## Configuring routing (works today)
 
