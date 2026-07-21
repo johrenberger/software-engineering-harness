@@ -65,6 +65,11 @@ def _profile(**kw: Any) -> RepositoryProfile:
         "architecture_summary": "",
         "conventions": (),
         "baseline_validation_status": BaselineStatus.UNKNOWN,
+        # WP4 / PR3 additions:
+        "instruction_files": (),
+        "is_monorepo": False,
+        "git_dirty": False,
+        "detected_language": "python",
     }
     defaults.update(kw)
     return RepositoryProfile(**defaults)  # type: ignore[arg-type]

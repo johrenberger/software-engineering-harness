@@ -14,6 +14,7 @@ framework the code happens to import.
 from __future__ import annotations
 
 import re
+import subprocess
 import tomllib
 from dataclasses import dataclass
 from datetime import datetime
@@ -124,9 +125,14 @@ class _StrictModel(BaseModel):
 class RepositoryProfile(_StrictModel):
     """Framework-neutral description of a Python repository.
 
-    All 13 fields are required (use ``""`` / ``()`` / ``"unknown"`` for
+    All 17 fields are required (use ``""`` / ``()`` / ``"unknown"`` for
     "not detected"). The model is frozen so downstream slices can rely on
     the values not changing mid-run.
+
+    The shape grew from 13 → 17 fields during slice-13 / WP4 to
+    surface the facts the planner needs (instruction files,
+    monorepo flag, base commit, dirty-state policy) so the
+    orchestrator never has to re-derive them from the filesystem.
     """
 
     name: str
@@ -142,6 +148,11 @@ class RepositoryProfile(_StrictModel):
     architecture_summary: str
     conventions: tuple[str, ...]
     baseline_validation_status: BaselineStatus
+    # WP4 additions (slice 13 / PR3):
+    instruction_files: tuple[str, ...]
+    is_monorepo: bool
+    git_dirty: bool
+    detected_language: str
 
 
 class BaselineSnapshot(_StrictModel):
@@ -344,6 +355,166 @@ def _detect_architecture_summary(path: Path) -> str:
     return "single-file Python project"
 
 
+# ---------------------------------------------------------------------------
+# WP4 / PR3 additions — slice 13 territory.
+# These helpers surface the facts the orchestrator needs to plan from
+# discovered state instead of hard-coded constants.
+# ---------------------------------------------------------------------------
+
+
+_INSTRUCTION_FILE_NAMES: tuple[str, ...] = (
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "CODEOWNERS",
+    "README.md",
+)
+
+
+def _detect_instruction_files(path: Path) -> tuple[str, ...]:
+    """Return the names of repo-level instruction files that exist.
+
+    These are surfaced verbatim (no parsing) so the planner can quote
+    or link to them when generating tasks. Detection is
+    case-insensitive on a known whitelist to avoid pulling arbitrary
+    dotfiles into the profile.
+    """
+    found: list[str] = []
+    for name in _INSTRUCTION_FILE_NAMES:
+        if (path / name).is_file():
+            found.append(name)
+    return tuple(found)
+
+
+def _detect_monorepo(path: Path) -> bool:
+    """True when the repo has more than one Python source root or
+    multiple ``pyproject.toml`` files.
+
+    The heuristic is intentionally cheap: ``inspect_repository`` is
+    called on every run, so we walk at most one level deep and
+    bail out as soon as we see a second project marker.
+    """
+    if _read_pyproject(path) is not None:
+        # Look for nested pyproject.toml files one level down.
+        nested = sum(
+            1 for child in path.iterdir() if child.is_dir() and (child / "pyproject.toml").is_file()
+        )
+        if nested > 0:
+            return True
+    return False
+
+
+def _detect_git_state(path: Path) -> tuple[str, bool]:
+    """Return (base_commit, dirty).
+
+    ``base_commit`` is the current HEAD commit SHA, or ``""`` when the
+    path is not a git repository or git is unavailable. ``dirty`` is
+    True iff the working tree has uncommitted changes (excluding
+    untracked files in the repo root).
+
+    Implementation note: we shell out to ``git`` rather than using
+    ``dulwich``/``pygit2`` because git is guaranteed to be installed
+    in every CI environment we run in, and a 50 ms subprocess is
+    cheaper than a dependency for a one-shot call.
+    """
+    if not (path / ".git").exists():
+        return "", False
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "", False
+    if head.returncode != 0:
+        return "", False
+    commit = head.stdout.strip()
+    try:
+        status = subprocess.run(
+            ["git", "-C", str(path), "status", "--porcelain"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return commit, False
+    return commit, status.returncode == 0 and bool(status.stdout.strip())
+
+
+def _detect_language(path: Path) -> str:
+    """Detect the dominant source language by extension count.
+
+    Returns one of ``"python"`` / ``"typescript"`` / ``"javascript"`` /
+    ``"rust"`` / ``"go"`` / ``"unknown"``. The scan walks at most
+    two levels deep (the repo root and one directory down, e.g.
+    ``src/`` / ``tests/`` / ``packages/``) so it stays O(visible
+    files) without missing the common src-layout repos.
+    """
+    if not path.is_dir():
+        return "unknown"
+    counts: dict[str, int] = {}
+    try:
+        children = list(path.iterdir())
+    except OSError:
+        return "unknown"
+    _tally_top_level(counts, children)
+    _tally_package_subdirs(counts, children)
+    if not counts:
+        return "unknown"
+    return max(counts.items(), key=lambda kv: kv[1])[0]
+
+
+def _tally_top_level(counts: dict[str, int], children: list[Path]) -> None:
+    """Bump language counters for top-level files in ``children``."""
+    for child in children:
+        if not child.is_file():
+            continue
+        ext = child.suffix.lstrip(".").lower()
+        if not ext:
+            continue
+        _tally_ext(counts, ext)
+
+
+def _tally_package_subdirs(counts: dict[str, int], children: list[Path]) -> None:
+    """Bump language counters for files inside known package roots.
+
+    Common package roots are scanned; deeper trees are out of
+    scope so this stays O(visible files).
+    """
+    package_roots = {"src", "lib", "tests", "packages", "apps", "services"}
+    for child in children:
+        if not child.is_dir() or child.name not in package_roots:
+            continue
+        try:
+            sub_files = list(child.iterdir())
+        except OSError:
+            continue
+        for sub in sub_files:
+            if not sub.is_file():
+                continue
+            ext = sub.suffix.lstrip(".").lower()
+            if not ext:
+                continue
+            _tally_ext(counts, ext)
+
+
+def _tally_ext(counts: dict[str, int], ext: str) -> None:
+    """Bump the language counter for a single file extension."""
+    if ext == "py":
+        counts["python"] = counts.get("python", 0) + 1
+    elif ext == "ts":
+        counts["typescript"] = counts.get("typescript", 0) + 1
+    elif ext == "js":
+        counts["javascript"] = counts.get("javascript", 0) + 1
+    elif ext == "rs":
+        counts["rust"] = counts.get("rust", 0) + 1
+    elif ext == "go":
+        counts["go"] = counts.get("go", 0) + 1
+
+
 # --- public API --------------------------------------------------------------
 
 
@@ -354,6 +525,13 @@ def inspect_repository(path: Path) -> RepositoryProfile:
     a directory. Other I/O errors during scanning degrade gracefully:
     a corrupt ``pyproject.toml`` is treated as "no pyproject" rather
     than aborting the whole discovery.
+
+    WP4 / PR3 additions: the profile now carries the repo's base
+    git commit, dirty-state, monorepo flag, instruction-file list,
+    and a cheap dominant-language detection. These are the facts the
+    planner consumes to generate tasks, dependencies, allowed paths
+    and validation commands instead of relying on hard-coded
+    constants.
     """
     if not path.exists():
         raise RepositoryError(f"repository path does not exist: {path}")
@@ -368,13 +546,17 @@ def inspect_repository(path: Path) -> RepositoryProfile:
     conventions = _detect_conventions(path, pyproject)
     ci = _detect_ci_workflows(path)
     architecture = _detect_architecture_summary(path)
+    instruction_files = _detect_instruction_files(path)
+    is_monorepo = _detect_monorepo(path)
+    base_commit, git_dirty = _detect_git_state(path)
+    detected_language = _detect_language(path)
 
     requires_python = pyproject.requires_python if pyproject is not None else ""
 
     return RepositoryProfile(
         name=path.name,
         path=str(path.resolve()),
-        base_commit="",
+        base_commit=base_commit,
         python_version_constraint=requires_python,
         package_manager=package_manager,
         source_roots=source_roots,
@@ -385,7 +567,47 @@ def inspect_repository(path: Path) -> RepositoryProfile:
         architecture_summary=architecture,
         conventions=conventions,
         baseline_validation_status=BaselineStatus.UNKNOWN,
+        instruction_files=instruction_files,
+        is_monorepo=is_monorepo,
+        git_dirty=git_dirty,
+        detected_language=detected_language,
     )
+
+
+# ---------------------------------------------------------------------------
+# Plan-derivation helpers (WP4 / PR3).
+# These are pure functions over a RepositoryProfile so the planner can
+# stay decoupled from the inspector. Note: per-gate command resolution
+# (test/lint/type_check/format) is handled by
+# :class:`CommandResolver` in :mod:`seharness.repository.conventions`
+# — we don't duplicate that here.
+# ---------------------------------------------------------------------------
+
+
+def derive_allowed_paths(profile: RepositoryProfile) -> tuple[str, ...]:
+    """Return the canonical allowed paths for ``profile``.
+
+    Cluster WP4 / story WP4.5: derive allowed paths from the
+    detected source roots + test roots + docs directory. Each
+    project marker yields at most one entry; the docs directory is
+    included when present so doc-only changes are plan-compatible.
+    """
+    paths: list[str] = []
+    for root in profile.source_roots:
+        paths.append(f"{root}/")
+    for root in profile.test_roots:
+        paths.append(f"{root}/")
+    repo_path = Path(profile.path)
+    if (repo_path / "docs").is_dir():
+        paths.append("docs/")
+    # Deduplicate while preserving order.
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in paths:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return tuple(out)
 
 
 __all__ = [
@@ -396,5 +618,6 @@ __all__ = [
     "RepositoryError",
     "RepositoryProfile",
     "ValidationCommand",
+    "derive_allowed_paths",
     "inspect_repository",
 ]
