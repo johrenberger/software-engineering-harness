@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable, Mapping
+from types import MappingProxyType
 
 from seharness.domain.enums import (
     ProviderName,
@@ -266,6 +267,17 @@ class ModelRouter:
             msg = f"no adapter registered for provider: {provider!r}"
             raise KeyError(msg)
         return adapter
+
+    @property
+    def adapters(self) -> Mapping[ProviderName, ModelAdapter]:
+        """Read-only view of the registered adapters.
+
+        Cluster N (production-composition): the readiness validator
+        walks the wired adapters via this property so it can refuse
+        to start in production when any adapter is not live. The
+        mapping is a snapshot — callers MUST NOT mutate it.
+        """
+        return MappingProxyType(self._adapters)
 
     @staticmethod
     def _is_routable_failure(error: ModelError) -> bool:

@@ -68,6 +68,11 @@ from seharness.models.output_repair import (
     StructuredOutputRepair,
 )
 from seharness.models.provider_readiness import ProviderReadiness, not_live
+from seharness.models.readiness_validation import (
+    ReadinessDiagnostic,
+    iter_not_live_adapters,
+    validate_router_readiness,
+)
 from seharness.models.router import (
     DEFAULT_FALLBACK,
     DEFAULT_ROUTING,
@@ -149,6 +154,7 @@ __all__ = [
     "ProviderKind",
     "ProviderName",
     "ProviderReadiness",
+    "ReadinessDiagnostic",
     "ReattemptCallable",
     "RecordingMiniMaxTransport",
     "RepairOutcome",
@@ -157,9 +163,11 @@ __all__ = [
     "RoutingRole",
     "StructuredOutputRepair",
     "get_adapter",
+    "iter_not_live_adapters",
     "not_live",
     "parse_model_catalog",
     "register_adapter",
     "registered_providers",
     "validate_model_against_account",
+    "validate_router_readiness",
 ]

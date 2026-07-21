@@ -177,6 +177,10 @@ class MiniMaxAdapter(ModelAdapter):
         model_id_for_struct = self._model_identifier or "unset"
 
         if not configured:
+            # When the key is unset, surface the configured model
+            # identifier if it was set explicitly, otherwise use
+            # the sentinel so the readiness struct satisfies its
+            # ``min_length=1`` constraint.
             return not_live(
                 reason=(f"environment variable {self._api_key_env!r} is unset"),
                 model_identifier=model_id_for_struct,
