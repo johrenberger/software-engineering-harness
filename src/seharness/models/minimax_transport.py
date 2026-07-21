@@ -44,9 +44,21 @@ Design constraints (enforced by ``tests/unit/models/test_minimax_transport.py``)
    MiniMax returns).
 6. The transport extracts usage from the response body when present.
 
-The endpoint defaults to ``https://api.minimax.chat/v1/text/chatcompletion_v2``
-per the live probe; it can be overridden for tests and alternative
-deployments.
+The endpoint defaults to ``https://api.minimax.io/v1/chat/completions``
+(the **OpenAI-compatible** endpoint) per the official API
+documentation. The older
+``https://api.minimax.chat/v1/text/chatcompletion_v2`` endpoint is
+officially documented but marked **deprecated**; it is NOT the
+default transport. The deprecated endpoint remains accepted when
+explicitly configured so legacy accounts are not broken.
+
+Model identifiers are **not** hard-coded. The current official
+documentation names MiniMax M2.7, M2.5, M2.1, and M2; ``MiniMax-M3``
+is not yet listed. Until the credentialed account confirms an M3
+listing, the harness treats the model ID as a mandatory
+``MINIMAX_MODEL`` environment variable. The transport's ``model``
+field accepts whatever string the caller passes; validation against
+the live model catalog happens via :func:`validate_model_against_account`.
 """
 
 from __future__ import annotations
@@ -64,13 +76,24 @@ from pydantic import BaseModel, ConfigDict, Field
 # ---------------------------------------------------------------------------
 
 
-#: Default MiniMax endpoint. Probed at the start of the refinement work
-#: (status 200 reachable, auth via ``Authorization: Bearer ...``).
-DEFAULT_ENDPOINT: str = "https://api.minimax.chat/v1/text/chatcompletion_v2"
+#: Default MiniMax endpoint. The official, OpenAI-compatible chat
+#: completions endpoint per
+#: https://platform.minimax.io/docs/api-reference/text-chat-openai
+DEFAULT_ENDPOINT: str = "https://api.minimax.io/v1/chat/completions"
 
-#: Default model identifier. Matches the existing default in
-#: :class:`seharness.models.minimax.MiniMaxAdapter`.
-DEFAULT_MODEL: str = "minimax/MiniMax-M3"
+#: Legacy deprecated endpoint. Accepted when explicitly configured
+#: so older accounts are not broken, but NOT the default.
+#: https://platform.minimax.io/docs/api-reference/text-post
+DEPRECATED_LEGACY_ENDPOINT: str = "https://api.minimax.chat/v1/text/chatcompletion_v2"
+
+#: Default model catalog endpoint used for startup validation.
+MODELS_ENDPOINT: str = "https://api.minimax.io/v1/models"
+
+#: Environment variable holding the model identifier. There is no
+#: hard-coded default model because the current official
+#: documentation lists MiniMax M2.7 / M2.5 / M2.1 / M2, not M3.
+#: Callers must set ``MINIMAX_MODEL`` explicitly.
+DEFAULT_MODEL_ENV: str = "MINIMAX_MODEL"
 
 #: Default request timeout in seconds.
 DEFAULT_TIMEOUT_SECONDS: float = 30.0
@@ -106,18 +129,28 @@ class MiniMaxRequest(BaseModel):
     The adapter translates its provider-neutral :class:`ModelRequest`
     into one of these. The transport does not know about
     :class:`ModelRequest`.
+
+    Field names mirror the official OpenAI-compatible schema:
+
+    - ``model``: caller-supplied; no hard-coded default (per the
+      refinement workplan the harness MUST NOT assume ``MiniMax-M3``
+      because the live account may not expose it).
+    - ``messages``: chat-completions shape.
+    - ``max_completion_tokens``: the upper bound on completion
+      tokens the model may emit. Maps to ``max_tokens`` in the
+      OpenAI client SDK but is named ``max_completion_tokens``
+      on the wire per the official MiniMax docs.
+    - ``temperature``: optional sampling temperature.
+    - ``stream``: always ``False``; this transport is non-streaming.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    model: str = DEFAULT_MODEL
+    model: str = ""
     messages: tuple[MiniMaxMessage, ...] = Field(min_length=1)
-    max_tokens: int | None = Field(default=None, ge=1, le=1_000_000)
+    max_completion_tokens: int | None = Field(default=None, ge=1, le=1_000_000)
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
-    # Optional structured-output hint. MiniMax's response_format is
-    # not yet observed; the field is passed through when the model
-    # supports it and ignored otherwise.
-    response_format: dict[str, Any] | None = None
+    stream: bool = False
 
 
 class MiniMaxTransportError(BaseModel):
@@ -222,6 +255,18 @@ class HttpMiniMaxTransport:
             f"HttpMiniMaxTransport(api_key_env={self._api_key_env!r}, "
             f"timeout_seconds={self._timeout_seconds})"
         )
+
+    @property
+    def client(self) -> httpx.Client:
+        """The underlying httpx client.
+
+        Exposed so the adapter can reuse the same connection pool
+        for the catalog ``GET /v1/models`` request and the chat
+        completions POST. Production startup therefore uses a
+        single client for both; tests can inject a
+        ``MockTransport``-backed client to intercept both.
+        """
+        return self._client
 
     def _bearer_token(self) -> str | None:
         token = os.environ.get(self._api_key_env)
@@ -535,6 +580,10 @@ def _extract_usage(body: dict[str, Any]) -> tuple[int | None, int | None]:
     """Extract (input_tokens, output_tokens) from the parsed response.
 
     Returns ``(None, None)`` if usage is missing or malformed.
+
+    The OpenAI-compatible schema uses ``prompt_tokens`` and
+    ``completion_tokens``. Some MiniMax responses also include
+    ``total_tokens``; we deliberately ignore that field.
     """
     usage = body.get("usage")
     if not isinstance(usage, dict):
@@ -546,11 +595,111 @@ def _extract_usage(body: dict[str, Any]) -> tuple[int | None, int | None]:
     return in_tok, out_tok
 
 
+# ---------------------------------------------------------------------------
+# Model-catalog validation
+# ---------------------------------------------------------------------------
+
+
+def parse_model_catalog(body: dict[str, Any]) -> tuple[str, ...]:
+    """Parse the OpenAI-compatible ``GET /v1/models`` response body.
+
+    The catalog body has shape ``{"data": [{"id": "..."}, ...]}``.
+    Returns the tuple of model ids in the order returned by the API.
+    Returns an empty tuple if the body is malformed.
+    """
+    data = body.get("data")
+    if not isinstance(data, list):
+        return ()
+    ids: list[str] = []
+    for entry in data:
+        if isinstance(entry, dict):
+            mid = entry.get("id")
+            if isinstance(mid, str) and mid:
+                ids.append(mid)
+    return tuple(ids)
+
+
+def validate_model_against_account(  # noqa: PLR0911 — branched error normalization; readability over consolidation
+    *,
+    configured_model: str,
+    api_key_env: str = "MINIMAX_API_KEY",
+    models_endpoint: str = MODELS_ENDPOINT,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    client: httpx.Client | None = None,
+) -> tuple[bool, tuple[str, ...], str | None]:
+    """Validate ``configured_model`` against the live MiniMax catalog.
+
+    Returns a 3-tuple ``(is_listed, available_models, error_message)``:
+
+    - ``is_listed``: True iff ``configured_model`` appears in the
+      catalog returned by ``GET /v1/models``.
+    - ``available_models``: the list of model ids returned by the API
+      (in order); useful for the operator to pick a different model
+      when ``is_listed`` is False.
+    - ``error_message``: a redacted error message when the catalog
+      could not be fetched (auth failure, timeout, etc.). ``None``
+      on success.
+
+    The function does NOT raise; it returns a structured result so
+    callers can fail closed at startup. Production startup MUST
+    reject configuration when ``is_listed`` is False.
+
+    Per the refinement workplan: do not silently substitute one
+    model for another. If the configured M3 model is absent from
+    the account, stop and surface the available models.
+    """
+    token = os.environ.get(api_key_env)
+    if not token:
+        return (False, (), f"environment variable {api_key_env!r} is unset")
+
+    owns_client = client is None
+    if client is None:
+        client = httpx.Client(timeout=timeout_seconds)
+    try:
+        try:
+            http_response = client.get(
+                models_endpoint,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=timeout_seconds,
+            )
+        except httpx.TimeoutException:
+            return (False, (), f"catalog fetch timed out after {timeout_seconds}s")
+        except httpx.ConnectError as exc:
+            return (False, (), f"catalog fetch connection failure: {exc!s}")
+        except httpx.HTTPError as exc:
+            return (False, (), f"catalog fetch transport error: {exc!s}")
+
+        if http_response.status_code in (401, 403):
+            return (False, (), f"http {http_response.status_code} fetching catalog")
+        if http_response.status_code >= 400:
+            return (
+                False,
+                (),
+                f"http {http_response.status_code} fetching catalog",
+            )
+
+        try:
+            parsed = json.loads(http_response.content)
+        except json.JSONDecodeError as exc:
+            return (False, (), f"catalog response is not valid JSON: {exc!s}")
+
+        if not isinstance(parsed, dict):
+            return (False, (), "catalog response is not a JSON object")
+
+        available = parse_model_catalog(parsed)
+        return (configured_model in available, available, None)
+    finally:
+        if owns_client:
+            client.close()
+
+
 __all__ = [
     "DEFAULT_ENDPOINT",
     "DEFAULT_MAX_RESPONSE_BYTES",
-    "DEFAULT_MODEL",
+    "DEFAULT_MODEL_ENV",
     "DEFAULT_TIMEOUT_SECONDS",
+    "DEPRECATED_LEGACY_ENDPOINT",
+    "MODELS_ENDPOINT",
     "FakeMiniMaxTransport",
     "HttpMiniMaxTransport",
     "MiniMaxMessage",
@@ -559,4 +708,6 @@ __all__ = [
     "MiniMaxTransportError",
     "MiniMaxTransportResponse",
     "RecordingMiniMaxTransport",
+    "parse_model_catalog",
+    "validate_model_against_account",
 ]
