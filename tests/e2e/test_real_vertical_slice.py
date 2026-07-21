@@ -69,10 +69,13 @@ def test_orchestrator_writes_real_repo_profile(tmp_path: Path) -> None:
     wired = _build_wired(tmp_path)
     result = wired.run()
     run_dir = wired.tmp_path / "runs" / result.run_id
+    # Cluster WP4 / story WP4.1: ``repo-profile.json`` is now the
+    # full ``RepositoryProfile`` Pydantic model (not the legacy
+    # 19-line stub), so we assert on the new shape.
     profile = json.loads((run_dir / "repo-profile.json").read_text())
-    assert profile["repo_path"] == str(wired.repo)
-    assert "main.py" in profile["files"]
-    assert profile["language"] == "python"
+    assert profile["path"] == str(wired.repo)
+    assert profile["detected_language"] == "python"
+    assert profile["baseline_validation_status"] == "unknown"
 
 
 def test_orchestrator_writes_real_specification(tmp_path: Path) -> None:
@@ -93,7 +96,12 @@ def test_orchestrator_writes_real_plan_with_one_task(tmp_path: Path) -> None:
     assert len(plan["tasks"]) == 1
     task = plan["tasks"][0]
     assert task["objective"] == "Add /health endpoint"
-    assert task["validation_commands"] == ["pytest --no-cov -q"]
+    # Cluster WP4 / story WP4.5: validation_commands is now derived
+    # from the discovered RepositoryProfile via CommandResolver.
+    # The fixture repo has no pyproject.toml, so the inspector falls
+    # back to ``package_manager=unknown`` which resolves to
+    # ``python -m pytest``.
+    assert task["validation_commands"] == ["python -m pytest"]
 
 
 def test_orchestrator_invokes_real_task_execution_service(tmp_path: Path) -> None:

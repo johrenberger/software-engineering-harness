@@ -35,13 +35,18 @@ def _new_profile(**overrides: object) -> RepositoryProfile:
         "architecture_summary": "",
         "conventions": (),
         "baseline_validation_status": "unknown",
+        # WP4 / PR3 additions:
+        "instruction_files": (),
+        "is_monorepo": False,
+        "git_dirty": False,
+        "detected_language": "python",
     }
     defaults.update(overrides)
     return RepositoryProfile(**defaults)  # type: ignore[arg-type]
 
 
 class TestRepositoryProfileRequiredFields:
-    """All 13 fields from SPEC are present and readable."""
+    """All 17 fields from SPEC are present and readable."""
 
     def test_has_name(self) -> None:
         assert _new_profile().name == "demo"
