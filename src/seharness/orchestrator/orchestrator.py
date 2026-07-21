@@ -54,6 +54,14 @@ from seharness.orchestrator.runtime_profile import (
     iter_adapter_slots,
     validate_runtime_profile_adapters,
 )
+from seharness.orchestrator.services import (
+    DeterministicServiceComposition,
+    ImplementationOutcome,
+    ReviewContext,
+    ReviewVerdict,
+    ServiceComposition,
+    SpecificationArtifact,
+)
 from seharness.orchestrator.types import (
     OrchestratorConfig,
     PhaseName,
@@ -200,6 +208,61 @@ class _Reviewer:
 
 
 # ---------------------------------------------------------------------------
+# WP3 helpers — adapters between the new ``ReviewVerdict`` /
+# ``ImplementationOutcome`` shapes and the legacy ``_phase_review``
+# string contract.
+# ---------------------------------------------------------------------------
+
+
+def _verdict_to_legacy(verdict: ReviewVerdict) -> str:
+    """Map the closed-set :class:`ReviewVerdict` status back to the
+    legacy string used by ``RunContext.review_verdict`` and the
+    downstream controller commands.
+
+    The mapping preserves the legacy ``approve`` / ``request_changes``
+    / ``reject`` vocabulary so existing tests + the Telegram
+    controller keep working unchanged.
+    """
+    if verdict.status == "approved":
+        return "approve"
+    if verdict.status == "rejected":
+        return "reject"
+    return "request_changes"
+
+
+def _build_review_spec(ctx: RunContext, run_dir: Path) -> SpecificationArtifact:
+    """Construct a minimal :class:`SpecificationArtifact` from the run
+    context for the review service to consume.
+
+    WP3 requires review to receive *only* the approved spec, the
+    diff, the plan, and the validation/coverage results — never the
+    chat history. ``SpecificationArtifact`` carries exactly those
+    fields so review can render them without re-reading the run
+    directory.
+    """
+    return SpecificationArtifact(
+        spec_version=1,
+        description=ctx.feature_description or "",
+        repo_path=ctx.repo_path or "",
+        run_id=str(ctx.run_id),
+    )
+
+
+# Sentinel ``ImplementationOutcome`` used when the orchestrator has
+# not yet recorded a real prior outcome. ``_phase_remediation``
+# passes this in so the deterministic remediation service has
+# something to inspect; it always returns ``not_applicable``.
+_ZERO_OUTCOME = ImplementationOutcome(
+    attempted=False,
+    attempt_index=0,
+    final_response=None,
+    structured=None,
+    error_kind=None,
+    error_message=None,
+)
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
 
@@ -222,11 +285,16 @@ class Orchestrator:
         pr_client: PullRequestClient | None = None,
         ci_monitor: object | None = None,
         trace_writer: TraceWriter | None | str = "auto",
+        services: ServiceComposition | None = None,
     ) -> None:
         self._run_ledger = run_ledger
         self._config = config or OrchestratorConfig()
         self._pr_client = pr_client or StubPullRequestClient()
         self._ci_monitor = ci_monitor  # typed lazily to avoid cycles
+        # Cluster WP3 (story H): provider-neutral service composition.
+        # Default is the deterministic composition so existing
+        # callers (tests, sandbox profile) keep working unchanged.
+        self._services: ServiceComposition = services or DeterministicServiceComposition()
         self._runner = LocalCommandRunner() if self._config.use_real_subprocess else StubRunner()
         # Cluster WP2: fail-closed adapter validation. In ``PRODUCTION``
         # we refuse to start with any stub-class-named adapter; in
@@ -851,26 +919,28 @@ def _phase_repository_discovery(
 def _phase_specification(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
-    run_dir.mkdir(parents=True, exist_ok=True)
-    spec_doc = {
-        "run_id": str(spec.run_id),
-        "description": ctx.feature_description,
-        "repo_path": ctx.repo_path,
-        "spec_version": 1,
-    }
-    spec_path = run_dir / "specification.json"
-    spec_path.write_text(json.dumps(spec_doc, indent=2, sort_keys=True) + "\n")
-    # Cluster WP1 / story WP1.4: surface the artifact path in the
-    # context so callers (and the controller layer) can introspect
-    # the spec without re-deriving it.
+    # Cluster WP3 (story H): delegate to the configured
+    # ``SpecificationService``. The deterministic default writes the
+    # exact same JSON shape as before, so tests that introspect
+    # ``specification.json`` keep passing.
+    artifact = orch._services.specification.produce(ctx=ctx, run_dir=run_dir)
+    spec_path = Path(run_dir) / "specification.json"
     new_ctx = replace(ctx, specification_path=str(spec_path))
-    return PhaseOutcome.OK, new_ctx, f"specification written: {spec_path.name}"
+    provider = artifact.provider.value if artifact.provider else "deterministic"
+    return (
+        PhaseOutcome.OK,
+        new_ctx,
+        f"specification written: {spec_path.name} (provider={provider})",
+    )
 
 
 def _phase_planning(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
-    plan = _PlanBuilder.build(ctx=ctx)
+    # Cluster WP3 (story H): delegate to the configured
+    # ``PlanningService``. Default composition wraps ``_PlanBuilder``
+    # so existing tests keep passing.
+    plan = orch._services.planning.build(ctx=ctx)
     plan_path = run_dir / "plan.json"
     plan_path.write_text(plan.model_dump_json(indent=2) + "\n")
     # Cluster WP1 / story WP1.4: surface the plan id so callers can
@@ -967,8 +1037,24 @@ def _phase_validation(
 def _phase_remediation(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
-    # Slice-7/8 already invoked revert_unauthorized; this phase simply
-    # records that we passed the remediation gate.
+    # Cluster WP3 (story H): delegate to the configured
+    # ``RemediationService``. The deterministic default marks the
+    # gate passed (matches the legacy behaviour) and the model-backed
+    # composition classifies any prior implementation error via the
+    # ``ErrorKind`` mapping in :mod:`seharness.orchestrator.services`.
+    plan = _PlanBuilder.build(ctx=ctx)
+    # If we have no recorded prior outcome we just acknowledge the
+    # remediation gate passed — the orchestrator will not call this
+    # service with a real ``prior_outcome`` until a later PR wires
+    # ``ImplementationOutcome`` into the run ledger. The protocol
+    # already exists; this phase handler stays simple for now.
+    if plan.tasks:
+        _ = orch._services.remediation.remediate(
+            ctx=ctx,
+            plan=plan,
+            task_id=plan.tasks[0].task_id,
+            prior_outcome=_ZERO_OUTCOME,
+        )
     return PhaseOutcome.OK, ctx, "no outstanding violations"
 
 
@@ -976,15 +1062,31 @@ def _phase_review(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
     plan = _PlanBuilder.build(ctx=ctx)
-    verdict = _Reviewer.review(run_dir=run_dir, plan=plan)
+    # Cluster WP3 (story H): delegate to the configured
+    # ``ReviewService`` with a *fresh* context — the SPEC requires
+    # review never to receive prior implementation chat history or
+    # trace events. ``ReviewContext`` is the structural enforcement
+    # of that rule.
+    review_verdict: ReviewVerdict = orch._services.review.review(
+        review_ctx=ReviewContext(
+            approved_spec=_build_review_spec(ctx, run_dir),
+            impact={},
+            plan=plan,
+            final_diff="",
+            validation_results={},
+            coverage_results={},
+            run_dir=run_dir,
+        )
+    )
+    legacy_verdict = _verdict_to_legacy(review_verdict)
     # Cluster WP1 / story WP1.4: surface the review verdict in the
     # context so callers / the controller can branch on it. The
     # verdict is recorded regardless of phase outcome — both OK and
     # FAILED branches carry the actual review result, never ``None``.
-    new_ctx = replace(ctx, review_verdict=verdict)
-    if verdict != "approve":
-        return PhaseOutcome.FAILED, new_ctx, f"review verdict: {verdict}"
-    return PhaseOutcome.OK, new_ctx, f"verdict: {verdict}"
+    new_ctx = replace(ctx, review_verdict=legacy_verdict)
+    if legacy_verdict != "approve":
+        return PhaseOutcome.FAILED, new_ctx, f"review verdict: {legacy_verdict}"
+    return PhaseOutcome.OK, new_ctx, f"verdict: {legacy_verdict}"
 
 
 def _phase_draft_pr(
