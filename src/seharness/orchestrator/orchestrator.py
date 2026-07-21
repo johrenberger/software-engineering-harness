@@ -50,6 +50,10 @@ from seharness.observability.trace import (
 )
 from seharness.orchestrator.phases import PHASE_SEQUENCE, phase_info
 from seharness.orchestrator.runner import LocalCommandRunner, StubRunner
+from seharness.orchestrator.runtime_profile import (
+    iter_adapter_slots,
+    validate_runtime_profile_adapters,
+)
 from seharness.orchestrator.types import (
     OrchestratorConfig,
     PhaseName,
@@ -215,6 +219,17 @@ class Orchestrator:
         self._pr_client = pr_client or StubPullRequestClient()
         self._ci_monitor = ci_monitor  # typed lazily to avoid cycles
         self._runner = LocalCommandRunner() if self._config.use_real_subprocess else StubRunner()
+        # Cluster WP2: fail-closed adapter validation. In ``PRODUCTION``
+        # we refuse to start with any stub-class-named adapter; in
+        # ``DEVELOPMENT`` we return a diagnostic so the caller can log
+        # a single startup warning; in ``TEST`` we silently pass. The
+        # validator is invoked here (rather than at adapter wire time)
+        # so the slots are mutable up to this point and so we can
+        # enumerate every slot via :func:`iter_adapter_slots`.
+        validate_runtime_profile_adapters(
+            profile=self._config.runtime_profile,
+            adapters=dict(iter_adapter_slots(self)),
+        )
         # Trace writer: ``"auto"`` defers to per-run creation at
         # ``<execution_root>/<run_id>/trace.jsonl``; ``None`` disables
         # tracing entirely; an explicit instance is used as-is.

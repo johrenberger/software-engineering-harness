@@ -18,6 +18,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, NewType
 
+from seharness.config import RuntimeProfile
+
 
 def _utcnow() -> datetime:
     return datetime.now(tz=UTC)
@@ -141,6 +143,13 @@ class OrchestratorConfig:
     #: When False (default), the orchestrator uses the in-memory
     #: ``StubRunner`` so unit tests don't spawn subprocesses.
     use_real_subprocess: bool = False
+    # Cluster WP2: which runtime profile the orchestrator is operating
+    # in. The default is DEVELOPMENT so notebook + local-iteration
+    # callers (the bulk of today's users) are unaffected. Production
+    # deployments must set ``runtime_profile=RuntimeProfile.PRODUCTION``
+    # to get fail-closed adapter validation; see
+    # :mod:`seharness.orchestrator.runtime_profile`.
+    runtime_profile: RuntimeProfile = RuntimeProfile.DEVELOPMENT
 
     def __post_init__(self) -> None:
         # dataclass(frozen=True) + ConfigDict is awkward; we just
