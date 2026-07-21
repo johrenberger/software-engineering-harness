@@ -26,7 +26,7 @@ from __future__ import annotations
 import contextlib
 import json
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -88,11 +88,20 @@ class PipelineResult:
     ``"failed"`` (any unrecoverable error), ``"blocked"`` (policy
     violation requiring intervention), or ``"paused"`` (awaiting
     resume / approval).
+
+    Cluster WP1 / story WP1.4: ``context`` carries the final
+    :class:`RunContext` populated by the last successful phase, so
+    callers can introspect ``profile_path`` / ``specification_path``
+    / ``plan_id`` / ``review_verdict`` / ``pr_url`` / ``ci_outcome``
+    without re-querying the ledger. ``None`` for callers that
+    intentionally want a lighter payload (and for legacy code paths
+    that pre-date the populated-context wire-up).
     """
 
     run_id: str
     terminal_state: str
     events: tuple[PipelineEvent, ...] = ()
+    context: RunContext | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -531,6 +540,12 @@ class Orchestrator:
             run_id=str(rid),
             terminal_state=terminal_state,
             events=tuple(events),
+            # Cluster WP1 / story WP1.4: surface the final RunContext
+            # so callers can read profile_path / specification_path /
+            # plan_id / review_verdict / pr_url / ci_outcome without
+            # querying the ledger. ``ctx`` is the dataclass instance
+            # mutated by each phase handler as it advances.
+            context=ctx,
         )
         self._events[str(rid)] = result.events
         # E4b: deregister the cancellation token now that the run is
@@ -824,7 +839,13 @@ def _phase_repository_discovery(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
     profile = _RepoProfiler.profile(repo_path=Path(ctx.repo_path), run_dir=run_dir)
-    return PhaseOutcome.OK, ctx, f"profile written: {profile.name}"
+    # Cluster WP1 / story WP1.4: surface the artifact path in the
+    # context so callers can introspect the profile without
+    # re-deriving it from run_dir. ``profile.name`` is the basename;
+    # callers usually want the absolute path so they can ``open()``
+    # it directly, hence ``run_dir / profile.name``.
+    new_ctx = replace(ctx, profile_path=str(run_dir / profile.name))
+    return PhaseOutcome.OK, new_ctx, f"profile written: {profile.name}"
 
 
 def _phase_specification(
@@ -839,7 +860,11 @@ def _phase_specification(
     }
     spec_path = run_dir / "specification.json"
     spec_path.write_text(json.dumps(spec_doc, indent=2, sort_keys=True) + "\n")
-    return PhaseOutcome.OK, ctx, f"specification written: {spec_path.name}"
+    # Cluster WP1 / story WP1.4: surface the artifact path in the
+    # context so callers (and the controller layer) can introspect
+    # the spec without re-deriving it.
+    new_ctx = replace(ctx, specification_path=str(spec_path))
+    return PhaseOutcome.OK, new_ctx, f"specification written: {spec_path.name}"
 
 
 def _phase_planning(
@@ -848,7 +873,11 @@ def _phase_planning(
     plan = _PlanBuilder.build(ctx=ctx)
     plan_path = run_dir / "plan.json"
     plan_path.write_text(plan.model_dump_json(indent=2) + "\n")
-    return PhaseOutcome.OK, ctx, f"plan produced: {plan.plan_id}"
+    # Cluster WP1 / story WP1.4: surface the plan id so callers can
+    # correlate later artifacts (e.g. task_results) with the plan
+    # that produced them.
+    new_ctx = replace(ctx, plan_id=plan.plan_id)
+    return PhaseOutcome.OK, new_ctx, f"plan produced: {plan.plan_id}"
 
 
 def _phase_implementation(
@@ -884,9 +913,23 @@ def _phase_implementation(
     except Exception as exc:
         # Convert any TaskExecutionService failure into a PhaseOutcome.
         raise OrchestratorError(f"implementation failed: {exc}") from exc
+    # Cluster WP1 / story WP1.4: surface a per-task summary in the
+    # context so callers (and the dashboard) can introspect task
+    # results without re-running ``svc.execute``. We append the new
+    # result rather than replacing, so re-execution (e.g. on resume
+    # retry) accumulates the history.
+    new_task_results = (
+        *ctx.task_results,
+        {
+            "task_id": task.task_id,
+            "violations": list(result.violations),
+            "summary": str(getattr(result, "summary", "")),
+        },
+    )
+    new_ctx = replace(ctx, task_results=new_task_results)
     return (
         PhaseOutcome.OK,
-        ctx,
+        new_ctx,
         f"task {task.task_id} executed: violations={list(result.violations)}",
     )
 
@@ -897,7 +940,11 @@ def _phase_validation(
     plan = _PlanBuilder.build(ctx=ctx)
     task = plan.tasks[0]
     if not task.validation_commands:
-        return PhaseOutcome.SKIPPED, ctx, "no validation commands"
+        # Cluster WP1 / story WP1.4: surface the SKIPPED state in the
+        # context so callers don't see ``validation_exit_code=None``
+        # and conclude the phase ran but produced no exit code.
+        new_ctx = replace(ctx, validation_exit_code=None)
+        return PhaseOutcome.SKIPPED, new_ctx, "no validation commands"
     cmd = task.validation_commands[0]
     result = orch._runner.run_validation(
         command=cmd,
@@ -906,9 +953,15 @@ def _phase_validation(
         cancel=orch._cancel_token_for(str(ctx.run_id)),
     )
     detail = f"{cmd} → exit {result.exit_code}"
+    # Cluster WP1 / story WP1.4: surface the actual exit code on the
+    # context regardless of phase outcome. The SKIPPED branch sets it
+    # to ``None``; the OK and FAILED branches set it to the actual
+    # exit code so downstream consumers (dashboard, failure-routing)
+    # can branch on it without re-running the validation.
+    new_ctx = replace(ctx, validation_exit_code=result.exit_code)
     if result.exit_code != 0:
-        return PhaseOutcome.FAILED, ctx, detail
-    return PhaseOutcome.OK, ctx, detail
+        return PhaseOutcome.FAILED, new_ctx, detail
+    return PhaseOutcome.OK, new_ctx, detail
 
 
 def _phase_remediation(
@@ -924,9 +977,14 @@ def _phase_review(
 ) -> tuple[PhaseOutcome, RunContext, str]:
     plan = _PlanBuilder.build(ctx=ctx)
     verdict = _Reviewer.review(run_dir=run_dir, plan=plan)
+    # Cluster WP1 / story WP1.4: surface the review verdict in the
+    # context so callers / the controller can branch on it. The
+    # verdict is recorded regardless of phase outcome — both OK and
+    # FAILED branches carry the actual review result, never ``None``.
+    new_ctx = replace(ctx, review_verdict=verdict)
     if verdict != "approve":
-        return PhaseOutcome.FAILED, ctx, f"review verdict: {verdict}"
-    return PhaseOutcome.OK, ctx, f"verdict: {verdict}"
+        return PhaseOutcome.FAILED, new_ctx, f"review verdict: {verdict}"
+    return PhaseOutcome.OK, new_ctx, f"verdict: {verdict}"
 
 
 def _phase_draft_pr(
@@ -938,7 +996,11 @@ def _phase_draft_pr(
         body=f"Automated run {spec.run_id}.",
         draft=orch._config.pr_draft,
     )
-    return PhaseOutcome.OK, ctx, f"draft PR: {url}"
+    # Cluster WP1 / story WP1.4: surface the PR URL so callers can
+    # navigate to the draft without re-querying the PR client. Even
+    # stub clients return a synthetic URL; we surface it verbatim.
+    new_ctx = replace(ctx, pr_url=url)
+    return PhaseOutcome.OK, new_ctx, f"draft PR: {url}"
 
 
 def _phase_ci(
@@ -948,26 +1010,38 @@ def _phase_ci(
     if monitor is None:
         # No real monitor wired; declare the run CI-ready if validation
         # passed (which it did, otherwise we'd have routed to failed).
-        return PhaseOutcome.OK, ctx, "CI monitor not configured; assuming ready"
+        # Cluster WP1 / story WP1.4: surface the no-monitor condition
+        # as a distinct outcome so the dashboard can flag runs that
+        # passed without CI evidence (vs. runs that have actual CI).
+        new_ctx = replace(ctx, ci_outcome="no_monitor")
+        return PhaseOutcome.OK, new_ctx, "CI monitor not configured; assuming ready"
     # Real monitor: invoke .run() with bounded budget.
     if not hasattr(monitor, "run"):
-        return PhaseOutcome.OK, ctx, "monitor missing run(); assuming ready"
+        new_ctx = replace(ctx, ci_outcome="no_run_method")
+        return PhaseOutcome.OK, new_ctx, "monitor missing run(); assuming ready"
     # We do NOT call .run() here because it blocks until the PR is
     # ready. /pr_status uses view_factory for an instant view; the
     # orchestrator mirrors that pattern by inspecting the most recent
     # view without polling.
     view_factory = getattr(monitor, "_view_factory", None)
     if view_factory is None:
-        return PhaseOutcome.OK, ctx, "monitor has no view_factory; assuming ready"
+        new_ctx = replace(ctx, ci_outcome="no_view_factory")
+        return PhaseOutcome.OK, new_ctx, "monitor has no view_factory; assuming ready"
     view = view_factory()
     if view is None:
-        return PhaseOutcome.OK, ctx, "no view available; assuming ready"
+        new_ctx = replace(ctx, ci_outcome="no_view")
+        return PhaseOutcome.OK, new_ctx, "no view available; assuming ready"
     from seharness.ci.readiness import ReadyEvaluator  # noqa: PLC0415
 
     decision = ReadyEvaluator().evaluate(view)
+    # Cluster WP1 / story WP1.4: surface the actual decision so
+    # callers learn whether the run is truly ready vs. still
+    # pending. ``ci_outcome`` is the SPEC §"Phase 9" phrase.
     if not decision.can_be_ready:
-        return PhaseOutcome.FAILED, ctx, "CI not ready"
-    return PhaseOutcome.OK, ctx, "CI ready"
+        new_ctx = replace(ctx, ci_outcome="not_ready")
+        return PhaseOutcome.FAILED, new_ctx, "CI not ready"
+    new_ctx = replace(ctx, ci_outcome="ready")
+    return PhaseOutcome.OK, new_ctx, "CI ready"
 
 
 def _phase_ready(
@@ -998,7 +1072,56 @@ _PHASE_HANDLERS: dict[PhaseName, _PhaseHandler] = {
 }
 
 
-__all__ = ["Orchestrator", "OrchestratorError", "PipelineEvent", "PipelineResult"]
+# ---------------------------------------------------------------------------
+# Cluster WP1 / story WP1.5 — OrchestrationService Protocol
+# ---------------------------------------------------------------------------
+#
+# The controller layer (slice 11) used to dispatch to ``Orchestrator``
+# via ``isinstance(self._task_executor, Orchestrator)``, which
+# hard-couples the controller to the concrete ``Orchestrator`` class.
+# ``OrchestrationService`` is the structural interface the controller
+# (and any future wiring layer) depends on. ``Orchestrator``
+# implements it implicitly; test doubles can implement it explicitly.
+#
+# Methods mirror ``Orchestrator.start_run`` / ``.resume_run`` /
+# ``.cancel_run``. The Protocol is intentionally narrow — adding a
+# method here is a deliberate API change that callers must support.
+
+
+class OrchestrationService(Protocol):
+    """Structural interface to the orchestrator.
+
+    Implemented by :class:`Orchestrator`; test doubles may implement
+    the same interface for stubbed dispatch in the controller. The
+    controller accepts any conformer; production deployments must
+    use :class:`Orchestrator` so the WP2 fail-closed validator
+    catches accidentally-wired stubs.
+
+    Cluster WP1 / story WP1.5.
+    """
+
+    def start_run(  # mirror Orchestrator signature
+        self,
+        *,
+        feature_description: str,
+        repo_path: str,
+        run_id: RunId | None = None,
+        idempotency_key: str = "",
+        resume_from_run_id: str | None = None,
+    ) -> PipelineResult: ...
+
+    def resume_run(self, run_id: str) -> PipelineResult: ...
+
+    def cancel_run(self, run_id: str) -> None: ...
+
+
+__all__ = [
+    "OrchestrationService",
+    "Orchestrator",
+    "OrchestratorError",
+    "PipelineEvent",
+    "PipelineResult",
+]
 
 
 # ---------------------------------------------------------------------------

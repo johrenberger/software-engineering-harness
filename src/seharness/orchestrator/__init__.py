@@ -21,7 +21,10 @@ go through ``ControllerApplicationService.feature_request`` which
 delegates to ``Orchestrator.start_run``.
 """
 
-from seharness.orchestrator.orchestrator import Orchestrator
+from seharness.orchestrator.orchestrator import (
+    OrchestrationService,
+    Orchestrator,
+)
 from seharness.orchestrator.phases import PHASE_SEQUENCE
 from seharness.orchestrator.runner import (
     CommandResult,
@@ -40,6 +43,7 @@ __all__ = [
     "PHASE_SEQUENCE",
     "CommandResult",
     "LocalCommandRunner",
+    "OrchestrationService",
     "Orchestrator",
     "OrchestratorConfig",
     "PhaseName",
