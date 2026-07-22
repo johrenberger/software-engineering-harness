@@ -1134,3 +1134,140 @@ class TestReviewVerdictCrossFieldValidation:
             )
         msg = str(excinfo.value)
         assert "inconsistent" in msg.lower() or "status" in msg.lower()
+
+
+# ---------------------------------------------------------------------------
+# Cluster M3-2: ServiceEvidence.to_provider_evidence_record
+# ---------------------------------------------------------------------------
+
+
+class TestServiceEvidenceToProviderEvidenceRecord:
+    """Cluster M3-2: the dataclass conversion helper that
+    bridges the model-call evidence schema to the durable
+    evidence envelope.
+    """
+
+    def test_minimal_conversion(self) -> None:
+        from seharness.domain.enums import ProviderName, RoutingRole
+        from seharness.orchestrator.provider_evidence import (
+            ProviderEvidenceRecord,
+        )
+        from seharness.orchestrator.services import ServiceEvidence
+
+        evidence = ServiceEvidence(
+            role=RoutingRole.PLANNING,
+            provider=ProviderName.MINIMAX,
+            model="MiniMax-M3",
+            request_id="req-abc",
+            template_version="specification@v1",
+            duration_s=0.5,
+            input_tokens=100,
+            output_tokens=200,
+            error_kind=None,
+            error_message=None,
+        )
+        record = evidence.to_provider_evidence_record(run_id="run-1", phase="specification")
+        assert isinstance(record, ProviderEvidenceRecord)
+        assert record.configured_model == "MiniMax-M3"
+        assert record.returned_model == "MiniMax-M3"
+        assert record.run_id == "run-1"
+        assert record.phase == "specification"
+
+    def test_falls_back_to_returned_model_when_configured_unset(self) -> None:
+        from seharness.domain.enums import ProviderName, RoutingRole
+        from seharness.orchestrator.services import ServiceEvidence
+
+        evidence = ServiceEvidence(
+            role=RoutingRole.PLANNING,
+            provider=ProviderName.MINIMAX,
+            model="MiniMax-M3",
+            request_id=None,
+            template_version="specification@v1",
+            duration_s=0.1,
+            input_tokens=None,
+            output_tokens=None,
+        )
+        # ``configured_model`` defaults to ``None`` so the
+        # helper must fall back to ``model`` (returned model).
+        record = evidence.to_provider_evidence_record(run_id="r", phase="specification")
+        assert record.configured_model == "MiniMax-M3"
+
+    def test_local_correlation_id_fallback(self) -> None:
+        from seharness.domain.enums import ProviderName, RoutingRole
+        from seharness.orchestrator.services import ServiceEvidence
+
+        evidence = ServiceEvidence(
+            role=RoutingRole.IMPLEMENTATION,
+            provider=ProviderName.MINIMAX,
+            model="MiniMax-M3",
+            request_id=None,
+            template_version="implementation@v1",
+            duration_s=0.1,
+            input_tokens=None,
+            output_tokens=None,
+        )
+        record = evidence.to_provider_evidence_record(
+            run_id="run-7", phase="implementation", task_id="t1"
+        )
+        assert record.local_correlation_id == "run-7:implementation:implementation"
+        assert record.task_id == "t1"
+
+    def test_error_kind_serialized_as_string(self) -> None:
+        from seharness.domain.enums import ProviderName, RoutingRole
+        from seharness.orchestrator.services import ServiceEvidence
+
+        evidence = ServiceEvidence(
+            role=RoutingRole.PLANNING,
+            provider=ProviderName.MINIMAX,
+            model="MiniMax-M3",
+            request_id=None,
+            template_version="specification@v1",
+            duration_s=0.1,
+            input_tokens=None,
+            output_tokens=None,
+            error_kind="malformed_output",
+            error_message="bad json",
+        )
+        record = evidence.to_provider_evidence_record(run_id="r", phase="specification")
+        assert record.normalized_error_kind == "malformed_output"
+        assert record.redacted_error_message == "bad json"
+
+    def test_explicit_correlation_id_preserved(self) -> None:
+        from seharness.domain.enums import ProviderName, RoutingRole
+        from seharness.orchestrator.services import ServiceEvidence
+
+        evidence = ServiceEvidence(
+            role=RoutingRole.PLANNING,
+            provider=ProviderName.MINIMAX,
+            model="MiniMax-M3",
+            request_id=None,
+            template_version="specification@v1",
+            duration_s=0.1,
+            input_tokens=None,
+            output_tokens=None,
+            local_correlation_id="explicit-corr-id",
+        )
+        record = evidence.to_provider_evidence_record(run_id="r", phase="specification")
+        assert record.local_correlation_id == "explicit-corr-id"
+
+    def test_configured_model_distinct_from_returned(self) -> None:
+        """The corrective doc requires both fields; the helper
+        must keep them distinct when both are set.
+        """
+        from seharness.domain.enums import ProviderName, RoutingRole
+        from seharness.orchestrator.services import ServiceEvidence
+
+        evidence = ServiceEvidence(
+            role=RoutingRole.PLANNING,
+            provider=ProviderName.MINIMAX,
+            model="MiniMax-M3-20260722",
+            request_id=None,
+            template_version="specification@v1",
+            duration_s=0.1,
+            input_tokens=None,
+            output_tokens=None,
+            configured_model="MiniMax-M3",
+        )
+        record = evidence.to_provider_evidence_record(run_id="r", phase="specification")
+        assert record.configured_model == "MiniMax-M3"
+        assert record.returned_model == "MiniMax-M3-20260722"
