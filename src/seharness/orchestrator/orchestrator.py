@@ -27,8 +27,9 @@ import contextlib
 import hashlib
 import json
 import os
+import shutil
 import socket
-import subprocess
+import subprocess  # nosec B404
 import time
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
@@ -1294,10 +1295,20 @@ def _git_head(*, repo_path: Path) -> str | None:
     Cluster M3-3: the corrective doc §"Repository discovery"
     requires recording the base Git SHA. We tolerate the
     non-git-repo case so notebook scenarios keep working.
+
+    The git executable is resolved via ``shutil.which`` so the
+    absolute path is passed to ``subprocess.run`` (bandit B607).
+    The arguments are hard-coded.
     """
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+        # Resolve ``git`` to an absolute path so bandit B607
+        # is satisfied. The arguments are hard-coded; no
+        # untrusted input flows into the call.
+        git_path = shutil.which("git")
+        if git_path is None:
+            return None
+        result = subprocess.run(  # nosec B603
+            [git_path, "rev-parse", "HEAD"],
             cwd=repo_path,
             capture_output=True,
             check=False,
