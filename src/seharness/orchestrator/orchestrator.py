@@ -24,9 +24,12 @@ to unconditional ``completed`` (Cluster A, story A4).
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
+import shutil
 import socket
+import subprocess  # nosec B404
 import time
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
@@ -56,6 +59,10 @@ from seharness.orchestrator.budgets import (
     BudgetExhausted,
     BudgetTracker,
 )
+from seharness.orchestrator.completion_policy import (
+    SKIP_REASON_LOCAL_M3_ACCEPTANCE,
+    LocalCompletionPolicy,
+)
 from seharness.orchestrator.delivery import (
     CiStatus,
     DeliveryComposition,
@@ -68,6 +75,9 @@ from seharness.orchestrator.leases import (
     new_owner_token,
 )
 from seharness.orchestrator.phases import PHASE_SEQUENCE, phase_info
+from seharness.orchestrator.provider_evidence import (
+    ProviderEvidenceWriter,
+)
 from seharness.orchestrator.runner import LocalCommandRunner, StubRunner
 from seharness.orchestrator.runtime_profile import (
     iter_adapter_slots,
@@ -394,7 +404,24 @@ class Orchestrator:
         delivery: DeliveryComposition | None = None,
         lease_store: LeaseStore | None = None,
         tracer: Tracer | None = None,
+        # Cluster M3-3 corrective: when ``composition`` is set,
+        # ``self._services`` is replaced with the supplied
+        # composition. The ``services`` kwarg remains for backward
+        # compatibility (one-or-the-other; passing both raises).
+        composition: ServiceComposition | None = None,
+        evidence_writer: ProviderEvidenceWriter | None = None,
+        completion_policy: LocalCompletionPolicy | None = None,
     ) -> None:
+        if services is not None and composition is not None:
+            msg = "Orchestrator accepts either services= or composition= but not both; pass one"
+            raise ValueError(msg)
+        self._completion_policy: LocalCompletionPolicy = (
+            completion_policy or LocalCompletionPolicy()
+        )
+        self._evidence_writer: ProviderEvidenceWriter | None = evidence_writer
+        self._composition_id: str | None = None
+        if composition is not None:
+            self._composition_id = type(composition).__name__
         self._run_ledger = run_ledger
         self._config = config or OrchestratorConfig()
         self._pr_client = pr_client or StubPullRequestClient()
@@ -402,7 +429,9 @@ class Orchestrator:
         # Cluster WP3 (story H): provider-neutral service composition.
         # Default is the deterministic composition so existing
         # callers (tests, sandbox profile) keep working unchanged.
-        self._services: ServiceComposition = services or DeterministicServiceComposition()
+        self._services: ServiceComposition = (
+            composition or services or DeterministicServiceComposition()
+        )
         # Cluster WP6 (story K): provider-neutral delivery composition.
         # Replays go through ``IdempotencyStore`` so duplicate
         # resumes cannot create duplicate branches, commits, or PRs.
@@ -598,6 +627,8 @@ class Orchestrator:
             run_id=rid,
             feature_description=feature_description,
             repo_path=str(repo),
+            composition_id=self._composition_id,
+            remote_skipped_reason=(self._completion_policy.remote_phases_skip_reason or None),
         )
         # Cluster E3: when resuming, rebuild the ctx from the
         # persisted snapshot so subsequent phases see the prior
@@ -1200,6 +1231,31 @@ def _classify_artifact(filename: str) -> str:
     return _ARTIFACT_KIND_BY_NAME.get(filename, "file")
 
 
+def _record_phase_evidence(
+    orch: Orchestrator,
+    *,
+    run_id: str,
+    phase: str,
+    task_id: str | None,
+    evidence: Any,
+) -> None:
+    """Persist a ``ServiceEvidence`` through the orchestrator's writer.
+
+    Cluster M3-3: each phase that calls a model-driven service
+    emits one ``ServiceEvidence``. The orchestrator's
+    ``evidence_writer`` is the durable channel; the writer's
+    ``record(call=...)`` method writes one JSONL line per call.
+    When no writer is wired (cluster WP3 default for backward
+    compatibility) the call is silently dropped so legacy
+    callers keep working.
+    """
+    writer = orch._evidence_writer
+    if writer is None:
+        return
+    record = evidence.to_provider_evidence_record(run_id=run_id, phase=phase, task_id=task_id)
+    writer.record(call=record)
+
+
 def _phase_feature_request(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
@@ -1215,8 +1271,56 @@ def _phase_repository_discovery(
     # re-deriving it from run_dir. ``profile.name`` is the basename;
     # callers usually want the absolute path so they can ``open()``
     # it directly, hence ``run_dir / profile.name``.
-    new_ctx = replace(ctx, profile_path=str(run_dir / profile.name))
+    profile_path = run_dir / profile.name
+    new_ctx = replace(ctx, profile_path=str(profile_path))
+    # Cluster M3-3: capture the base Git SHA + profile hash so the
+    # M3 vertical acceptance has immutable run anchors. We capture
+    # the SHA via ``git rev-parse HEAD``; if the repo isn't a git
+    # working tree (e.g. notebook scenarios) we fall back to
+    # ``None``. The profile hash is the SHA-256 of the profile
+    # artifact; if the profiler hasn't written it yet we defer to
+    # the next phase.
+    base_sha = _git_head(repo_path=Path(ctx.repo_path))
+    if base_sha is not None:
+        new_ctx = replace(new_ctx, base_git_sha=base_sha)
+    if profile_path.exists():
+        profile_hash = hashlib.sha256(profile_path.read_bytes()).hexdigest()
+        new_ctx = replace(new_ctx, profile_hash=profile_hash)
     return PhaseOutcome.OK, new_ctx, f"profile written: {profile.name}"
+
+
+def _git_head(*, repo_path: Path) -> str | None:
+    """Return ``git rev-parse HEAD`` for ``repo_path`` or None on failure.
+
+    Cluster M3-3: the corrective doc §"Repository discovery"
+    requires recording the base Git SHA. We tolerate the
+    non-git-repo case so notebook scenarios keep working.
+
+    The git executable is resolved via ``shutil.which`` so the
+    absolute path is passed to ``subprocess.run`` (bandit B607).
+    The arguments are hard-coded.
+    """
+    try:
+        # Resolve ``git`` to an absolute path so bandit B607
+        # is satisfied. The arguments are hard-coded; no
+        # untrusted input flows into the call.
+        git_path = shutil.which("git")
+        if git_path is None:
+            return None
+        result = subprocess.run(  # nosec B603
+            [git_path, "rev-parse", "HEAD"],
+            cwd=repo_path,
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    sha = result.stdout.strip()
+    return sha or None
 
 
 def _phase_specification(
@@ -1229,6 +1333,19 @@ def _phase_specification(
     artifact = orch._services.specification.produce(ctx=ctx, run_dir=run_dir)
     spec_path = Path(run_dir) / "specification.json"
     new_ctx = replace(ctx, specification_path=str(spec_path))
+    # Cluster M3-3: persist the spec hash + record evidence so
+    # the M3 vertical acceptance has durable artifacts to audit.
+    if spec_path.exists():
+        spec_hash = hashlib.sha256(spec_path.read_bytes()).hexdigest()
+        new_ctx = replace(new_ctx, specification_hash=spec_hash)
+    if getattr(orch._services.specification, "last_evidence", None) is not None:
+        _record_phase_evidence(
+            orch,
+            run_id=str(ctx.run_id),
+            phase=PhaseName.SPECIFICATION.value,
+            task_id=None,
+            evidence=orch._services.specification.last_evidence,
+        )
     provider = artifact.provider.value if artifact.provider else "deterministic"
     return (
         PhaseOutcome.OK,
@@ -1250,6 +1367,18 @@ def _phase_planning(
     # correlate later artifacts (e.g. task_results) with the plan
     # that produced them.
     new_ctx = replace(ctx, plan_id=plan.plan_id)
+    # Cluster M3-3: persist the plan hash + record evidence.
+    if plan_path.exists():
+        plan_hash = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+        new_ctx = replace(new_ctx, plan_hash=plan_hash)
+    if getattr(orch._services.planning, "last_evidence", None) is not None:
+        _record_phase_evidence(
+            orch,
+            run_id=str(ctx.run_id),
+            phase=PhaseName.PLANNING.value,
+            task_id=None,
+            evidence=orch._services.planning.last_evidence,
+        )
     return PhaseOutcome.OK, new_ctx, f"plan produced: {plan.plan_id}"
 
 
@@ -1425,6 +1554,20 @@ def _phase_review(
     # verdict is recorded regardless of phase outcome — both OK and
     # FAILED branches carry the actual review result, never ``None``.
     new_ctx = replace(ctx, review_verdict=legacy_verdict)
+    # Cluster M3-3: record review evidence + persist verdict hash
+    # so the M3 vertical acceptance has durable artifacts.
+    if getattr(orch._services.review, "last_evidence", None) is not None:
+        _record_phase_evidence(
+            orch,
+            run_id=str(ctx.run_id),
+            phase=PhaseName.REVIEW.value,
+            task_id=None,
+            evidence=orch._services.review.last_evidence,
+        )
+    review_path = run_dir / "review-verdict.json"
+    if review_path.exists():
+        review_hash = hashlib.sha256(review_path.read_bytes()).hexdigest()
+        new_ctx = replace(new_ctx, review_verdict_hash=review_hash)
     if legacy_verdict != "approve":
         return PhaseOutcome.FAILED, new_ctx, f"review verdict: {legacy_verdict}"
     return PhaseOutcome.OK, new_ctx, f"verdict: {legacy_verdict}"
@@ -1442,7 +1585,25 @@ def _phase_draft_pr(
     the same ``(run_id, task_id)`` returns the cached record —
     duplicate resumes cannot create duplicate branches, commits,
     or PRs.
+
+    Cluster M3-3: the local-completion policy short-circuits this
+    phase with the literal ``skipped_by_local_m3_acceptance_policy``
+    reason. No synthetic URL is fabricated; the run continues to
+    the next phase with the reason recorded on the context.
     """
+    if orch._completion_policy.should_skip(PhaseName.DRAFT_PR):
+        new_ctx = replace(
+            ctx,
+            remote_skipped_reason=(orch._completion_policy.remote_phases_skip_reason),
+        )
+        return (
+            PhaseOutcome.SKIPPED,
+            new_ctx,
+            (
+                f"draft_pr {SKIP_REASON_LOCAL_M3_ACCEPTANCE}; "
+                f"reason={orch._completion_policy.remote_phases_skip_reason!r}"
+            ),
+        )
     from seharness.delivery.commit import CommitMessage  # noqa: PLC0415
 
     idempotency_root = run_dir / "delivery"
@@ -1506,7 +1667,24 @@ def _phase_ci(
     If no monitor is wired AND the runtime profile is ``PRODUCTION``
     we fail-closed with ``blocked``; otherwise we fall back to the
     pre-WP6 behaviour so existing tests keep passing.
+
+    Cluster M3-3: the local-completion policy short-circuits this
+    phase with the literal ``skipped_by_local_m3_acceptance_policy``
+    reason. No synthetic CI readiness is fabricated.
     """
+    if orch._completion_policy.should_skip(PhaseName.CI):
+        new_ctx = replace(
+            ctx,
+            remote_skipped_reason=(orch._completion_policy.remote_phases_skip_reason),
+        )
+        return (
+            PhaseOutcome.SKIPPED,
+            new_ctx,
+            (
+                f"ci {SKIP_REASON_LOCAL_M3_ACCEPTANCE}; "
+                f"reason={orch._completion_policy.remote_phases_skip_reason!r}"
+            ),
+        )
     if ctx.delivery_head_sha is None:
         new_ctx = replace(ctx, ci_outcome="blocked")
         return PhaseOutcome.FAILED, new_ctx, "delivery head SHA missing; CI blocked"

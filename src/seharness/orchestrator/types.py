@@ -139,6 +139,24 @@ class RunContext:
     # the run to ``failed`` / ``blocked`` instead of ``completed``.
     remediation_attempts: int = 0
     remediation_exhausted: bool = False
+    # Cluster M3-3 corrective: artifact hashes + evidence paths.
+    # The corrective doc §"Canonical orchestrator integration"
+    # enumerates a checklist of durable artifacts that must
+    # accompany every M3 vertical run. New fields default to
+    # ``None`` so pre-M3-3 callers keep working.
+    base_git_sha: str | None = None
+    profile_hash: str | None = None
+    specification_hash: str | None = None
+    plan_hash: str | None = None
+    test_patch_hash: str | None = None
+    production_patch_hash: str | None = None
+    remediation_patch_hash: str | None = None
+    final_diff_hash: str | None = None
+    review_verdict_hash: str | None = None
+    red_evidence_path: str | None = None
+    green_evidence_path: str | None = None
+    composition_id: str | None = None
+    remote_skipped_reason: str | None = None
 
 
 @dataclass(frozen=True)
