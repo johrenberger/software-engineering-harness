@@ -1038,3 +1038,99 @@ class TestSpecificationServiceRaisesMalformedOutput:
             service.produce(ctx=_ctx(tmp_path), run_dir=tmp_path / "x")
         assert service.last_evidence is not None
         assert service.last_evidence.error_kind == "malformed_output"
+
+
+# ---------------------------------------------------------------------------
+# Cluster M3-1: ReviewVerdict cross-field validation
+# ---------------------------------------------------------------------------
+
+
+class TestReviewVerdictCrossFieldValidation:
+    """Cluster M3-1 corrective: status / approval consistency.
+
+    Per the corrective doc:
+
+    - ``approved``          → ``approval == True``
+    - ``changes_requested`` → ``approval == False``
+    - ``rejected``          → ``approval == False``
+
+    Contradictory payloads must raise ``ValidationError`` so the
+    orchestrator can never read an inconsistent completion
+    decision.
+    """
+
+    def test_approved_with_approval_true_accepted(self) -> None:
+        v = ReviewVerdict(
+            status="approved",
+            approval=True,
+            summary="ok",
+        )
+        assert v.approval is True
+
+    def test_changes_requested_with_approval_false_accepted(self) -> None:
+        v = ReviewVerdict(
+            status="changes_requested",
+            approval=False,
+            summary="fix",
+        )
+        assert v.approval is False
+
+    def test_rejected_with_approval_false_accepted(self) -> None:
+        v = ReviewVerdict(
+            status="rejected",
+            approval=False,
+            summary="nope",
+        )
+        assert v.approval is False
+
+    def test_approved_with_approval_false_rejected(self) -> None:
+        """status='approved' requires approval=True; False is
+        contradictory and must raise."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ReviewVerdict(
+                status="approved",
+                approval=False,
+                summary="bad",
+            )
+
+    def test_changes_requested_with_approval_true_rejected(self) -> None:
+        """status='changes_requested' requires approval=False;
+        True is contradictory."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ReviewVerdict(
+                status="changes_requested",
+                approval=True,
+                summary="bad",
+            )
+
+    def test_rejected_with_approval_true_rejected(self) -> None:
+        """status='rejected' requires approval=False; True is
+        contradictory."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ReviewVerdict(
+                status="rejected",
+                approval=True,
+                summary="bad",
+            )
+
+    def test_error_message_mentions_inconsistency(self) -> None:
+        """The validator's error message must surface the
+        inconsistency so operators can diagnose a malformed
+        review response without reading Pydantic internals.
+        """
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError) as excinfo:
+            ReviewVerdict(
+                status="approved",
+                approval=False,
+                summary="bad",
+            )
+        msg = str(excinfo.value)
+        assert "inconsistent" in msg.lower() or "status" in msg.lower()

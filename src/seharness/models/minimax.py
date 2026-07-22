@@ -45,9 +45,13 @@ from seharness.domain.results import (
 )
 from seharness.models.base import ModelAdapter
 from seharness.models.minimax_transport import (
-    DEFAULT_ENDPOINT,
+    DEFAULT_MODEL,
     DEFAULT_MODEL_ENV,
+    DEFAULT_PROTOCOL,
+    DEFAULT_SERVICE_TIER,
+    DEFAULT_THINKING,
     MODELS_ENDPOINT,
+    SUPPORTED_PROTOCOLS,
     FakeMiniMaxTransport,
     HttpMiniMaxTransport,
     MiniMaxMessage,
@@ -101,25 +105,45 @@ class MiniMaxAdapter(ModelAdapter):
         *,
         api_key_env: str = "MINIMAX_API_KEY",
         endpoint: str | None = None,
+        protocol: str = DEFAULT_PROTOCOL,
         model_identifier: str | None = None,
         timeout_seconds: float = 30.0,
         max_response_bytes: int = 4 * 1024 * 1024,
+        thinking: bool | None = DEFAULT_THINKING,
+        service_tier: str | None = DEFAULT_SERVICE_TIER,
         transport: MiniMaxTransport | None = None,
     ) -> None:
+        if protocol not in SUPPORTED_PROTOCOLS:
+            raise ValueError(
+                f"protocol must be one of {SUPPORTED_PROTOCOLS!r}, got {protocol!r}",
+            )
         self._api_key_env = api_key_env
         self._endpoint = endpoint
-        # Model identifier resolution order:
-        # 1. Explicit ``model_identifier`` constructor argument.
-        # 2. ``MINIMAX_MODEL`` environment variable.
-        # 3. ``None`` — the adapter is not configured for any model.
+        self._protocol = protocol
+        # Cluster M3-1 corrective — model identifier resolution:
+        #   1. Explicit ``model_identifier`` constructor argument
+        #      (non-empty after stripping).
+        #   2. ``MINIMAX_MODEL`` environment variable (non-empty
+        #      after stripping; the empty-string case is treated
+        #      as "unset" so an operator who ``export FOO=""``
+        #      by accident falls back to the default).
+        #   3. Production default :data:`DEFAULT_MODEL`
+        #      (``MiniMax-M3``).
         #
-        # There is no hard-coded default. Per the refinement
-        # workplan the harness MUST NOT assume ``MiniMax-M3``
-        # because the live account may not expose it. The current
-        # official documentation names MiniMax M2.7 / M2.5 / M2.1 /
-        # M2 only.
-        resolved_model = model_identifier or os.environ.get(DEFAULT_MODEL_ENV)
-        self._model_identifier = resolved_model or ""
+        # Per the corrective doc the default MUST be ``MiniMax-M3``
+        # and the adapter MUST NOT silently substitute M2.7 or any
+        # other model.
+        explicit = (model_identifier or "").strip()
+        env_value = (os.environ.get(DEFAULT_MODEL_ENV) or "").strip()
+        if explicit:
+            resolved_model = explicit
+        elif env_value:
+            resolved_model = env_value
+        else:
+            resolved_model = DEFAULT_MODEL
+        self._model_identifier = resolved_model
+        self._thinking = thinking
+        self._service_tier = service_tier
         self._timeout_seconds = float(timeout_seconds)
         self._max_response_bytes = int(max_response_bytes)
 
@@ -129,12 +153,14 @@ class MiniMaxAdapter(ModelAdapter):
             # Default: build the production HTTP transport. The
             # readiness probe below decides whether the adapter
             # is actually live. The endpoint defaults to the
-            # official OpenAI-compatible chat-completions endpoint
-            # ``https://api.minimax.io/v1/chat/completions`` (NOT
-            # the deprecated ``/v1/text/chatcompletion_v2``).
+            # protocol's matching URL (OpenAI-compatible by
+            # default); an explicit ``endpoint`` overrides the
+            # protocol default (legacy accounts wired to
+            # ``api.minimax.chat`` continue to work).
             self._transport = HttpMiniMaxTransport(
                 api_key_env=api_key_env,
-                endpoint=endpoint or DEFAULT_ENDPOINT,
+                endpoint=endpoint,
+                protocol=protocol,
                 timeout_seconds=timeout_seconds,
                 max_response_bytes=max_response_bytes,
             )
@@ -167,20 +193,33 @@ class MiniMaxAdapter(ModelAdapter):
         ``transport_is_live`` is ``True`` only for the production
         HTTP transport. The fakes report ``False`` so a
         ``FakeMiniMaxTransport`` cannot masquerade as live.
+
+        Cluster M3-1 corrective — catalog-lag classification:
+
+        The :class:`ProviderReadiness` struct now carries a
+        :attr:`classification` literal that distinguishes
+        ``live_verified_catalog`` (model is listed in
+        ``GET /v1/models``) from ``live_verified_catalog_lag``
+        (catalog does not list the model but a direct call
+        succeeds) and ``not_live`` (neither). The construction-
+        time probe only sets ``classification`` to a coarse
+        value (``not_live`` or ``not_classified``); the finer
+        catalog + direct-call verification is performed by
+        :meth:`verify_against_account` at production startup.
         """
         api_key = os.environ.get(self._api_key_env)
         configured = bool(api_key)
         transport_is_live = isinstance(self._transport, HttpMiniMaxTransport)
 
-        # The struct enforces ``model_identifier`` min_length=1;
-        # an empty identifier is reported as the sentinel "unset".
+        # Cluster M3-1: model identifier always resolves (the
+        # default is :data:`DEFAULT_MODEL`); the sentinel
+        # ``"unset"`` only appears in pathological construction
+        # paths. The struct still enforces ``min_length=1`` so
+        # we substitute the sentinel rather than letting an
+        # empty string leak into the readiness envelope.
         model_id_for_struct = self._model_identifier or "unset"
 
         if not configured:
-            # When the key is unset, surface the configured model
-            # identifier if it was set explicitly, otherwise use
-            # the sentinel so the readiness struct satisfies its
-            # ``min_length=1`` constraint.
             return not_live(
                 reason=(f"environment variable {self._api_key_env!r} is unset"),
                 model_identifier=model_id_for_struct,
@@ -200,14 +239,22 @@ class MiniMaxAdapter(ModelAdapter):
                 transport_is_live=False,
                 model_identifier=self._model_identifier,
                 reason="transport is not the production HTTP transport",
+                classification="not_live",
             )
 
+        # Cluster M3-1: coarse-grained ``not_classified`` here;
+        # production startup runs :meth:`verify_against_account`
+        # which downgrades / upgrades to catalog_verified or
+        # live_verified_catalog_lag. ``is_live()`` returns
+        # ``True`` for both catalog_verified and
+        # live_verified_catalog_lag.
         return ProviderReadiness(
             configured=configured,
             transport_available=True,
             transport_is_live=True,
             model_identifier=self._model_identifier,
             reason=None,
+            classification="not_classified",
         )
 
     def _build_provider_request(self, request: ModelRequest) -> MiniMaxRequest:
@@ -227,6 +274,15 @@ class MiniMaxAdapter(ModelAdapter):
             max_completion_tokens=request.max_tokens,
             temperature=request.temperature,
             stream=False,
+            # Cluster M3-1 corrective: propagate the adapter's
+            # configured thinking + service_tier so the wire
+            # body reflects the operator's intent. The transport
+            # serializes them only when the corresponding flag
+            # is not ``None`` (operator-set) so unset values
+            # remain unset on the wire.
+            thinking=self._thinking,
+            service_tier=self._service_tier,
+            protocol=self._protocol,
         )
 
     def validate_against_account(
