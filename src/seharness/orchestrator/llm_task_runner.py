@@ -292,17 +292,20 @@ class LLMDrivenTaskRunner:
         # measured against the committed state, not the working
         # tree's pre-run content.
         git_path = shutil.which("git")
-        try:
-            base_sha = subprocess.run(  # nosec B603 — args are hard-coded
-                [git_path, "rev-parse", "HEAD"],
-                cwd=self._repo_root,
-                capture_output=True,
-                check=True,
-                text=True,
-                timeout=10,
-            ).stdout.strip()
-        except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
+        if git_path is None:
             base_sha = ""
+        else:
+            try:
+                base_sha = subprocess.run(  # nosec B603 — args are hard-coded
+                    [git_path, "rev-parse", "HEAD"],
+                    cwd=self._repo_root,
+                    capture_output=True,
+                    check=True,
+                    text=True,
+                    timeout=10,
+                ).stdout.strip()
+            except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
+                base_sha = ""
 
         # 2. RED — run pytest BEFORE any patch.
         red_result = _run_pytest(

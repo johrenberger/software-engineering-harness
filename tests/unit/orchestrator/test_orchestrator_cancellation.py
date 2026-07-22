@@ -242,7 +242,15 @@ class TestTokenPassedToRunner:
         seen_cancel: dict[str, Any] = {}
 
         class CapturingRunner:
-            def run_task(self, *, red_dir, green_dir, task_id, cancel=None):  # type: ignore[no-untyped-def]
+            def run_task(
+                self,
+                *,
+                red_dir,
+                green_dir,
+                task_id,
+                cancel=None,
+                pending_changes=None,
+            ):  # type: ignore[no-untyped-def]
                 seen_cancel["task"] = cancel
                 # Don't actually do task work — return a synthetic OK so
                 # the orchestrator doesn't try to invoke slice-7 services.

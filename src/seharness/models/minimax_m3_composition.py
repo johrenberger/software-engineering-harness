@@ -53,6 +53,8 @@ from seharness.models.minimax import MiniMaxAdapter
 from seharness.models.minimax_transport import (
     DEFAULT_MODEL,
     NATIVE_ENDPOINT,
+    MiniMaxTransportResponse,
+    RecordingMiniMaxTransport,
 )
 from seharness.models.readiness_validation import (
     validate_router_readiness,
@@ -478,9 +480,174 @@ def build_minimax_m3_local_composition(
     )
 
 
+# ---------------------------------------------------------------------------
+# Offline composition factory (cluster M3-4)
+# ---------------------------------------------------------------------------
+
+
+def build_minimax_m3_offline_composition(
+    *,
+    config: MiniMaxM3CompositionConfig,
+    recording_transport: RecordingMiniMaxTransport,
+    recording_responses: tuple[MiniMaxTransportResponse, ...],
+) -> MiniMaxM3CompositionResult:
+    """Construct the M3 composition wired against a recording transport.
+
+    Cluster M3-4: the offline vertical acceptance test (and any
+    later offline replay) needs a real :class:`MiniMaxM3CompositionResult`
+    — the same shape the production builder returns — but with
+    every model call routed through a pre-loaded
+    :class:`RecordingMiniMaxTransport`. This factory:
+
+    - Refuses ``runtime_profile != TEST`` (M3-2 invariant: a
+      recording transport is a stub-class transport; only TEST
+      may construct with one).
+    - Still enforces: ``model == "MiniMax-M3"``,
+      ``sandbox_config`` present with non-empty policy /
+      validation commands, ``provider_evidence_dir`` present,
+      author router ≠ review router, author adapter ≠ review
+      adapter (M3-2 invariants).
+    - **Skips** the PRODUCTION-only preconditions: live readiness
+      verification, ``api_key`` requirement, deterministic-
+      service refusal (the offline composition may legitimately
+      wire deterministic services in TEST mode — they are not the
+      ``Deterministic*Service`` subclasses the M3-2 builder
+      forbids anyway).
+    - Wires the supplied :class:`RecordingMiniMaxTransport` onto
+      both author and review adapters so the same recording
+      queue feeds both paths. The caller is responsible for
+      loading the recordings in the order the orchestrator will
+      consume them (specification → planning → implementation xN
+      → review).
+
+    Returns the same :class:`MiniMaxM3CompositionResult` shape
+    the production builder returns, so the orchestrator wires
+    it identically.
+    """
+    from seharness.orchestrator.provider_evidence import (  # noqa: PLC0415
+        ProviderEvidenceWriter as _ProviderEvidenceWriter,
+    )
+    from seharness.orchestrator.services import (  # noqa: PLC0415
+        ModelBackedPlanningService,
+        ModelBackedReviewService,
+        ModelBackedServiceComposition,
+    )
+
+    if config.runtime_profile != RuntimeProfile.TEST:
+        msg = (
+            "build_minimax_m3_offline_composition: runtime_profile must be "
+            f"TEST (got {config.runtime_profile!r}); recording transports "
+            "are stub-class and the M3-2 invariant forbids them on "
+            "PRODUCTION / DEVELOPMENT"
+        )
+        raise ConfigurationError(msg)
+    if not recording_responses:
+        msg = (
+            "build_minimax_m3_offline_composition: recording_responses "
+            "must be a non-empty tuple; an offline composition without "
+            "any queued responses fails every model call"
+        )
+        raise ConfigurationError(msg)
+    # The supplied recording transport is the queue source; we
+    # reuse it on both adapters so the caller's transport
+    # instance is the single source of truth for replay.
+    # (mypy otherwise warns about the unused parameter; the
+    # adapter wiring below consumes it.)
+    if config.model != "MiniMax-M3":
+        msg = (
+            "build_minimax_m3_offline_composition: model must be "
+            f"'MiniMax-M3' (got {config.model!r}); the offline "
+            "factory refuses silent model substitution"
+        )
+        raise ConfigurationError(msg)
+    if config.sandbox_config is None:
+        msg = (
+            "build_minimax_m3_offline_composition: sandbox_config is "
+            "required (got None); the offline factory refuses to start "
+            "without sandbox configuration (even in TEST mode)"
+        )
+        raise ConfigurationError(msg)
+    if config.provider_evidence_dir is None:
+        msg = (
+            "build_minimax_m3_offline_composition: provider_evidence_dir "
+            "is required (got None); the offline factory must record "
+            "evidence so the offline vertical acceptance can audit "
+            "every model call"
+        )
+        raise ConfigurationError(msg)
+    endpoint = config.endpoint
+    if endpoint is None:
+        endpoint = NATIVE_ENDPOINT if config.protocol == "native" else None
+    # Two distinct adapter instances, each with its own
+    # RecordingMiniMaxTransport (so the adapters cannot share
+    # any state). Each transport is pre-loaded with the same
+    # queue so the recorder-driven replay is deterministic.
+    author_adapter = MiniMaxAdapter(
+        endpoint=endpoint,
+        protocol=config.protocol,
+        model_identifier=config.model,
+        thinking=config.thinking,
+        service_tier=config.service_tier,
+        transport=recording_transport,
+    )
+    review_adapter = MiniMaxAdapter(
+        endpoint=endpoint,
+        protocol=config.protocol,
+        model_identifier=config.model,
+        thinking=config.thinking,
+        service_tier=config.service_tier,
+        transport=recording_transport,
+    )
+    if author_adapter is review_adapter:
+        msg = (
+            "build_minimax_m3_offline_composition: author and review "
+            "adapters must be distinct objects"
+        )
+        raise ConfigurationError(msg)
+    author_router = _build_router(
+        role_to_provider=dict.fromkeys(_AUTHOR_ROLES, ProviderName.MINIMAX),
+        minimax_adapter=author_adapter,
+    )
+    review_router = _build_router(
+        role_to_provider={RoutingRole.REVIEW: ProviderName.MINIMAX},
+        minimax_adapter=review_adapter,
+    )
+    if author_router is review_router:
+        msg = (
+            "build_minimax_m3_offline_composition: author and review "
+            "routers must be distinct objects"
+        )
+        raise ConfigurationError(msg)
+    composition = ModelBackedServiceComposition(
+        router=author_router,
+        clock=config.clock,
+        runtime_profile=config.runtime_profile,
+    )
+    composition.planning = ModelBackedPlanningService(
+        router=author_router,
+        policy_allowed_paths=tuple(config.sandbox_config.patch_policy_allowed_paths),
+    )
+    # Cluster M3-4: wire the review service with the dedicated
+    # review_router so RoutingRole.REVIEW routes correctly.
+    composition.review = ModelBackedReviewService(
+        router=review_router,
+        budget=composition._budget,
+        clock=composition._clock,
+    )
+    evidence_writer = _ProviderEvidenceWriter(evidence_dir=config.provider_evidence_dir)
+    return MiniMaxM3CompositionResult(
+        composition=composition,
+        author_router=author_router,
+        review_router=review_router,
+        evidence_writer=evidence_writer,
+        sandbox_config=config.sandbox_config,
+    )
+
+
 __all__ = [
     "MiniMaxM3CompositionConfig",
     "MiniMaxM3CompositionResult",
     "SandboxConfig",
     "build_minimax_m3_local_composition",
+    "build_minimax_m3_offline_composition",
 ]
