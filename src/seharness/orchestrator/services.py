@@ -50,7 +50,12 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from seharness.orchestrator.provider_evidence import (
+        ProviderEvidenceRecord as _ProviderEvidenceRecordT,
+    )
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -828,6 +833,11 @@ class ServiceEvidence:
     provider/version/usage/request-id without leaking secrets. The
     dataclass is the WP3 "Persist model, model version,
     prompt-template version, request ID, usage, timing" answer.
+
+    Cluster M3-2 corrective: extended with the fields required by
+    §"Evidence requirements". The original field set is preserved
+    so pre-M3-2 callers keep working; new fields default to
+    ``None`` / ``()`` so existing constructions compile unchanged.
     """
 
     role: RoutingRole
@@ -840,6 +850,74 @@ class ServiceEvidence:
     output_tokens: int | None
     error_kind: ErrorKind | None = None
     error_message: str | None = None
+    # Cluster M3-2: configured_model vs returned_model split.
+    # ``model`` continues to be the returned model for backward
+    # compatibility; ``configured_model`` is the audit anchor.
+    configured_model: str | None = None
+    protocol: str | None = None
+    endpoint_classification: str | None = None
+    thinking_mode: bool | None = None
+    service_tier: str | None = None
+    attempt_number: int = 1
+    local_correlation_id: str | None = None
+    input_artifact_hashes: tuple[str, ...] = ()
+    output_artifact_hash: str | None = None
+
+    def to_provider_evidence_record(
+        self,
+        *,
+        run_id: str,
+        phase: str,
+        task_id: str | None = None,
+    ) -> _ProviderEvidenceRecordT:
+        """Convert this dataclass to a :class:`ProviderEvidenceRecord`.
+
+        Cluster M3-2: every model call must record a durable,
+        redacted evidence envelope. The orchestrator's phase
+        handlers hold a :class:`ServiceEvidence` and pass it
+        to the :class:`ProviderEvidenceWriter` via this helper.
+
+        The dataclass fields are the dataclass's contract; the
+        record's fields are the persistence schema. They are
+        nearly identical but the record carries an audit-friendly
+        timestamp and rejects ``configured_model == ""``.
+        """
+        # Lazy import: ``provider_evidence`` is a sibling module
+        # in ``seharness.orchestrator``. Importing it at module
+        # top causes a partial-init cycle because the
+        # orchestrator's ``__init__`` re-exports symbols from
+        # ``services.py`` while ``services.py`` is still being
+        # loaded. The lazy import keeps the cycle closed.
+        from seharness.orchestrator.provider_evidence import (  # noqa: PLC0415
+            ProviderEvidenceRecord as _ProviderEvidenceRecord,
+        )
+
+        configured_model = self.configured_model or self.model
+        return _ProviderEvidenceRecord(
+            run_id=run_id,
+            phase=phase,
+            task_id=task_id,
+            provider=self.provider.value,
+            configured_model=configured_model,
+            returned_model=self.model,
+            protocol=self.protocol or "unknown",
+            endpoint_classification=self.endpoint_classification or "unknown",
+            prompt_template_version=self.template_version,
+            thinking_mode=self.thinking_mode,
+            service_tier=self.service_tier,
+            local_correlation_id=(
+                self.local_correlation_id or f"{run_id}:{phase}:{self.role.value}"
+            ),
+            provider_request_id=self.request_id,
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
+            duration_s=self.duration_s,
+            attempt_number=self.attempt_number,
+            normalized_error_kind=(str(self.error_kind) if self.error_kind is not None else None),
+            redacted_error_message=self.error_message,
+            input_artifact_hashes=self.input_artifact_hashes,
+            output_artifact_hash=self.output_artifact_hash,
+        )
 
 
 class ModelBackedSpecificationService:
