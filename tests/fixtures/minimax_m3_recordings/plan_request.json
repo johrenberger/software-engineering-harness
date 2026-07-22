@@ -1,0 +1,18 @@
+{
+  "model": "MiniMax-M3",
+  "protocol": "native",
+  "thinking": {"type": "enabled"},
+  "service_tier": "standard",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Produce a structured plan for the following feature request."
+    },
+    {
+      "role": "user",
+      "content": "Produce a structured plan for the following feature request.\n\nFeature description: Add /health endpoint\nRepository path: [redacted-synthetic]\nRun id: [redacted-synthetic]\nValidation commands: test, lint, type_check"
+    }
+  ],
+  "max_tokens": 1024,
+  "temperature": 0.0
+}

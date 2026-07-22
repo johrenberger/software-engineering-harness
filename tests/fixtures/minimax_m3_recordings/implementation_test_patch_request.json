@@ -1,0 +1,18 @@
+{
+  "model": "MiniMax-M3",
+  "protocol": "native",
+  "thinking": {"type": "enabled"},
+  "service_tier": "standard",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Produce a test-only unified diff for the following task."
+    },
+    {
+      "role": "user",
+      "content": "Task id: task-001\nTask objective: Add /health endpoint to the FastAPI app returning 200 with body {\"status\": \"ok\"}. Update main.py with a @app.get(\"/health\") route and a def health() handler.\nAllowed paths: main.py, tests/test_health.py"
+    }
+  ],
+  "max_tokens": 1024,
+  "temperature": 0.0
+}

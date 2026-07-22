@@ -1,0 +1,7 @@
+{
+  "content_text": "{\"plan_id\": \"plan-m3-4-offline-001\", \"tasks\": [{\"task_id\": \"task-001\", \"task_objective\": \"Add /health endpoint to the FastAPI app returning 200 with body {\\\"status\\\": \\\"ok\\\"}. Update main.py with a @app.get(\\\"/health\\\") route and a def health() handler.\", \"allowed_paths\": [\"main.py\", \"tests/test_health.py\"], \"order_index\": 0}]}",
+  "usage_input_tokens": 300,
+  "usage_output_tokens": 220,
+  "request_id": "[redacted-synthetic]",
+  "error": null
+}

@@ -1,0 +1,8 @@
+[project]
+name = "health-fixture-repo"
+version = "0.0.1"
+description = "Cluster M3-4 vertical-acceptance fixture"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
