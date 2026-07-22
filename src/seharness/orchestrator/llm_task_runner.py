@@ -201,6 +201,12 @@ def _run_pytest(
         "--tb=short",
         "-p",
         "no:cacheprovider",
+        # Clear the inherited addopts from the se-harness pyproject.toml
+        # so coverage / flaky-plugin / junit-xml / reruns don't leak
+        # into the subprocess invocation. The fixture repo's own
+        # pyproject.toml may declare its own addopts; we do not want
+        # the se-harness addopts applied on top of those.
+        "--override-ini=addopts=",
         "--rootdir",
         str(cwd),
     ]
