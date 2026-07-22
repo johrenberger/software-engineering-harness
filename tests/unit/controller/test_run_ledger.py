@@ -17,6 +17,7 @@ from __future__ import annotations
 import pytest
 
 from seharness.controller import RunLedger, RunRecord, RunState
+from seharness.controller.run_ledger import OptimisticConcurrencyError
 
 
 def test_run_ledger_starts_empty() -> None:
@@ -689,3 +690,284 @@ def test_e3_run_record_phase_field_in_asdict_payload() -> None:
     assert payload_full["phase"] == "implementation"
     assert payload_full["ctx"] == {"x": 1}
     assert payload_full["feature_description"] == "feat"
+
+
+# ---------------------------------------------------------------------------
+# Cluster P3: cost-attribution on the run record
+# ---------------------------------------------------------------------------
+"""Cluster P3: cost-attribution fields on the audit trail.
+
+Pins the deferred follow-up: cost-attribution fields on the run
+record so the dashboard / audit trail can surface "how much did
+this run cost?" without re-running anything.
+
+Coverage:
+
+- ``record_cost_attribution`` stamps the four fields on an
+  existing record and bumps revision (Cluster E2 invariants).
+- ``None`` arguments leave the existing value alone (partial
+  update).
+- Negative values are rejected at the Pydantic layer.
+- Missing run_id returns ``None`` (mirrors ``mark_*`` family).
+- Cluster E2 CAS: stale ``expected_revision`` raises
+  ``OptimisticConcurrencyError`` before mutation.
+- Re-keying on ``record_start`` does NOT wipe prior cost-
+  attribution (mirrors the phase + ctx preservation).
+- ``by_task`` accepts the per-task breakdown shape that
+  matches the Cluster P2 ``<run_dir>/budget/by-task.json``
+  artifact (outer ``task_id``, inner axis names).
+"""
+
+
+def test_p3_record_cost_attribution_stamps_totals() -> None:
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    rec = ledger.record_cost_attribution(
+        "r1",
+        total_tokens=5000,
+        total_cost_usd=0.012,
+        total_elapsed_s=4.5,
+    )
+    assert rec is not None
+    assert rec.total_tokens == 5000
+    assert rec.total_cost_usd == 0.012
+    assert rec.total_elapsed_s == 4.5
+    assert rec.by_task is None
+    # Revision bumped exactly once.
+    assert rec.revision == 2
+
+
+def test_p3_record_cost_attribution_stamps_by_task() -> None:
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    by_task = {
+        "task-foo": {"model_tokens": 100.0, "model_cost_usd": 0.003},
+        "task-bar": {"model_tokens": 250.0, "model_cost_usd": 0.007},
+    }
+    rec = ledger.record_cost_attribution("r1", by_task=by_task)
+    assert rec is not None
+    assert rec.by_task == by_task
+    # Totals still None when only by_task is provided.
+    assert rec.total_tokens is None
+    assert rec.total_cost_usd is None
+
+
+def test_p3_record_cost_attribution_partial_update() -> None:
+    """A later call can update only some fields; ``None``
+    means "leave the existing value alone" (the common case
+    where the orchestrator records totals first and then the
+    per-task breakdown once the final phase boundary fires).
+    """
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    ledger.record_cost_attribution("r1", total_tokens=1000, total_cost_usd=0.005)
+    # Second call updates by_task + total_elapsed_s; the prior
+    # totals stay intact.
+    rec = ledger.record_cost_attribution(
+        "r1",
+        by_task={"task-x": {"model_tokens": 500.0}},
+        total_elapsed_s=2.5,
+    )
+    assert rec is not None
+    assert rec.total_tokens == 1000  # preserved
+    assert rec.total_cost_usd == 0.005  # preserved
+    assert rec.total_elapsed_s == 2.5  # updated
+    assert rec.by_task == {"task-x": {"model_tokens": 500.0}}  # updated
+
+
+def test_p3_record_cost_attribution_unknown_run_returns_none() -> None:
+    ledger = RunLedger()
+    assert ledger.record_cost_attribution("ghost", total_tokens=1) is None
+
+
+def test_p3_record_cost_attribution_cas_stale_revision_raises() -> None:
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")  # revision 1
+    ledger.record_phase("r1", phase="spec")  # revision 2
+    # Stale CAS.
+    with pytest.raises(OptimisticConcurrencyError):
+        ledger.record_cost_attribution(
+            "r1",
+            total_tokens=100,
+            expected_revision=1,
+        )
+    # Ledger untouched: revision still 2, totals still None.
+    rec = ledger.get("r1")
+    assert rec is not None
+    assert rec.revision == 2
+    assert rec.total_tokens is None
+
+
+def test_p3_record_cost_attribution_cas_matching_revision_succeeds() -> None:
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")  # revision 1
+    ledger.record_phase("r1", phase="spec")  # revision 2
+    rec = ledger.record_cost_attribution(
+        "r1",
+        total_tokens=2500,
+        expected_revision=2,
+    )
+    assert rec is not None
+    assert rec.revision == 3
+    assert rec.total_tokens == 2500
+
+
+def test_p3_record_cost_attribution_rejects_negative_totals() -> None:
+    """Negative cost-attribution is a programmer error --
+    the underlying :class:`BudgetTracker` records ``ge=0`` so
+    a negative value would never legitimately reach the
+    ledger. Cluster P3 raises at the Pydantic boundary
+    rather than silently clamping.
+    """
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        RunRecord(
+            run_id="r1",
+            state=RunState.RUNNING,
+            repository="repo",
+            total_tokens=-1,
+        )
+    with pytest.raises(ValidationError):
+        RunRecord(
+            run_id="r1",
+            state=RunState.RUNNING,
+            repository="repo",
+            total_cost_usd=-0.01,
+        )
+    with pytest.raises(ValidationError):
+        RunRecord(
+            run_id="r1",
+            state=RunState.RUNNING,
+            repository="repo",
+            total_elapsed_s=-1.0,
+        )
+
+
+def test_p3_record_cost_attribution_defaults_to_none() -> None:
+    """Pre-P3 record construction (or any record that never
+    had cost-attribution stamped) carries ``None`` for all
+    four fields, not ``0``. ``0`` would be a real value
+    (a run that consumed zero model axes); ``None`` means
+    "not recorded" so the dashboard can render ``n/a``
+    instead of a misleading ``0``.
+    """
+    rec = RunRecord(run_id="r1", state=RunState.RUNNING, repository="repo")
+    assert rec.total_tokens is None
+    assert rec.total_cost_usd is None
+    assert rec.total_elapsed_s is None
+    assert rec.by_task is None
+
+
+def test_p3_record_start_rekey_preserves_cost_attribution() -> None:
+    """Cluster E1's re-keying contract preserves cost-
+    attribution. A re-``record_start`` on the same ``run_id``
+    bumps revision but keeps the prior cost-attribution
+    intact so the audit trail doesn't lose data on a
+    caller retry.
+    """
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo", idempotency_key="k1")
+    ledger.record_cost_attribution(
+        "r1",
+        total_tokens=1000,
+        total_cost_usd=0.01,
+    )
+    # Re-key (same run_id, different idempotency_key).
+    rec = ledger.record_start(
+        "r1",
+        repository="repo",
+        idempotency_key="k2-override",
+    )
+    assert rec.total_tokens == 1000
+    assert rec.total_cost_usd == 0.01
+
+
+def test_p3_by_task_accepts_cluster_p2_artifact_shape() -> None:
+    """The ``by_task`` shape intentionally matches the
+    Cluster P2 ``<run_dir>/budget/by-task.json`` envelope
+    (outer ``task_id``, inner ``{model_tokens,
+    model_cost_usd, elapsed_seconds}``). A roundtrip
+    through the recorder's persistence path is the
+    end-to-end contract.
+    """
+    from collections.abc import Mapping
+
+    from seharness.orchestrator.budgets import BudgetAxis, RunBudgets
+    from seharness.orchestrator.per_phase_budget import (
+        build_recorder,
+    )
+
+    budgets = RunBudgets(model_tokens=10_000, model_cost_usd=1.0)
+    recorder = build_recorder(budgets=budgets)
+    recorder.record_invocation(
+        phase_id="spec",
+        task_id="task-foo",
+        input_tokens=100,
+        output_tokens=200,
+        cost_usd=0.006,
+        elapsed_s=0.5,
+    )
+    recorder.record_invocation(
+        phase_id="implement",
+        task_id="task-foo",
+        input_tokens=250,
+        output_tokens=100,
+        cost_usd=0.007,
+        elapsed_s=1.0,
+    )
+    by_task: Mapping[str, Mapping[BudgetAxis, float]] = recorder.consumption_by_task()
+
+    # Convert axis-keyed mapping to the string-keyed shape the
+    # ledger expects.
+    ledger_payload = {
+        task_id: {axis.value: amount for axis, amount in axes.items()}
+        for task_id, axes in by_task.items()
+    }
+
+    ledger = RunLedger()
+    ledger.record_start("r1", repository="repo")
+    rec = ledger.record_cost_attribution("r1", by_task=ledger_payload)
+    assert rec is not None
+    assert rec.by_task == ledger_payload
+    # The task accumulated across two phases.
+    assert rec.by_task["task-foo"]["model_tokens"] == 650.0
+    assert abs(rec.by_task["task-foo"]["model_cost_usd"] - 0.013) < 1e-9
+
+
+def test_p3_recorder_underlying_totals_match_attribution() -> None:
+    """When the per-task breakdown is stamped on the ledger,
+    the sum of ``by_task`` MUST equal the recorder's
+    underlying ``consumption()`` totals (sanity check that
+    the recorder and the ledger agree on the numbers).
+    """
+    from seharness.orchestrator.budgets import BudgetAxis, RunBudgets
+    from seharness.orchestrator.per_phase_budget import build_recorder
+
+    budgets = RunBudgets(model_tokens=10_000, model_cost_usd=1.0)
+    recorder = build_recorder(budgets=budgets)
+    recorder.record_invocation(
+        phase_id="spec",
+        task_id="task-foo",
+        input_tokens=100,
+        output_tokens=200,
+        cost_usd=0.006,
+        elapsed_s=0.5,
+    )
+    recorder.record_invocation(
+        phase_id="implement",
+        task_id="task-bar",
+        input_tokens=250,
+        output_tokens=100,
+        cost_usd=0.007,
+        elapsed_s=1.0,
+    )
+    by_task = {
+        task_id: {axis.value: amount for axis, amount in axes.items()}
+        for task_id, axes in recorder.consumption_by_task().items()
+    }
+    underlying = recorder.tracker.consumption()
+    sum_tokens = sum(t.get("model_tokens", 0.0) for t in by_task.values())
+    sum_cost = sum(t.get("model_cost_usd", 0.0) for t in by_task.values())
+    assert sum_tokens == underlying[BudgetAxis.MODEL_TOKENS]
+    assert sum_cost == underlying[BudgetAxis.MODEL_COST_USD]

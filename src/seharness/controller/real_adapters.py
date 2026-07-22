@@ -336,6 +336,20 @@ class _LedgerLine:
     # for transition rows from WP1-aware writes. New writes should
     # populate ``cursor``; ``phase`` is kept as a derived view.
     cursor: dict[str, Any] | None = None
+    # Cluster P3: cost-attribution fields for the audit trail.
+    # All four default to ``None`` so pre-P3 lines that lack the
+    # fields load cleanly (``None`` is the on-disk absence
+    # marker; ``0`` would be a real value, distinct from
+    # "not recorded"). ``by_task`` mirrors the Cluster P2
+    # ``<run_dir>/budget/by-task.json`` shape -- outer key is
+    # ``task_id``, inner keys are axis names. Carried on the
+    # ``start`` line for the orchestrator to fill in at run
+    # completion (a transition line carries the latest revision
+    # of the values for replay).
+    total_tokens: int | None = None
+    total_cost_usd: float | None = None
+    total_elapsed_s: float | None = None
+    by_task: dict[str, dict[str, float]] | None = None
 
     def to_jsonl(self) -> str:
         payload: dict[str, Any] = {
@@ -356,6 +370,23 @@ class _LedgerLine:
             payload["feature_description"] = self.feature_description
         if self.cursor is not None:
             payload["cursor"] = self.cursor
+        # Cluster P3: cost-attribution fields carried on the
+        # line so a replay reconstructs them. All four default
+        # to ``None``; omitted from the JSONL when None so the
+        # pre-P3 envelope shape is preserved. Inner ``by_task``
+        # values are coerced to floats at write time so the
+        # loader can rely on numeric values.
+        if self.total_tokens is not None:
+            payload["total_tokens"] = self.total_tokens
+        if self.total_cost_usd is not None:
+            payload["total_cost_usd"] = self.total_cost_usd
+        if self.total_elapsed_s is not None:
+            payload["total_elapsed_s"] = self.total_elapsed_s
+        if self.by_task is not None:
+            payload["by_task"] = {
+                task_id: {axis: float(amount) for axis, amount in axes.items()}
+                for task_id, axes in self.by_task.items()
+            }
         return json.dumps(payload, sort_keys=True)
 
 
@@ -375,6 +406,76 @@ def _coerce_cursor(raw: object) -> PhaseCursor | None:
         return PhaseCursor.model_validate(raw)
     except Exception:
         return None
+
+
+def _coerce_optional_int(raw: object) -> int | None:
+    """Coerce a JSONL-loaded value to ``int | None``.
+
+    Returns ``None`` for missing / non-numeric input. Cluster P3
+    uses this for ``total_tokens`` so a corrupt / missing key
+    on disk doesn't crash replay. A negative value is also
+    rejected because ``RunRecord.total_tokens`` has ``ge=0``;
+    we surface the corruption as ``None`` rather than letting
+    the Pydantic layer raise so a single bad line can't take
+    down the entire replay (the field is optional anyway).
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        # ``bool`` is a subclass of ``int`` in Python; reject it
+        # explicitly so a stray ``True`` doesn't sneak through
+        # as ``1``.
+        return None
+    if isinstance(raw, int) and raw >= 0:
+        return raw
+    return None
+
+
+def _coerce_optional_float(raw: object) -> float | None:
+    """Coerce a JSONL-loaded value to ``float | None``.
+
+    Mirrors :func:`_coerce_optional_int` for the two float
+    Cluster P3 fields (``total_cost_usd`` / ``total_elapsed_s``).
+    Booleans are rejected; non-numeric or negative inputs map
+    to ``None`` so a corrupt line doesn't fail replay.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)) and raw >= 0:
+        return float(raw)
+    return None
+
+
+def _coerce_by_task(raw: object) -> dict[str, dict[str, float]] | None:
+    """Coerce a JSONL-loaded ``by_task`` value.
+
+    Returns ``None`` for missing / non-dict input. Inner
+    non-dict values are skipped (the task itself is dropped)
+    rather than raising -- a single malformed task entry
+    shouldn't poison the whole ``by_task`` view. Numeric inner
+    values are coerced to ``float``; non-numeric inner values
+    are dropped.
+    """
+    if raw is None or not isinstance(raw, dict):
+        return None
+    coerced: dict[str, dict[str, float]] = {}
+    for task_id, axes in raw.items():
+        if not isinstance(task_id, str) or not task_id:
+            continue
+        if not isinstance(axes, dict):
+            continue
+        inner: dict[str, float] = {}
+        for axis, amount in axes.items():
+            if not isinstance(axis, str) or not axis:
+                continue
+            if isinstance(amount, bool):
+                continue
+            if isinstance(amount, (int, float)):
+                inner[axis] = float(amount)
+        coerced[task_id] = inner
+    return coerced
 
 
 class FileRunLedger:
@@ -436,6 +537,19 @@ class FileRunLedger:
                         # ``None`` so the legacy ``phase`` string is
                         # the only resume signal.
                         cursor=_coerce_cursor(entry.get("cursor")),
+                        # Cluster P3: cost-attribution fields. All
+                        # optional on disk; missing keys default to
+                        # ``None`` so pre-P3 lines load unchanged.
+                        total_tokens=_coerce_optional_int(
+                            entry.get("total_tokens"),
+                        ),
+                        total_cost_usd=_coerce_optional_float(
+                            entry.get("total_cost_usd"),
+                        ),
+                        total_elapsed_s=_coerce_optional_float(
+                            entry.get("total_elapsed_s"),
+                        ),
+                        by_task=_coerce_by_task(entry.get("by_task")),
                     )
                 elif kind == "transition":
                     rec = self._index.get(run_id)
@@ -470,6 +584,29 @@ class FileRunLedger:
                         ctx=new_ctx if new_ctx is not None else rec.ctx,
                         feature_description=rec.feature_description,
                         cursor=new_cursor,
+                        # Cluster P3: carry the latest cost-
+                        # attribution fields forward. When the
+                        # transition line lacks them, the prior
+                        # values are preserved (mirrors the
+                        # phase / ctx carry-forward pattern above).
+                        total_tokens=_coerce_optional_int(
+                            entry.get("total_tokens"),
+                        )
+                        if entry.get("total_tokens") is not None
+                        else rec.total_tokens,
+                        total_cost_usd=_coerce_optional_float(
+                            entry.get("total_cost_usd"),
+                        )
+                        if entry.get("total_cost_usd") is not None
+                        else rec.total_cost_usd,
+                        total_elapsed_s=_coerce_optional_float(
+                            entry.get("total_elapsed_s"),
+                        )
+                        if entry.get("total_elapsed_s") is not None
+                        else rec.total_elapsed_s,
+                        by_task=_coerce_by_task(entry.get("by_task"))
+                        if entry.get("by_task") is not None
+                        else rec.by_task,
                     )
 
     # ---- append ---------------------------------------------------------
@@ -518,6 +655,13 @@ class FileRunLedger:
                 else existing.feature_description,
                 # Cluster WP1: preserve prior cursor too.
                 cursor=existing.cursor,
+                # Cluster P3: also preserve prior cost-
+                # attribution fields so the audit trail
+                # doesn't lose data on a re-key / re-record.
+                total_tokens=existing.total_tokens,
+                total_cost_usd=existing.total_cost_usd,
+                total_elapsed_s=existing.total_elapsed_s,
+                by_task=existing.by_task,
             )
         else:
             rec = RunRecord(
@@ -543,6 +687,16 @@ class FileRunLedger:
                 ctx=rec.ctx,
                 feature_description=rec.feature_description,
                 cursor=rec.cursor.model_dump() if rec.cursor is not None else None,
+                # Cluster P3: carry cost-attribution onto the
+                # start line so the JSONL envelope captures
+                # any prior attribution. New writes from a
+                # fresh ``record_start`` pass ``None`` for all
+                # four (the run hasn't accumulated cost yet);
+                # re-records pass the preserved values.
+                total_tokens=rec.total_tokens,
+                total_cost_usd=rec.total_cost_usd,
+                total_elapsed_s=rec.total_elapsed_s,
+                by_task=rec.by_task,
             )
         )
         return rec
@@ -746,6 +900,84 @@ class FileRunLedger:
             expected_revision=expected_revision,
             expected_state=expected_state,
         )
+
+    # ---- cost attribution (Cluster P3) -------------------------------
+
+    def record_cost_attribution(
+        self,
+        run_id: str,
+        *,
+        total_tokens: int | None = None,
+        total_cost_usd: float | None = None,
+        total_elapsed_s: float | None = None,
+        by_task: dict[str, dict[str, float]] | None = None,
+        expected_revision: int | None = None,
+    ) -> RunRecord | None:
+        """Cluster P3: stamp cost-attribution onto a run record.
+
+        Mirrors :meth:`RunLedger.record_cost_attribution` and
+        appends a JSONL ``transition`` line carrying the
+        four fields so a replay reconstructs them. The
+        ``transition`` line keeps the run in ``RUNNING`` state
+        so the cost-attribution stamp is visible without
+        forcing a state change (the caller is expected to
+        follow up with ``mark_complete`` when appropriate).
+        Revision bumps per Cluster E2; ``expected_revision``
+        enforces CAS.
+        """
+        rec = self._index.get(run_id)
+        if rec is None:
+            return None
+        if expected_revision is not None and expected_revision != rec.revision:
+            raise OptimisticConcurrencyError(
+                run_id=run_id,
+                expected_revision=expected_revision,
+                actual_revision=rec.revision,
+                expected_state=None,
+                actual_state=rec.state,
+            )
+        new_total_tokens = total_tokens if total_tokens is not None else rec.total_tokens
+        new_total_cost_usd = total_cost_usd if total_cost_usd is not None else rec.total_cost_usd
+        new_total_elapsed_s = (
+            total_elapsed_s if total_elapsed_s is not None else rec.total_elapsed_s
+        )
+        new_by_task = by_task if by_task is not None else rec.by_task
+        updated = RunRecord(
+            run_id=rec.run_id,
+            state=rec.state,
+            repository=rec.repository,
+            started_at=rec.started_at,
+            idempotency_key=rec.idempotency_key,
+            revision=rec.revision + 1,
+            phase=rec.phase,
+            ctx=rec.ctx,
+            feature_description=rec.feature_description,
+            cursor=rec.cursor,
+            total_tokens=new_total_tokens,
+            total_cost_usd=new_total_cost_usd,
+            total_elapsed_s=new_total_elapsed_s,
+            by_task=new_by_task,
+        )
+        self._index[run_id] = updated
+        self._append(
+            _LedgerLine(
+                kind="transition",
+                run_id=run_id,
+                state=rec.state.value,
+                repository=rec.repository,
+                timestamp=_utcnow_iso(),
+                idempotency_key=rec.idempotency_key,
+                revision=updated.revision,
+                phase=rec.phase,
+                ctx=rec.ctx,
+                cursor=rec.cursor.model_dump() if rec.cursor is not None else None,
+                total_tokens=new_total_tokens,
+                total_cost_usd=new_total_cost_usd,
+                total_elapsed_s=new_total_elapsed_s,
+                by_task=new_by_task,
+            )
+        )
+        return updated
 
     # ---- read API (mirrors in-memory RunLedger) ------------------------
 
