@@ -14,6 +14,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
+from seharness.security.payload_filter import (
+    SuspiciousPayloadFilter,
+)
+
 from .commands import CommandKind, ParsedCommand
 from .service import ApplicationService, FeatureRequest
 
@@ -119,11 +123,21 @@ class FeatureHandler:
     """Handler for ``/feature``.
 
     0 args → interactive prompt (error message guiding user).
-    2 args → invoke ``application.feature_request(...)``.
+    2 args → run ``description`` through the optional
+    ``payload_filter`` FIRST; reject without invoking the
+    application service when the verdict is not OK. The
+    filter defaults to ``None`` (legacy behaviour: nothing
+    to filter) for backward compat.
     """
 
-    def __init__(self, *, application: ApplicationService) -> None:
+    def __init__(
+        self,
+        *,
+        application: ApplicationService,
+        payload_filter: SuspiciousPayloadFilter | None = None,
+    ) -> None:
         self.application = application
+        self.payload_filter = payload_filter
 
     def handle(self, cmd: ParsedCommand) -> CommandResult:
         if len(cmd.args) == 0:
@@ -136,6 +150,15 @@ class FeatureHandler:
             )
         repo, *desc_parts = cmd.args
         description = " ".join(desc_parts)
+        if self.payload_filter is not None:
+            verdict = self.payload_filter.check(description)
+            if not verdict.ok:
+                return CommandResult(
+                    ok=False,
+                    message=_bounded(
+                        f"rejected: payload triggered {list(verdict.reasons)}",
+                    ),
+                )
         request = FeatureRequest(repository_url=repo, description=description)
         result_raw = self.application.feature_request(request)
         result = _as_dict(result_raw)
