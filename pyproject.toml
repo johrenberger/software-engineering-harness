@@ -134,6 +134,13 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
+    # Cluster M3-4: the fixture repo's own test suite
+    # (tests/fixtures/health_fixture_repo/tests/) is not part of
+    # the se-harness test suite; it is only used as a bootstrap
+    # target by the offline vertical acceptance. Exclude it from
+    # normal pytest collection so it does not produce import errors
+    # when fastapi is absent from the CI environment.
+    "--ignore=tests/fixtures/health_fixture_repo/tests/",
     # G1c: test analytics. Capture top-10 slowest tests > 50 ms; emit
     # JUnit XML for downstream consumers (GH Actions, dashboard); enable
     # up to 3 reruns for flaky detection. Output the flaky-test JSON

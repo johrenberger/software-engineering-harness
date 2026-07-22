@@ -1402,12 +1402,31 @@ def _phase_implementation(
     red_dir.mkdir(parents=True, exist_ok=True)
     green_dir.mkdir(parents=True, exist_ok=True)
 
+    # Cluster M3-4: call the model-backed implementation service
+    # FIRST so the runner can apply the model-produced patch
+    # between RED and GREEN. The default deterministic composition
+    # raises on ``execute`` because there's no router, so we
+    # only invoke the service when the composition is model-backed.
+    pending_changes: tuple[str, ...] = ()
+    from seharness.orchestrator.services import (  # noqa: PLC0415
+        ModelBackedImplementationService,
+    )
+
+    if isinstance(orch._services.implementation, ModelBackedImplementationService):
+        impl_request_ctx = ctx
+        impl_outcome = orch._services.implementation.execute(
+            ctx=impl_request_ctx, plan=plan, task_id=task.task_id
+        )
+        if impl_outcome.structured is not None:
+            pending_changes = tuple(getattr(impl_outcome.structured, "attempted_changes", ()) or ())
+
     def _runner(r: Path, g: Path) -> None:
         orch._runner.run_task(
             red_dir=r,
             green_dir=g,
             task_id=task.task_id,
             cancel=orch._cancel_token_for(str(ctx.run_id)),
+            pending_changes=pending_changes,
         )
 
     try:
