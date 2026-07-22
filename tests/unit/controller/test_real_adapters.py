@@ -596,3 +596,274 @@ def test_file_run_ledger_record_phase_non_dict_ctx_raises(tmp_path: Path) -> Non
     ledger.record_start("r1", repository="/repo")
     with pytest.raises(ValueError, match="ctx"):
         ledger.record_phase("r1", phase="implementation", ctx=[1, 2, 3])
+
+
+# ---------------------------------------------------------------------------
+# Cluster P3: cost-attribution on FileRunLedger (JSONL roundtrip)
+# ---------------------------------------------------------------------------
+
+
+def test_p3_file_run_ledger_record_cost_attribution_stamps_totals(tmp_path: Path) -> None:
+    """Cluster P3: stamping cost-attribution on the file
+    ledger appends a transition line carrying the four
+    fields; a replay reconstructs them on the in-memory
+    index.
+    """
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("r1", repository="repo")
+    rec = ledger.record_cost_attribution(
+        "r1",
+        total_tokens=2500,
+        total_cost_usd=0.012,
+        total_elapsed_s=4.5,
+    )
+    assert rec is not None
+    assert rec.total_tokens == 2500
+    assert rec.total_cost_usd == 0.012
+    assert rec.total_elapsed_s == 4.5
+    assert rec.by_task is None
+    # State preserved through the cost-attribution stamp.
+    assert rec.state == RunState.RUNNING
+
+    # Replay and verify the JSONL envelope roundtrip.
+    replayed = FileRunLedger(path=path).get("r1")
+    assert replayed is not None
+    assert replayed.total_tokens == 2500
+    assert replayed.total_cost_usd == 0.012
+    assert replayed.total_elapsed_s == 4.5
+
+
+def test_p3_file_run_ledger_by_task_roundtrip(tmp_path: Path) -> None:
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("r1", repository="repo")
+    by_task = {
+        "task-foo": {"model_tokens": 100.0, "model_cost_usd": 0.003},
+        "task-bar": {"model_tokens": 250.0, "model_cost_usd": 0.007},
+    }
+    ledger.record_cost_attribution("r1", by_task=by_task)
+    replayed = FileRunLedger(path=path).get("r1")
+    assert replayed is not None
+    assert replayed.by_task == by_task
+
+
+def test_p3_file_run_ledger_omits_none_fields_from_jsonl(tmp_path: Path) -> None:
+    """Cluster P3 envelope shape: pre-P3 lines that lack the
+    cost fields must still load. Verify by writing a JSONL
+    line without the fields and replaying it.
+    """
+    path = _mk(tmp_path)
+    # Hand-craft a JSONL line that pre-dates P3.
+    payload = {
+        "kind": "start",
+        "run_id": "r1",
+        "state": "running",
+        "repository": "repo",
+        "timestamp": "2026-07-22T03:00:00+00:00",
+        "revision": 1,
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ledger = FileRunLedger(path=path)
+    rec = ledger.get("r1")
+    assert rec is not None
+    assert rec.total_tokens is None
+    assert rec.total_cost_usd is None
+    assert rec.total_elapsed_s is None
+    assert rec.by_task is None
+
+
+def test_p3_file_run_ledger_replay_preserves_partial_cost_attribution(tmp_path: Path) -> None:
+    """Cluster P3: a transition line carrying only some of
+    the cost fields preserves the others (mirrors the in-
+    memory carry-forward).
+    """
+    path = _mk(tmp_path)
+    # Hand-craft a sequence: start with no cost attribution,
+    # transition with only total_tokens set.
+    start = {
+        "kind": "start",
+        "run_id": "r1",
+        "state": "running",
+        "repository": "repo",
+        "timestamp": "2026-07-22T03:00:00+00:00",
+        "revision": 1,
+    }
+    transition = {
+        "kind": "transition",
+        "run_id": "r1",
+        "state": "running",
+        "repository": "repo",
+        "timestamp": "2026-07-22T03:01:00+00:00",
+        "revision": 2,
+        "total_tokens": 500,
+    }
+    path.write_text(
+        json.dumps(start) + "\n" + json.dumps(transition) + "\n",
+        encoding="utf-8",
+    )
+    ledger = FileRunLedger(path=path)
+    rec = ledger.get("r1")
+    assert rec is not None
+    assert rec.total_tokens == 500
+    # Others preserved as ``None`` (the start line's absence).
+    assert rec.total_cost_usd is None
+    assert rec.total_elapsed_s is None
+    assert rec.by_task is None
+
+
+def test_p3_file_run_ledger_rejects_negative_cost_attribution(tmp_path: Path) -> None:
+    """Negative cost-attribution is rejected at the Pydantic
+    layer (Cluster P3 invariant). A corrupt line on disk is
+    loaded as ``None`` via the _coerce helpers instead of
+    crashing the replay.
+    """
+    path = _mk(tmp_path)
+    payload = {
+        "kind": "start",
+        "run_id": "r1",
+        "state": "running",
+        "repository": "repo",
+        "timestamp": "2026-07-22T03:00:00+00:00",
+        "revision": 1,
+        "total_tokens": -10,
+        "total_cost_usd": -0.01,
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ledger = FileRunLedger(path=path)
+    rec = ledger.get("r1")
+    assert rec is not None
+    # Negative values on disk load as ``None`` (the _coerce
+    # helpers reject them) so a corrupt line doesn't crash
+    # replay.
+    assert rec.total_tokens is None
+    assert rec.total_cost_usd is None
+
+
+def test_p3_file_run_ledger_cost_attribution_cas_stale_revision_raises(tmp_path: Path) -> None:
+    """Cluster E2: stale ``expected_revision`` on
+    ``record_cost_attribution`` raises BEFORE mutation.
+    """
+    from seharness.controller.run_ledger import OptimisticConcurrencyError
+
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    ledger.record_start("r1", repository="repo")  # revision 1
+    ledger.record_phase("r1", phase="spec")  # revision 2
+    with pytest.raises(OptimisticConcurrencyError):
+        ledger.record_cost_attribution(
+            "r1",
+            total_tokens=100,
+            expected_revision=1,
+        )
+    # Ledger untouched.
+    rec = ledger.get("r1")
+    assert rec is not None
+    assert rec.revision == 2
+    assert rec.total_tokens is None
+
+
+def test_p3_file_run_ledger_coerce_helpers_reject_bool_and_garbage(tmp_path: Path) -> None:
+    """Defensive coverage: the _coerce_optional_int /
+    _coerce_optional_float / _coerce_by_task helpers reject
+    booleans, non-numeric values, and malformed by_task
+    payloads so a corrupt JSONL line doesn't crash replay.
+    """
+    path = _mk(tmp_path)
+    payload = {
+        "kind": "start",
+        "run_id": "r1",
+        "state": "running",
+        "repository": "repo",
+        "timestamp": "2026-07-22T03:00:00+00:00",
+        "revision": 1,
+        "total_tokens": True,  # bool rejected
+        "total_cost_usd": "not-a-number",  # non-numeric rejected
+        "total_elapsed_s": True,  # bool rejected
+        "by_task": "not-a-dict",  # non-dict rejected
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ledger = FileRunLedger(path=path)
+    rec = ledger.get("r1")
+    assert rec is not None
+    # All four cost-attribution fields fall back to ``None``.
+    assert rec.total_tokens is None
+    assert rec.total_cost_usd is None
+    assert rec.total_elapsed_s is None
+    assert rec.by_task is None
+
+
+def test_p3_file_run_ledger_cost_attribution_unknown_run_returns_none(tmp_path: Path) -> None:
+    """Unknown ``run_id`` returns ``None`` (mirrors ``mark_*``)."""
+    path = _mk(tmp_path)
+    ledger = FileRunLedger(path=path)
+    assert ledger.record_cost_attribution("ghost", total_tokens=1) is None
+
+
+def test_p3_file_run_ledger_by_task_partial_corruption_drops_bad_entries(tmp_path: Path) -> None:
+    """A ``by_task`` payload with mixed valid + invalid
+    entries preserves the valid ones and drops the invalid
+    ones (so a single bad entry can't poison the view).
+    """
+    path = _mk(tmp_path)
+    payload = {
+        "kind": "start",
+        "run_id": "r1",
+        "state": "running",
+        "repository": "repo",
+        "timestamp": "2026-07-22T03:00:00+00:00",
+        "revision": 1,
+        "by_task": {
+            "task-good": {"model_tokens": 100.0, "model_cost_usd": 0.003},
+            "task-bad-inner": {"model_tokens": True, "model_cost_usd": "garbage"},
+            "task-bad-axes": [1, 2, 3],
+            "": {"model_tokens": 50.0},  # empty task_id dropped
+        },
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ledger = FileRunLedger(path=path)
+    rec = ledger.get("r1")
+    assert rec is not None
+    assert rec.by_task is not None
+    # Good task preserved with all axes.
+    assert rec.by_task["task-good"] == {
+        "model_tokens": 100.0,
+        "model_cost_usd": 0.003,
+    }
+    # Bad-axes task (inner is a list) is dropped entirely.
+    assert "task-bad-axes" not in rec.by_task
+    # Bad-inner task survives but its bad inner values are
+    # dropped, leaving an empty inner mapping.
+    assert rec.by_task["task-bad-inner"] == {}
+    # Empty task_id is dropped.
+    assert "" not in rec.by_task
+
+
+def test_p3_file_run_ledger_by_task_drops_empty_axis(tmp_path: Path) -> None:
+    """Defensive: an empty axis key in ``by_task`` is dropped
+    (a non-empty string axis is preserved even if it looks
+    unusual; only empty keys are filtered). Covers the
+    ``not axis`` branch in the inner coercion loop.
+    """
+    path = _mk(tmp_path)
+    payload = {
+        "kind": "start",
+        "run_id": "r1",
+        "state": "running",
+        "repository": "repo",
+        "timestamp": "2026-07-22T03:00:00+00:00",
+        "revision": 1,
+        "by_task": {
+            "task-x": {
+                "model_tokens": 100.0,
+                "": 0.25,  # empty axis key dropped
+            },
+        },
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ledger = FileRunLedger(path=path)
+    rec = ledger.get("r1")
+    assert rec is not None
+    assert rec.by_task == {
+        "task-x": {"model_tokens": 100.0},
+    }

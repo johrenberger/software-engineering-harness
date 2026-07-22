@@ -188,6 +188,18 @@ class RunRecord(BaseModel):
     assigning to ``ctx``. ``feature_description`` is also persisted
     so the resume seam can detect spec drift between the original
     run and the resume request.
+
+    Cluster P3 (deferred item 3): cost-attribution fields for the
+    audit trail. ``total_tokens`` / ``total_cost_usd`` /
+    ``total_elapsed_s`` capture run-level totals (the same values
+    the underlying :class:`BudgetTracker` reports at run completion);
+    ``by_task`` captures the per-task breakdown projected by the
+    Cluster P2 :class:`PerPhaseBudgetRecorder`, keyed by ``task_id``.
+    All four fields default to ``None`` so pre-P3 records (and
+    records for runs that don't consume model axes) keep loading
+    unchanged. The dashboard reads these straight from the ledger
+    to surface "how much did this run cost?" without re-running
+    anything.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -209,6 +221,22 @@ class RunRecord(BaseModel):
     # writes should always populate ``cursor`` and may leave ``phase``
     # as a derived value or omit it.
     cursor: PhaseCursor | None = Field(default=None)
+    # Cluster P3: cost-attribution for the audit trail. ``None``
+    # means "no attribution recorded yet" (or "the run never
+    # consumed any model axes"); the dashboard falls back to
+    # ``n/a`` in that case rather than a misleading ``0``.
+    total_tokens: int | None = Field(default=None, ge=0)
+    total_cost_usd: float | None = Field(default=None, ge=0.0)
+    total_elapsed_s: float | None = Field(default=None, ge=0.0)
+    # Cluster P3: per-task breakdown (mirrors the Cluster P2
+    # ``by-task.json`` envelope). Outer key is ``task_id``;
+    # inner key is the axis name (``model_tokens``,
+    # ``model_cost_usd``, ``elapsed_seconds``). ``None`` when
+    # no attribution has been recorded. The shape deliberately
+    # matches the JSONL artifact so the dashboard can render
+    # the same row format regardless of where the data came
+    # from.
+    by_task: dict[str, dict[str, float]] | None = Field(default=None)
 
 
 class RunLedger:
@@ -316,6 +344,13 @@ class RunLedger:
                     "feature_description": feature_description
                     if feature_description is not None
                     else old.feature_description,
+                    # Cluster P3: also carry over cost-
+                    # attribution fields so the audit trail
+                    # doesn't lose data on a re-key / re-record.
+                    "total_tokens": old.total_tokens,
+                    "total_cost_usd": old.total_cost_usd,
+                    "total_elapsed_s": old.total_elapsed_s,
+                    "by_task": old.by_task,
                 }
             )
             self._records[run_id] = rec
@@ -482,6 +517,80 @@ class RunLedger:
             expected_revision=expected_revision,
             expected_state=expected_state,
         )
+
+    def record_cost_attribution(
+        self,
+        run_id: str,
+        *,
+        total_tokens: int | None = None,
+        total_cost_usd: float | None = None,
+        total_elapsed_s: float | None = None,
+        by_task: dict[str, dict[str, float]] | None = None,
+        expected_revision: int | None = None,
+    ) -> RunRecord | None:
+        """Cluster P3: stamp cost-attribution onto a run record.
+
+        Writes the four cost-attribution fields onto the existing
+        record in place, bumping :attr:`RunRecord.revision` like
+        every other state transition (so any caller holding a
+        stale revision sees the bump on their next read). All
+        arguments are keyword-only and all default to ``None``,
+        so the caller can stamp a partial attribution (e.g. just
+        the totals, no per-task breakdown) without re-stating
+        the fields they don't want to touch.
+
+        Cluster P3 invariants:
+
+        - The four cost fields are non-negative (``ge=0`` /
+          ``ge=0.0``); passing a negative value is a programmer
+          error and raises :class:`ValueError` at the Pydantic
+          layer before the ledger is touched.
+        - The revision bump preserves Cluster E2's CAS contract:
+          callers that read at revision N and want to stamp
+          attribution can pass ``expected_revision=N``; mismatch
+          raises :class:`OptimisticConcurrencyError` BEFORE
+          mutation, so the ledger stays untouched.
+        - ``by_task`` is a per-task breakdown keyed by
+          ``task_id``; the inner keys are axis names
+          (``model_tokens`` / ``model_cost_usd`` /
+          ``elapsed_seconds``). The shape mirrors the Cluster P2
+          ``<run_dir>/budget/by-task.json`` artifact so the
+          dashboard renders the same row regardless of source.
+        - Returns the updated :class:`RunRecord`, or ``None`` if
+          ``run_id`` is unknown (mirrors the ``mark_*`` family).
+        """
+        rec = self._records.get(run_id)
+        if rec is None:
+            return None
+        # Cluster E2: CAS check before mutation.
+        if expected_revision is not None and expected_revision != rec.revision:
+            raise OptimisticConcurrencyError(
+                run_id=run_id,
+                expected_revision=expected_revision,
+                actual_revision=rec.revision,
+                expected_state=None,
+                actual_state=rec.state,
+            )
+        # Cluster P3: build the updated record. ``None`` means
+        # "leave the existing value alone" -- a partial update
+        # is the common case (the orchestrator records totals
+        # first, then the per-task breakdown later as the final
+        # phase boundary fires).
+        updated = rec.model_copy(
+            update={
+                "revision": rec.revision + 1,
+                "total_tokens": total_tokens if total_tokens is not None else rec.total_tokens,
+                "total_cost_usd": total_cost_usd
+                if total_cost_usd is not None
+                else rec.total_cost_usd,
+                "total_elapsed_s": total_elapsed_s
+                if total_elapsed_s is not None
+                else rec.total_elapsed_s,
+                "by_task": by_task if by_task is not None else rec.by_task,
+            }
+        )
+        self._records[run_id] = updated
+        return updated
 
     def _update_state(
         self,
