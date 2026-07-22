@@ -314,6 +314,14 @@ class SpecificationService(Protocol):
         run_dir: Any,
     ) -> SpecificationArtifact: ...
 
+    # Cluster M3-3: model-backed implementations expose the
+    # last :class:`ServiceEvidence` they emitted so the
+    # orchestrator can persist it through the evidence writer.
+    # Default services (deterministic) leave this ``None``; the
+    # orchestrator's evidence-recording helper is a silent no-op
+    # in that case so legacy callers keep working.
+    last_evidence: ServiceEvidence | None = None
+
 
 @runtime_checkable
 class PlanningService(Protocol):
@@ -325,6 +333,8 @@ class PlanningService(Protocol):
     """
 
     def build(self, *, ctx: RunContext) -> Plan: ...
+
+    last_evidence: ServiceEvidence | None = None
 
 
 @runtime_checkable
@@ -338,6 +348,8 @@ class ImplementationService(Protocol):
         plan: Plan,
         task_id: str,
     ) -> ImplementationOutcome: ...
+
+    last_evidence: ServiceEvidence | None = None
 
 
 @runtime_checkable
@@ -361,6 +373,8 @@ class RemediationService(Protocol):
         prior_outcome: ImplementationOutcome,
     ) -> RemediationOutcome: ...
 
+    last_evidence: ServiceEvidence | None = None
+
 
 @runtime_checkable
 class ReviewService(Protocol):
@@ -373,6 +387,8 @@ class ReviewService(Protocol):
     """
 
     def review(self, *, review_ctx: ReviewContext) -> ReviewVerdict: ...
+
+    last_evidence: ServiceEvidence | None = None
 
 
 @runtime_checkable
@@ -573,6 +589,8 @@ class DeterministicSpecificationService:
     so existing tests that introspect the JSON shape keep passing.
     """
 
+    last_evidence: ServiceEvidence | None = None
+
     def produce(self, *, ctx: RunContext, run_dir: Any) -> SpecificationArtifact:
         run_dir_path = _coerce_path(run_dir)
         run_dir_path.mkdir(parents=True, exist_ok=True)
@@ -599,6 +617,8 @@ class DeterministicPlanningService:
     time: ``_PlanBuilder`` lives in ``orchestrator.py`` which imports
     the service module.
     """
+
+    last_evidence: ServiceEvidence | None = None
 
     def build(self, *, ctx: RunContext) -> Plan:
         # Lazy import keeps the dependency graph one-way:
@@ -743,6 +763,8 @@ class DeterministicImplementationService:
     nothing harmful.
     """
 
+    last_evidence: ServiceEvidence | None = None
+
     def execute(
         self,
         *,
@@ -761,6 +783,8 @@ class DeterministicImplementationService:
 
 class DeterministicRemediationService:
     """Never attempts remediation; surfaces a 'not-applicable' outcome."""
+
+    last_evidence: ServiceEvidence | None = None
 
     def remediate(
         self,
@@ -793,6 +817,8 @@ class DeterministicReviewService:
     ``review-verdict.json`` to the run directory. The shape matches
     the legacy JSON so existing tests (and dashboards) keep working.
     """
+
+    last_evidence: ServiceEvidence | None = None
 
     def review(self, *, review_ctx: ReviewContext) -> ReviewVerdict:
         verdict = ReviewVerdict(
