@@ -81,19 +81,46 @@ from pydantic import BaseModel, ConfigDict, Field
 #: https://platform.minimax.io/docs/api-reference/text-chat-openai
 DEFAULT_ENDPOINT: str = "https://api.minimax.io/v1/chat/completions"
 
-#: Legacy deprecated endpoint. Accepted when explicitly configured
-#: so older accounts are not broken, but NOT the default.
+#: Legacy / native chat-completion endpoint. Accepted when
+#: explicitly configured (or when the operator selects
+#: ``protocol="native"``), but NOT the default.
 #: https://platform.minimax.io/docs/api-reference/text-post
+NATIVE_ENDPOINT: str = "https://api.minimax.io/v1/text/chatcompletion_v2"
+
+#: Pre-existing deprecated endpoint that lives on a different
+#: domain (``api.minimax.chat``). Kept here for backward
+#: compatibility with older accounts that wired against this
+#: URL before the migration to ``api.minimax.io``.
 DEPRECATED_LEGACY_ENDPOINT: str = "https://api.minimax.chat/v1/text/chatcompletion_v2"
 
 #: Default model catalog endpoint used for startup validation.
 MODELS_ENDPOINT: str = "https://api.minimax.io/v1/models"
 
-#: Environment variable holding the model identifier. There is no
-#: hard-coded default model because the current official
-#: documentation lists MiniMax M2.7 / M2.5 / M2.1 / M2, not M3.
-#: Callers must set ``MINIMAX_MODEL`` explicitly.
+#: Environment variable holding the model identifier. The
+#: production default is :data:`DEFAULT_MODEL` (Cluster M3-1
+#: corrective). Callers may override with ``MINIMAX_MODEL`` for
+#: testing or to point at a non-default model; ``MINIMAX_MODEL``
+#: set to an empty string is treated as unset and falls back to
+#: the default.
 DEFAULT_MODEL_ENV: str = "MINIMAX_MODEL"
+
+#: Production-default model identifier (Cluster M3-1 corrective).
+#: Per the corrective doc: ``MINIMAX_MODEL`` when explicitly
+#: set; otherwise ``MiniMax-M3``. The default MUST NOT be
+#: silently substituted with M2.7 or any other model.
+DEFAULT_MODEL: str = "MiniMax-M3"
+
+#: Open-set of supported protocol identifiers. Used by the
+#: adapter and transport to decide which endpoint + body shape
+#: to use. Both protocols normalize into the same
+#: :class:`MiniMaxTransportResponse` so the rest of the harness
+#: is protocol-agnostic.
+PROTOCOL_NATIVE: str = "native"
+PROTOCOL_OPENAI_COMPATIBLE: str = "openai-compatible"
+SUPPORTED_PROTOCOLS: tuple[str, ...] = (PROTOCOL_NATIVE, PROTOCOL_OPENAI_COMPATIBLE)
+
+#: Default protocol when none is configured.
+DEFAULT_PROTOCOL: str = PROTOCOL_OPENAI_COMPATIBLE
 
 #: Default request timeout in seconds.
 DEFAULT_TIMEOUT_SECONDS: float = 30.0
@@ -101,6 +128,17 @@ DEFAULT_TIMEOUT_SECONDS: float = 30.0
 #: Default max response body size in bytes (4 MiB). Larger bodies are
 #: rejected before parsing.
 DEFAULT_MAX_RESPONSE_BYTES: int = 4 * 1024 * 1024
+
+#: Default thinking mode for M3 production runs. Per the
+#: corrective doc, thinking is enabled for specification,
+#: planning, test generation, implementation, remediation, and
+#: review. ``None`` means "let the model decide"; ``True`` and
+#: ``False`` are explicit overrides.
+DEFAULT_THINKING: bool | None = True
+
+#: Default service tier for M3 production runs. ``None`` means
+#: "let the model decide"; any string is forwarded verbatim.
+DEFAULT_SERVICE_TIER: str | None = "standard"
 
 
 # ---------------------------------------------------------------------------
@@ -132,9 +170,9 @@ class MiniMaxRequest(BaseModel):
 
     Field names mirror the official OpenAI-compatible schema:
 
-    - ``model``: caller-supplied; no hard-coded default (per the
-      refinement workplan the harness MUST NOT assume ``MiniMax-M3``
-      because the live account may not expose it).
+    - ``model``: caller-supplied; defaults to
+      :data:`DEFAULT_MODEL` (``MiniMax-M3``) when the operator
+      has not set ``MINIMAX_MODEL``.
     - ``messages``: chat-completions shape.
     - ``max_completion_tokens``: the upper bound on completion
       tokens the model may emit. Maps to ``max_tokens`` in the
@@ -142,6 +180,18 @@ class MiniMaxRequest(BaseModel):
       on the wire per the official MiniMax docs.
     - ``temperature``: optional sampling temperature.
     - ``stream``: always ``False``; this transport is non-streaming.
+    - ``thinking``: Cluster M3-1 corrective. Optional
+      ``thinking: {type: "enabled"}`` block sent on the wire
+      when the operator has thinking mode enabled. ``None``
+      omits the block (model decides).
+    - ``service_tier``: Cluster M3-1 corrective. Optional
+      ``service_tier`` string sent on the wire when configured.
+      ``None`` omits the field.
+    - ``protocol``: Cluster M3-1 corrective. The wire protocol
+      the transport must use (``"native"`` or
+      ``"openai-compatible"``). Defaults to
+      :data:`DEFAULT_PROTOCOL`. The transport picks the
+      matching endpoint.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -151,6 +201,82 @@ class MiniMaxRequest(BaseModel):
     max_completion_tokens: int | None = Field(default=None, ge=1, le=1_000_000)
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     stream: bool = False
+    thinking: bool | None = None
+    service_tier: str | None = None
+    protocol: str = DEFAULT_PROTOCOL
+
+
+def _serialize_request_body(
+    request: MiniMaxRequest,
+    *,
+    protocol: str,
+) -> str:
+    """Serialize a :class:`MiniMaxRequest` into the wire body
+    for the given protocol.
+
+    Both protocols share the same envelope where they overlap;
+    the differences are the body field names. The native
+    protocol expects ``prompt`` (concatenated user content) and
+    a flat ``max_tokens`` / ``temperature``; the OpenAI-
+    compatible protocol expects ``messages[]``,
+    ``max_completion_tokens``, and ``temperature``.
+
+    Cluster M3-1 corrective:
+
+    - ``thinking`` and ``service_tier`` are forwarded verbatim on
+      both protocols (the native protocol has documented
+      ``thinking: {type: "enabled"}`` and ``service_tier``
+      keys; the OpenAI-compatible protocol uses the same keys
+      per the official MiniMax docs).
+    - The native body shape concatenates ``messages`` into a
+      single ``prompt`` string (system + user segments joined
+      with ``\n\n``). This is the format the legacy endpoint
+      expects; Cluster M3-5 live verification confirms the
+      real server accepts it.
+    - ``max_completion_tokens`` is mapped to ``max_tokens`` on
+      the native wire (the legacy field name) and forwarded
+      verbatim on OpenAI-compatible.
+    - ``stream`` is always ``False``; not forwarded on the
+      native wire (legacy endpoint does not support streaming
+      in this transport).
+    """
+    if protocol == PROTOCOL_NATIVE:
+        # Concatenate messages into a single prompt. System +
+        # user segments are joined with a double newline so the
+        # model sees them as separate sections.
+        prompt_parts: list[str] = []
+        for message in request.messages:
+            if message.role == "system":
+                prompt_parts.append(f"[system]\n{message.content}")
+            elif message.role == "user":
+                prompt_parts.append(message.content)
+            else:
+                # assistant / tool messages collapse into the
+                # prompt verbatim — the native endpoint does
+                # not distinguish them.
+                prompt_parts.append(f"[{message.role}]\n{message.content}")
+        native_body: dict[str, Any] = {
+            "model": request.model,
+            "prompt": "\n\n".join(prompt_parts),
+        }
+        if request.max_completion_tokens is not None:
+            native_body["max_tokens"] = request.max_completion_tokens
+        if request.temperature is not None:
+            native_body["temperature"] = request.temperature
+        if request.thinking is not None:
+            native_body["thinking"] = {"type": "enabled" if request.thinking else "disabled"}
+        if request.service_tier is not None:
+            native_body["service_tier"] = request.service_tier
+        return json.dumps(native_body, sort_keys=True)
+
+    # OpenAI-compatible: serialize the request with Pydantic
+    # and add the thinking / service_tier keys verbatim.
+    openai_body: dict[str, Any] = json.loads(request.model_dump_json(exclude_none=True))
+    if request.thinking is not None:
+        openai_body["thinking"] = {"type": "enabled" if request.thinking else "disabled"}
+    if request.service_tier is not None:
+        openai_body["service_tier"] = request.service_tier
+    return json.dumps(openai_body, sort_keys=True)
 
 
 class MiniMaxTransportError(BaseModel):
@@ -227,19 +353,53 @@ class HttpMiniMaxTransport:
     ``api_key_env`` at construction time. The transport MUST NOT
     accept the token as a constructor argument or store it in any
     field that survives ``__repr__``.
+
+    Cluster M3-1 corrective — protocol switch:
+
+    The transport supports two wire protocols, both normalized into
+    the same :class:`MiniMaxTransportResponse`:
+
+    - ``openai-compatible`` (default): routes to
+      :data:`DEFAULT_ENDPOINT`
+      (``https://api.minimax.io/v1/chat/completions``) with the
+      OpenAI-compatible chat-completions body shape
+      (``messages[]``).
+    - ``native``: routes to :data:`NATIVE_ENDPOINT`
+      (``https://api.minimax.io/v1/text/chatcompletion_v2``) with
+      the legacy chat-completion body shape (``prompt``). The
+      wire-body shape is selected by the adapter at request
+      construction; the transport picks the matching URL.
+
+    The transport is otherwise protocol-agnostic: it serializes
+    whatever body shape the adapter hands it. Callers MAY pass
+    an explicit ``endpoint`` to override the protocol default
+    (legacy accounts wired to ``api.minimax.chat`` continue to
+    work).
     """
 
     def __init__(
         self,
         *,
         api_key_env: str = "MINIMAX_API_KEY",
-        endpoint: str = DEFAULT_ENDPOINT,
+        endpoint: str | None = None,
+        protocol: str = DEFAULT_PROTOCOL,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
         client: httpx.Client | None = None,
     ) -> None:
+        if protocol not in SUPPORTED_PROTOCOLS:
+            raise ValueError(
+                f"protocol must be one of {SUPPORTED_PROTOCOLS!r}, got {protocol!r}",
+            )
         self._api_key_env = api_key_env
-        self._endpoint = endpoint
+        self._protocol = protocol
+        # Resolve endpoint: explicit wins, else protocol default.
+        if endpoint is not None:
+            self._endpoint = endpoint
+        elif protocol == PROTOCOL_NATIVE:
+            self._endpoint = NATIVE_ENDPOINT
+        else:
+            self._endpoint = DEFAULT_ENDPOINT
         self._timeout_seconds = float(timeout_seconds)
         self._max_response_bytes = int(max_response_bytes)
         # The httpx.Client is owned by the transport so callers do not
@@ -268,6 +428,18 @@ class HttpMiniMaxTransport:
         """
         return self._client
 
+    @property
+    def protocol(self) -> str:
+        """The configured wire protocol (``native`` /
+        ``openai-compatible``). Cluster M3-1 corrective."""
+        return self._protocol
+
+    @property
+    def endpoint(self) -> str:
+        """The resolved endpoint (after protocol / explicit
+        resolution). Exposed for diagnostics and tests."""
+        return self._endpoint
+
     def _bearer_token(self) -> str | None:
         token = os.environ.get(self._api_key_env)
         return token if token else None
@@ -284,9 +456,16 @@ class HttpMiniMaxTransport:
                 )
             )
 
-        # Serialize the request body. Pydantic's ``model_dump_json``
-        # is deterministic and uses our frozen schema.
-        body = request.model_dump_json(exclude_none=True)
+        # Cluster M3-1 corrective — protocol-aware body shape.
+        # The native protocol expects a legacy ``prompt`` body;
+        # the openai-compatible protocol expects ``messages[]``.
+        # Both routes fall through to the same normalized
+        # :class:`MiniMaxTransportResponse` so the rest of the
+        # harness is protocol-agnostic.
+        body = _serialize_request_body(
+            request,
+            protocol=request.protocol or self._protocol,
+        )
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",

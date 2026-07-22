@@ -33,7 +33,25 @@ Design constraints:
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+
+#: Cluster M3-1 corrective — readiness classification literal.
+#: The readiness struct now distinguishes catalog_verified,
+#: live_verified_catalog_lag, not_live, and not_classified
+#: (the coarse-grained construction-time state before the
+#: catalog + direct-call verification runs).
+#
+# Closed set; off-literal values raise ``ValidationError`` at
+# construction so a future careless edit can't widen the
+# classification vocabulary.
+ReadinessClassification = Literal[
+    "live_verified_catalog",
+    "live_verified_catalog_lag",
+    "not_live",
+    "not_classified",
+]
 
 
 class ProviderReadiness(BaseModel):
@@ -63,6 +81,14 @@ class ProviderReadiness(BaseModel):
         Human-readable explanation; populated when any of the
         boolean fields is ``False`` or when ``model_identifier``
         is empty.
+    classification:
+        Cluster M3-1 corrective. Closed-set literal describing
+        how the adapter was verified against the live MiniMax
+        account. ``not_classified`` is the coarse construction-
+        time state; production startup upgrades it to one of
+        ``live_verified_catalog`` /
+        ``live_verified_catalog_lag`` / ``not_live`` via the
+        catalog lookup + direct-call fallback.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -72,9 +98,18 @@ class ProviderReadiness(BaseModel):
     transport_is_live: bool
     model_identifier: str = Field(min_length=1)
     reason: str | None = None
+    classification: ReadinessClassification = "not_classified"
 
     def is_live(self) -> bool:
-        """``True`` iff every boolean field is true and the model id is set."""
+        """``True`` iff every boolean field is true and the model id is set.
+
+        Cluster M3-1: this binary API is preserved unchanged so
+        existing callers continue to work. The classification
+        distinguishes ``live_verified_catalog`` from
+        ``live_verified_catalog_lag`` but both map to ``True``
+        here; the catalog-vs-direct-call distinction is what
+        callers use the classification for.
+        """
         return (
             self.configured
             and self.transport_available
@@ -101,6 +136,7 @@ def not_live(reason: str, **overrides: bool | str) -> ProviderReadiness:
         transport_is_live=transport_is_live,
         model_identifier=model_identifier,
         reason=reason,
+        classification="not_live",
     )
 
 

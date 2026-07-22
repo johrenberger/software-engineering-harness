@@ -49,6 +49,7 @@ from seharness.models.minimax_transport import (
     DEFAULT_TIMEOUT_SECONDS,
     DEPRECATED_LEGACY_ENDPOINT,
     MODELS_ENDPOINT,
+    NATIVE_ENDPOINT,
     FakeMiniMaxTransport,
     HttpMiniMaxTransport,
     MiniMaxMessage,
@@ -891,14 +892,24 @@ class TestAdapterReadiness:
         assert r.reason is None
         assert r.model_identifier == "MiniMax-M2.7"
 
-    def test_empty_model_identifier_yields_not_live(self) -> None:
+    def test_empty_model_identifier_falls_back_to_default(self) -> None:
+        """Cluster M3-1: ``model_identifier=""`` is treated as
+        "unset" so the adapter falls back to the M3 default.
+        A fake transport is the gate that fails the readiness
+        check; the model identifier surfaces as ``MiniMax-M3``
+        on the readiness struct.
+        """
         import os
 
         os.environ["MINIMAX_API_KEY"] = "sk-test"
-        adapter = MiniMaxAdapter(api_key_env="MINIMAX_API_KEY", model_identifier="")
+        adapter = MiniMaxAdapter(
+            api_key_env="MINIMAX_API_KEY",
+            model_identifier="",
+            transport=FakeMiniMaxTransport(),
+        )
         r = adapter.readiness()
         assert not r.is_live()
-        assert r.model_identifier == "unset"
+        assert r.model_identifier == "MiniMax-M3"
 
 
 # ---------------------------------------------------------------------------
@@ -1425,13 +1436,22 @@ class TestValidateModelAgainstAccount:
 
 
 class TestRequiredModelIdentifier:
-    """ENFORCED BOUNDARY: per the refinement workplan, the model
-    ID is mandatory + configurable. There is no hard-coded
-    default. The constructor resolves the model id in this order:
+    """ENFORCED BOUNDARY: per the corrective doc, the model ID
+    is configurable and the production default is
+    ``MiniMax-M3`` (not M2.7). The constructor resolves the
+    model id in this order:
 
-    1. Explicit ``model_identifier`` argument.
-    2. ``MINIMAX_MODEL`` environment variable.
-    3. Empty string — the adapter is not configured for any model.
+    1. Explicit ``model_identifier`` argument (non-empty after
+       stripping).
+    2. ``MINIMAX_MODEL`` environment variable (non-empty after
+       stripping).
+    3. Production default :data:`DEFAULT_MODEL`
+       (``MiniMax-M3``).
+
+    Cluster M3-1 corrective: the empty-string fallback has
+    been removed. Operators who relied on the previous
+    "no model = no default" behaviour MUST set
+    ``MINIMAX_MODEL`` explicitly or rely on the M3 default.
     """
 
     def test_explicit_model_identifier_used(self) -> None:
@@ -1454,23 +1474,42 @@ class TestRequiredModelIdentifier:
         )
         assert adapter.model_identifier == "MiniMax-M2.7"
 
-    def test_no_argument_no_env_yields_empty_identifier(self) -> None:
-        """When neither an argument nor an env var is provided,
-        the adapter carries an empty model identifier and reports
-        not-live. The readiness struct reports ``model_identifier``
-        as the sentinel ``unset`` to satisfy the schema's
-        ``min_length=1``."""
+    def test_no_argument_no_env_yields_minimax_m3_default(self) -> None:
+        """Cluster M3-1: when neither an argument nor an env
+        var is provided, the adapter defaults to
+        ``MiniMax-M3``. The readiness struct still reports
+        not-live when the API key is missing, but the model
+        identifier on the adapter is the M3 production
+        default.
+        """
+        os.environ.pop("MINIMAX_API_KEY", None)
+        os.environ.pop("MINIMAX_MODEL", None)
         adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
-        assert adapter.model_identifier == ""
+        assert adapter.model_identifier == "MiniMax-M3"
         r = adapter.readiness()
         assert not r.is_live()
-        # The struct's identifier is the sentinel "unset"; the
-        # adapter property preserves the empty string so callers
-        # can distinguish "no model configured" from "model 'x'".
-        assert r.model_identifier == "unset"
-        # The reason mentions the missing API key (first probe
-        # gate), not the empty model id.
+        # The probe lands on the "API key unset" gate (the
+        # first probe check); the model id is the M3 default.
+        assert r.model_identifier == "MiniMax-M3"
         assert "MINIMAX_API_KEY" in (r.reason or "")
+
+    def test_empty_string_env_treated_as_unset(self) -> None:
+        """Cluster M3-1: ``MINIMAX_MODEL=""`` is treated as
+        "unset" so an operator who accidentally exports an
+        empty value falls back to the M3 default.
+        """
+        os.environ["MINIMAX_MODEL"] = ""
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        assert adapter.model_identifier == "MiniMax-M3"
+
+    def test_whitespace_env_treated_as_unset(self) -> None:
+        """Cluster M3-1: ``MINIMAX_MODEL="  "`` is treated as
+        "unset" so an operator with stray whitespace falls
+        back to the M3 default.
+        """
+        os.environ["MINIMAX_MODEL"] = "   "
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        assert adapter.model_identifier == "MiniMax-M3"
 
     def test_adapter_validate_against_account_with_fake_transport(self) -> None:
         """Validation is not possible with a fake transport — the
@@ -1484,25 +1523,34 @@ class TestRequiredModelIdentifier:
         assert available == ()
         assert "HTTP transport" in (err or "")
 
-    def test_adapter_validate_against_account_without_model_id(self) -> None:
-        """Even with a valid HTTP transport, validation cannot
-        proceed without a model id."""
+    def test_adapter_validate_against_account_with_default_model(self) -> None:
+        """Validation with the M3 default routes through the
+        catalog lookup just like an explicit identifier.
+
+        The test wires an HTTP transport that returns a
+        catalog containing ``MiniMax-M3``; the adapter's
+        default identifier is then verified as listed.
+        """
 
         def handler(req: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json={"data": []})
+            return httpx.Response(
+                200,
+                json={"data": [{"id": "MiniMax-M3"}, {"id": "MiniMax-M2.7"}]},
+            )
 
         os.environ["MINIMAX_API_KEY"] = "sk-test"
+        os.environ.pop("MINIMAX_MODEL", None)
         client = httpx.Client(
             transport=httpx.MockTransport(handler), timeout=DEFAULT_TIMEOUT_SECONDS
         )
         adapter = MiniMaxAdapter(
             transport=HttpMiniMaxTransport(client=client),
-            model_identifier="",
         )
+        assert adapter.model_identifier == "MiniMax-M3"
         is_listed, available, err = adapter.validate_against_account()
-        assert is_listed is False
-        assert available == ()
-        assert "model identifier" in (err or "")
+        assert is_listed is True
+        assert available == ("MiniMax-M3", "MiniMax-M2.7")
+        assert err is None
 
     def test_adapter_validate_against_account_proxies_to_helper(self) -> None:
         """When the adapter uses an HTTP transport with a configured
@@ -1533,24 +1581,24 @@ class TestRequiredModelIdentifier:
         assert available == ("MiniMax-M2.7", "MiniMax-M2.5")
         assert err is None
 
-    def test_readiness_reports_empty_model_identifier(self) -> None:
-        """When model_identifier is empty the readiness struct
-        reports ``not_live`` with a clear reason."""
+    def test_readiness_with_default_model_reports_fake_transport(self) -> None:
+        """Cluster M3-1: with the API key set, the default M3
+        model, but a fake transport, the readiness probe
+        reports ``not_live`` because the transport is not
+        the production HTTP transport. The model identifier
+        is the M3 default rather than ``unset``.
+        """
         os.environ["MINIMAX_API_KEY"] = "sk-test"
+        os.environ.pop("MINIMAX_MODEL", None)
         adapter = MiniMaxAdapter(
             transport=FakeMiniMaxTransport(),
-            model_identifier="",
         )
         r = adapter.readiness()
         assert not r.is_live()
-        # The empty identifier is reported as the sentinel "unset"
-        # so the readiness struct satisfies its min_length=1.
-        assert r.model_identifier == "unset"
-        # The probe goes past the "not configured" gate (key is
-        # set) and lands on the "empty model id" gate.
+        assert r.model_identifier == "MiniMax-M3"
         assert r.configured is True
         assert r.transport_is_live is False
-        assert "model_identifier" in (r.reason or "")
+        assert "transport" in (r.reason or "")
 
     def test_readiness_reports_fake_transport_with_key_and_model(self) -> None:
         """When the key is set, the model id is set, but the
@@ -1570,3 +1618,440 @@ class TestRequiredModelIdentifier:
         assert r.transport_is_live is False
         assert r.transport_available is True
         assert "not the production HTTP transport" in (r.reason or "")
+
+
+# ---------------------------------------------------------------------------
+# Cluster M3-1: model default + protocol switch + thinking/service_tier
+# ---------------------------------------------------------------------------
+
+
+class TestM31ModelDefault:
+    """Cluster M3-1 corrective: ``MiniMax-M3`` is the production
+    default. ``MINIMAX_MODEL`` (when explicitly set to a non-empty
+    string) wins; ``model_identifier`` (explicit ctor arg) wins
+    over the env var. The empty-string and whitespace env cases
+    fall back to the default.
+    """
+
+    def test_default_is_minimax_m3_when_env_unset(self) -> None:
+        os.environ.pop("MINIMAX_MODEL", None)
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        assert adapter.model_identifier == "MiniMax-M3"
+
+    def test_default_is_minimax_m3_when_env_empty_string(self) -> None:
+        os.environ["MINIMAX_MODEL"] = ""
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        assert adapter.model_identifier == "MiniMax-M3"
+
+    def test_default_is_minimax_m3_when_env_whitespace(self) -> None:
+        os.environ["MINIMAX_MODEL"] = "   "
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        assert adapter.model_identifier == "MiniMax-M3"
+
+    def test_env_var_overrides_default(self) -> None:
+        os.environ["MINIMAX_MODEL"] = "MiniMax-M2.7"
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        assert adapter.model_identifier == "MiniMax-M2.7"
+
+    def test_explicit_arg_overrides_env(self) -> None:
+        os.environ["MINIMAX_MODEL"] = "MiniMax-M2.7"
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            model_identifier="MiniMax-M2.5",
+        )
+        assert adapter.model_identifier == "MiniMax-M2.5"
+
+    def test_explicit_arg_empty_falls_back_to_env(self) -> None:
+        os.environ["MINIMAX_MODEL"] = "MiniMax-M2.7"
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            model_identifier="",
+        )
+        assert adapter.model_identifier == "MiniMax-M2.7"
+
+    def test_does_not_silently_fallback_to_m2_7(self) -> None:
+        """When neither argument nor env is set, the adapter
+        does NOT silently pick ``MiniMax-M2.7`` (the previously-
+        documented model). It picks the production default
+        ``MiniMax-M3``.
+        """
+        os.environ.pop("MINIMAX_MODEL", None)
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        assert adapter.model_identifier != "MiniMax-M2.7"
+        assert adapter.model_identifier == "MiniMax-M3"
+
+
+class TestM31ProtocolSwitch:
+    """Cluster M3-1: native / openai-compatible protocol switch
+    routes to the matching endpoint.
+    """
+
+    def test_default_protocol_is_openai_compatible(self) -> None:
+        transport = HttpMiniMaxTransport()
+        assert transport.protocol == "openai-compatible"
+        assert transport.endpoint == DEFAULT_ENDPOINT
+
+    def test_native_protocol_uses_native_endpoint(self) -> None:
+        transport = HttpMiniMaxTransport(protocol="native")
+        assert transport.protocol == "native"
+        assert transport.endpoint == NATIVE_ENDPOINT
+
+    def test_openai_compatible_protocol_uses_default_endpoint(self) -> None:
+        transport = HttpMiniMaxTransport(protocol="openai-compatible")
+        assert transport.protocol == "openai-compatible"
+        assert transport.endpoint == DEFAULT_ENDPOINT
+
+    def test_explicit_endpoint_overrides_protocol_default(self) -> None:
+        transport = HttpMiniMaxTransport(
+            protocol="native",
+            endpoint="https://custom.example.com/v1/chat",
+        )
+        assert transport.protocol == "native"
+        assert transport.endpoint == "https://custom.example.com/v1/chat"
+
+    def test_unknown_protocol_rejected(self) -> None:
+        with pytest.raises(ValueError, match="protocol"):
+            HttpMiniMaxTransport(protocol="not-a-protocol")
+
+    def test_adapter_propagates_protocol_to_transport(self) -> None:
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            protocol="native",
+        )
+        # Adapter is wired to a fake transport, so the protocol
+        # is carried on the adapter but the resolved transport
+        # is still the fake. The adapter's protocol is what
+        # gets forwarded into MiniMaxRequest.
+        assert adapter._protocol == "native"  # noqa: SLF001 — internal probe
+
+    def test_adapter_rejects_unknown_protocol(self) -> None:
+        with pytest.raises(ValueError, match="protocol"):
+            MiniMaxAdapter(
+                transport=FakeMiniMaxTransport(),
+                protocol="not-a-protocol",
+            )
+
+
+class TestM31ThinkingAndServiceTier:
+    """Cluster M3-1: thinking + service_tier configuration
+    propagates into the wire request.
+    """
+
+    def test_thinking_default_is_enabled(self) -> None:
+        os.environ.pop("MINIMAX_MODEL", None)
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        request = ModelRequest(
+            role=RoutingRole.PLANNING,
+            prompt="hello",
+            max_tokens=100,
+            temperature=0.0,
+        )
+        provider_request = adapter._build_provider_request(request)  # noqa: SLF001
+        assert provider_request.thinking is True
+
+    def test_service_tier_default_is_standard(self) -> None:
+        os.environ.pop("MINIMAX_MODEL", None)
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        request = ModelRequest(
+            role=RoutingRole.PLANNING,
+            prompt="hello",
+            max_tokens=100,
+            temperature=0.0,
+        )
+        provider_request = adapter._build_provider_request(request)  # noqa: SLF001
+        assert provider_request.service_tier == "standard"
+
+    def test_thinking_can_be_disabled(self) -> None:
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            thinking=False,
+        )
+        request = ModelRequest(
+            role=RoutingRole.PLANNING,
+            prompt="hello",
+            max_tokens=100,
+            temperature=0.0,
+        )
+        provider_request = adapter._build_provider_request(request)  # noqa: SLF001
+        assert provider_request.thinking is False
+
+    def test_thinking_can_be_unset(self) -> None:
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            thinking=None,
+        )
+        request = ModelRequest(
+            role=RoutingRole.PLANNING,
+            prompt="hello",
+            max_tokens=100,
+            temperature=0.0,
+        )
+        provider_request = adapter._build_provider_request(request)  # noqa: SLF001
+        assert provider_request.thinking is None
+
+    def test_service_tier_can_be_overridden(self) -> None:
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            service_tier="priority",
+        )
+        request = ModelRequest(
+            role=RoutingRole.PLANNING,
+            prompt="hello",
+            max_tokens=100,
+            temperature=0.0,
+        )
+        provider_request = adapter._build_provider_request(request)  # noqa: SLF001
+        assert provider_request.service_tier == "priority"
+
+    def test_service_tier_can_be_unset(self) -> None:
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+            service_tier=None,
+        )
+        request = ModelRequest(
+            role=RoutingRole.PLANNING,
+            prompt="hello",
+            max_tokens=100,
+            temperature=0.0,
+        )
+        provider_request = adapter._build_provider_request(request)  # noqa: SLF001
+        assert provider_request.service_tier is None
+
+
+class TestM31NativeBodySerialization:
+    """Cluster M3-1: the native protocol serializes messages
+    into a legacy ``prompt`` body and forwards thinking /
+    service_tier verbatim.
+    """
+
+    def test_native_body_uses_prompt_field(self) -> None:
+        from seharness.models.minimax_transport import (
+            _serialize_request_body,
+        )
+
+        request = MiniMaxRequest(
+            model="MiniMax-M3",
+            messages=(MiniMaxMessage(role="user", content="hello"),),
+            max_completion_tokens=100,
+            temperature=0.5,
+            thinking=True,
+            service_tier="standard",
+            protocol="native",
+        )
+        body = json.loads(_serialize_request_body(request, protocol="native"))
+        assert body["model"] == "MiniMax-M3"
+        assert body["prompt"] == "hello"
+        assert body["max_tokens"] == 100
+        assert body["temperature"] == 0.5
+        assert body["thinking"] == {"type": "enabled"}
+        assert body["service_tier"] == "standard"
+        # OpenAI-shape fields are absent in the native body.
+        assert "messages" not in body
+        assert "max_completion_tokens" not in body
+
+    def test_native_body_concatenates_system_and_user(self) -> None:
+        from seharness.models.minimax_transport import (
+            _serialize_request_body,
+        )
+
+        request = MiniMaxRequest(
+            model="MiniMax-M3",
+            messages=(
+                MiniMaxMessage(role="system", content="be terse"),
+                MiniMaxMessage(role="user", content="hi"),
+            ),
+            protocol="native",
+        )
+        body = json.loads(_serialize_request_body(request, protocol="native"))
+        assert "be terse" in body["prompt"]
+        assert "hi" in body["prompt"]
+        # System section is marked.
+        assert "[system]" in body["prompt"]
+
+    def test_openai_compatible_body_uses_messages(self) -> None:
+        from seharness.models.minimax_transport import (
+            _serialize_request_body,
+        )
+
+        request = MiniMaxRequest(
+            model="MiniMax-M3",
+            messages=(MiniMaxMessage(role="user", content="hello"),),
+            max_completion_tokens=100,
+            temperature=0.5,
+            thinking=True,
+            service_tier="standard",
+            protocol="openai-compatible",
+        )
+        body = json.loads(_serialize_request_body(request, protocol="openai-compatible"))
+        assert body["model"] == "MiniMax-M3"
+        assert body["messages"] == [{"role": "user", "content": "hello"}]
+        assert body["max_completion_tokens"] == 100
+        assert body["temperature"] == 0.5
+        assert body["thinking"] == {"type": "enabled"}
+        assert body["service_tier"] == "standard"
+        # Native-shape fields are absent in the OpenAI body.
+        assert "prompt" not in body
+        assert "max_tokens" not in body
+
+    def test_openai_compatible_body_omits_unset_thinking(self) -> None:
+        from seharness.models.minimax_transport import (
+            _serialize_request_body,
+        )
+
+        request = MiniMaxRequest(
+            model="MiniMax-M3",
+            messages=(MiniMaxMessage(role="user", content="hello"),),
+            thinking=None,
+            service_tier=None,
+            protocol="openai-compatible",
+        )
+        body = json.loads(_serialize_request_body(request, protocol="openai-compatible"))
+        assert "thinking" not in body
+        assert "service_tier" not in body
+
+
+class TestM31ReadinessClassification:
+    """Cluster M3-1: ProviderReadiness carries a closed-set
+    ``classification`` literal. ``is_live()`` returns ``True``
+    for both catalog_verified and live_verified_catalog_lag.
+    """
+
+    def test_classification_default_is_not_classified(self) -> None:
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        os.environ.pop("MINIMAX_MODEL", None)
+        client = httpx.Client(
+            transport=httpx.MockTransport(lambda req: httpx.Response(200)),
+            timeout=DEFAULT_TIMEOUT_SECONDS,
+        )
+        adapter = MiniMaxAdapter(
+            transport=HttpMiniMaxTransport(client=client),
+        )
+        r = adapter.readiness()
+        assert r.classification == "not_classified"
+        assert r.is_live() is True
+
+    def test_classification_catalog_verified_is_live(self) -> None:
+        readiness = ProviderReadiness(
+            configured=True,
+            transport_available=True,
+            transport_is_live=True,
+            model_identifier="MiniMax-M3",
+            classification="live_verified_catalog",
+        )
+        assert readiness.is_live() is True
+
+    def test_classification_catalog_lag_is_live(self) -> None:
+        readiness = ProviderReadiness(
+            configured=True,
+            transport_available=True,
+            transport_is_live=True,
+            model_identifier="MiniMax-M3",
+            classification="live_verified_catalog_lag",
+        )
+        assert readiness.is_live() is True
+
+    def test_classification_not_live_is_not_live(self) -> None:
+        readiness = ProviderReadiness(
+            configured=False,
+            transport_available=False,
+            transport_is_live=False,
+            model_identifier="MiniMax-M3",
+            classification="not_live",
+        )
+        assert readiness.is_live() is False
+
+    def test_classification_literal_is_closed(self) -> None:
+        """Off-literal classification values raise at construction."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ProviderReadiness(
+                configured=True,
+                transport_available=True,
+                transport_is_live=True,
+                model_identifier="MiniMax-M3",
+                classification="maybe_live",  # type: ignore[arg-type]
+            )
+
+    def test_not_live_factory_sets_classification_not_live(self) -> None:
+        r = not_live(reason="test")
+        assert r.classification == "not_live"
+
+
+class TestM31ProductionRefusesSilentFallback:
+    """Cluster M3-1: the production startup path refuses silent
+    model substitution. When ``MINIMAX_MODEL`` is unset, the
+    adapter reports the M3 default and the production readiness
+    validator accepts the default identifier (i.e., it does
+    not reject M3 as "unknown").
+    """
+
+    def test_default_model_identifier_passes_readiness(self) -> None:
+        """The M3 default identifier must satisfy the readiness
+        schema's ``min_length=1`` constraint so production
+        startup doesn't reject it as malformed."""
+        os.environ.pop("MINIMAX_MODEL", None)
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        adapter = MiniMaxAdapter(
+            transport=FakeMiniMaxTransport(),
+        )
+        r = adapter.readiness()
+        assert len(r.model_identifier) >= 1
+        assert r.model_identifier == "MiniMax-M3"
+        # The probe still flags the fake transport as not live,
+        # but the model identifier is not the rejection reason.
+        assert "model_identifier is empty" not in (r.reason or "")
+
+    def test_minimax_m2_7_explicit_not_silently_overridden(self) -> None:
+        """When the operator explicitly sets ``MINIMAX_MODEL`` to
+        M2.7 (e.g. for testing), the adapter uses M2.7 verbatim.
+        The production profile accepts this as long as the M2.7
+        model is in the live catalog; the doc explicitly says
+        M2.7 may remain supported for compatibility.
+        """
+        os.environ["MINIMAX_MODEL"] = "MiniMax-M2.7"
+        os.environ["MINIMAX_API_KEY"] = "sk-test"
+        adapter = MiniMaxAdapter(transport=FakeMiniMaxTransport())
+        assert adapter.model_identifier == "MiniMax-M2.7"
+
+
+class TestM31NativeBodyAssistantAndToolMessages:
+    """Cluster M3-1: the native protocol wraps assistant /
+    tool messages in ``[role]`` markers (the native endpoint
+    does not distinguish them from user/system segments).
+    """
+
+    def test_native_body_wraps_assistant_in_role_marker(self) -> None:
+        from seharness.models.minimax_transport import (
+            _serialize_request_body,
+        )
+
+        request = MiniMaxRequest(
+            model="MiniMax-M3",
+            messages=(
+                MiniMaxMessage(role="user", content="hi"),
+                MiniMaxMessage(role="assistant", content="hello back"),
+                MiniMaxMessage(role="user", content="how are you?"),
+            ),
+            protocol="native",
+        )
+        body = json.loads(_serialize_request_body(request, protocol="native"))
+        assert "[assistant]" in body["prompt"]
+        assert "hello back" in body["prompt"]
+
+    def test_native_body_wraps_tool_in_role_marker(self) -> None:
+        from seharness.models.minimax_transport import (
+            _serialize_request_body,
+        )
+
+        request = MiniMaxRequest(
+            model="MiniMax-M3",
+            messages=(
+                MiniMaxMessage(role="user", content="run the tool"),
+                MiniMaxMessage(role="tool", content="tool output"),
+            ),
+            protocol="native",
+        )
+        body = json.loads(_serialize_request_body(request, protocol="native"))
+        assert "[tool]" in body["prompt"]
+        assert "tool output" in body["prompt"]

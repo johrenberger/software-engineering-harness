@@ -52,7 +52,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from seharness.artifacts.traceability import Plan
 from seharness.config import RuntimeProfile
@@ -190,6 +190,34 @@ class ReviewVerdict(BaseModel):
     status string. ``approval`` is a separate bool so callers can
     approve with or without comments, but the *status* is always one
     of ``approved``, ``changes_requested``, ``rejected``.
+
+    Cluster M3-1 corrective — cross-field validation:
+
+    The corrective doc requires the verdict envelope to enforce
+    status / approval consistency. Concretely:
+
+    - ``status == "approved"``          ↔ ``approval is True``
+    - ``status == "changes_requested"`` ↔ ``approval is False``
+    - ``status == "rejected"``          ↔ ``approval is False``
+
+    Inconsistent payloads (``status="approved"`` with
+    ``approval=False``, or ``status="rejected"`` with
+    ``approval=True``) raise :class:`ValidationError` at the
+    Pydantic layer. This blocks two failure modes:
+
+    1. A model that emits a contradictory verdict (e.g. "approved
+       but not approved") cannot pass schema validation, so the
+       orchestrator never reads a contradictory completion
+       decision.
+    2. A buggy parser that drops a field cannot silently pass
+       through; the missing-field case still raises because the
+       status / approval combination is checked post-default.
+
+    The reviewer schema lives here so the validator is the single
+    source of truth for "what counts as approval". Callers that
+    need a single authoritative completion decision derive it
+    from ``verdict.status`` (or equivalently
+    ``verdict.approval``); they MUST NOT combine the two.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, validate_assignment=True)
@@ -204,6 +232,32 @@ class ReviewVerdict(BaseModel):
     input_tokens: int | None = None
     output_tokens: int | None = None
     duration_s: float | None = None
+
+    @model_validator(mode="after")
+    def _status_approval_consistency(self) -> ReviewVerdict:
+        """Cluster M3-1: enforce status / approval consistency.
+
+        Per the corrective doc:
+
+        - ``approved``          → ``approval == True``
+        - ``changes_requested`` → ``approval == False``
+        - ``rejected``          → ``approval == False``
+
+        Contradictory payloads (e.g. ``status="approved"`` with
+        ``approval=False``) raise :class:`ValidationError` so the
+        orchestrator can never read an inconsistent completion
+        decision.
+        """
+        expected_approval = self.status == "approved"
+        if self.approval != expected_approval:
+            msg = (
+                f"ReviewVerdict status / approval are inconsistent: "
+                f"status={self.status!r} requires approval={expected_approval}, "
+                f"got approval={self.approval}; this is a malformed verdict "
+                f"and must not pass through schema validation"
+            )
+            raise ValueError(msg)
+        return self
 
 
 # ---------------------------------------------------------------------------
