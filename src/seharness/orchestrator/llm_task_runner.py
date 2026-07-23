@@ -201,6 +201,14 @@ def _run_pytest(
         "--tb=short",
         "-p",
         "no:cacheprovider",
+        # Disable the se-harness flaky-test plugin (registered in
+        # tests/conftest.py) so it does not try to write its
+        # JSON report from the subprocess context. The plugin
+        # only matters when running the se-harness suite itself,
+        # not when running the fixture repo's tests as RED/GREEN
+        # evidence.
+        "-p",
+        "no:tests._testing_helpers.flaky_plugin",
         # Clear the inherited addopts from the se-harness pyproject.toml
         # so coverage / flaky-plugin / junit-xml / reruns don't leak
         # into the subprocess invocation. The fixture repo's own
