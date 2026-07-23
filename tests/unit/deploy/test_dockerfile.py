@@ -108,8 +108,9 @@ def test_ci_workflow_exists() -> None:
 
 
 def test_ci_workflow_runs_on_push_to_main_and_prs() -> None:
-    files = list(_workflows().glob("*.yml")) + list(_workflows().glob("*.yaml"))
-    workflow = files[0].read_text()
+    ci_yml = _workflows() / "ci.yml"
+    assert ci_yml.exists(), f"ci.yml not found under {_workflows()}"
+    workflow = ci_yml.read_text()
     assert "pull_request" in workflow
     assert "push" in workflow
 
