@@ -1,0 +1,7 @@
+{
+  "content_text": "{\"discovered_repo_profile_name\": \"repo-profile.json\", \"repository_instructions\": [\"pyproject.toml\"], \"validation_commands\": [\"test\", \"lint\", \"type_check\"], \"description\": \"Add a GET /health endpoint to the FastAPI app that returns 200 with a JSON body of {\\\"status\\\": \\\"ok\\\"}.\"}",
+  "usage_input_tokens": 250,
+  "usage_output_tokens": 180,
+  "request_id": "[redacted-synthetic]",
+  "error": null
+}

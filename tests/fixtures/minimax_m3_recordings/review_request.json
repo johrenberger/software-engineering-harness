@@ -1,0 +1,18 @@
+{
+  "model": "MiniMax-M3",
+  "protocol": "native",
+  "thinking": {"type": "enabled"},
+  "service_tier": "standard",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Independently review the proposed final diff for the following run."
+    },
+    {
+      "role": "user",
+      "content": "Run id: [redacted-synthetic]\nApproved specification: Add /health endpoint to the FastAPI app returning 200 with body {\"status\": \"ok\"}.\nApproved plan: task-001: Add /health endpoint to the FastAPI app returning 200 with body {\"status\": \"ok\"}. Update main.py with a @app.get(\"/health\") route and a def health() handler.\nBase SHA: [redacted-synthetic]\nFinal diff: [redacted-synthetic]\nRED evidence: [redacted-synthetic]\nGREEN evidence: [redacted-synthetic]"
+    }
+  ],
+  "max_tokens": 512,
+  "temperature": 0.0
+}

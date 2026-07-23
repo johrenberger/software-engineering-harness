@@ -1,0 +1,7 @@
+{
+  "content_text": "{\"task_id\": \"task-001\", \"attempted_changes\": [\"WRITE_FILE: main.py\\nfrom fastapi import FastAPI\\n\\napp = FastAPI()\\n\\n\\n@app.get(\\\"/\\\")\\ndef root() -> dict[str, str]:\\n    return {\\\"msg\\\": \\\"fixture-repo\\\"}\\n\\n\\n@app.get(\\\"/items/{item_id}\\\")\\ndef read_item(item_id: int) -> dict[str, object]:\\n    return {\\\"item_id\\\": item_id}\\n\\n\\n@app.get(\\\"/health\\\")\\ndef health() -> dict[str, str]:\\n    return {\\\"status\\\": \\\"ok\\\"}\\n\"]}",
+  "usage_input_tokens": 500,
+  "usage_output_tokens": 320,
+  "request_id": "[redacted-synthetic]",
+  "error": null
+}

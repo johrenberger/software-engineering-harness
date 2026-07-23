@@ -2055,3 +2055,193 @@ class TestM31NativeBodyAssistantAndToolMessages:
         body = json.loads(_serialize_request_body(request, protocol="native"))
         assert "[tool]" in body["prompt"]
         assert "tool output" in body["prompt"]
+
+
+# ---------------------------------------------------------------------------
+# Cluster M3-4: _parse_structured_output helper on MiniMaxAdapter
+# ---------------------------------------------------------------------------
+
+
+class TestParseStructuredOutput:
+    """The M3-4 offline acceptance needs the MiniMax adapter to
+    parse JSON ``content_text`` into ``response.parsed`` so the
+    model-backed services can validate against their Pydantic
+    schemas. The helper is intentionally trivial — it only
+    succeeds when the entire body is a clean JSON top-level value.
+    Mixed prose is not supported; the repair layer handles that.
+    """
+
+    def test_json_object_parses(self) -> None:
+        from seharness.models.minimax import _parse_structured_output
+
+        result = _parse_structured_output('{"status": "approved", "approval": true}')
+        assert result == {"status": "approved", "approval": True}
+
+    def test_json_array_parses(self) -> None:
+        from seharness.models.minimax import _parse_structured_output
+
+        result = _parse_structured_output("[1, 2, 3]")
+        assert result == [1, 2, 3]
+
+    def test_nested_json_parses(self) -> None:
+        from seharness.models.minimax import _parse_structured_output
+
+        body = '{"plan": {"plan_id": "p-1", "tasks": [{"task_id": "t-1"}]}}'
+        result = _parse_structured_output(body)
+        assert isinstance(result, dict)
+        assert "plan" in result
+
+    def test_none_returns_none(self) -> None:
+        from seharness.models.minimax import _parse_structured_output
+
+        assert _parse_structured_output(None) is None
+
+    def test_empty_string_returns_none(self) -> None:
+        from seharness.models.minimax import _parse_structured_output
+
+        assert _parse_structured_output("") is None
+        assert _parse_structured_output("   ") is None
+
+    def test_prose_returns_none(self) -> None:
+        from seharness.models.minimax import _parse_structured_output
+
+        # The first character is not { or [, so we skip the
+        # try/except entirely and return None quickly.
+        assert _parse_structured_output("Here is the plan: {...}") is None
+        assert _parse_structured_output("Sure! Let me start.") is None
+
+    def test_markdown_fenced_json_returns_none(self) -> None:
+        from seharness.models.minimax import _parse_structured_output
+
+        body = '```json\n{"x": 1}\n```'
+        # Leading backticks means the first non-whitespace char is
+        # `` ` ``, not ``{``, so the helper bails out.
+        assert _parse_structured_output(body) is None
+
+    def test_malformed_json_returns_none(self) -> None:
+        from seharness.models.minimax import _parse_structured_output
+
+        # Starts with { but is not valid JSON; the helper swallows
+        # the JSONDecodeError and returns None.
+        assert _parse_structured_output("{not valid") is None
+        assert _parse_structured_output("{") is None
+
+    def test_scalar_json_returns_none(self) -> None:
+        from seharness.models.minimax import _parse_structured_output
+
+        # Bare numbers / strings / booleans / null are valid JSON
+        # but not what the structured-payload caller wants. The
+        # helper only accepts objects and arrays so the caller can
+        # validate them against Pydantic models.
+        assert _parse_structured_output("42") is None
+        assert _parse_structured_output('"hello"') is None
+        assert _parse_structured_output("true") is None
+        assert _parse_structured_output("null") is None
+
+
+class TestParseStructuredOutputFlowsThroughInvoke:
+    """End-to-end: a JSON content_text flows into ``response.parsed``
+    via :meth:`MiniMaxAdapter.invoke`.
+    """
+
+    def test_invoke_sets_parsed_from_json_content(self) -> None:
+        from seharness.models.minimax import MiniMaxAdapter
+        from seharness.models.minimax_transport import (
+            DEFAULT_MODEL,
+            FakeMiniMaxTransport,
+        )
+
+        class _ScriptedTransport(FakeMiniMaxTransport):
+            def complete(self, request):  # type: ignore[override]
+                from seharness.models.minimax_transport import (
+                    MiniMaxTransportResponse,
+                )
+
+                return MiniMaxTransportResponse(
+                    content_text='{"status": "approved", "approval": true}',
+                    usage_input_tokens=10,
+                    usage_output_tokens=5,
+                    request_id="req-1",
+                    error=None,
+                )
+
+        adapter = MiniMaxAdapter(
+            model_identifier=DEFAULT_MODEL,
+            transport=_ScriptedTransport(),
+        )
+        from seharness.domain.enums import RoutingRole
+        from seharness.domain.requests import ModelRequest
+
+        response = adapter.invoke(ModelRequest(role=RoutingRole.REVIEW, prompt="hi", context={}))
+        assert response.error is None
+        assert response.parsed == {"status": "approved", "approval": True}
+        assert response.raw_output == '{"status": "approved", "approval": true}'
+
+    def test_invoke_parsed_none_for_prose(self) -> None:
+        from seharness.models.minimax import MiniMaxAdapter
+        from seharness.models.minimax_transport import (
+            DEFAULT_MODEL,
+            FakeMiniMaxTransport,
+        )
+
+        class _ProseTransport(FakeMiniMaxTransport):
+            def complete(self, request):  # type: ignore[override]
+                from seharness.models.minimax_transport import (
+                    MiniMaxTransportResponse,
+                )
+
+                return MiniMaxTransportResponse(
+                    content_text="Here is the plan: ...",
+                    usage_input_tokens=10,
+                    usage_output_tokens=5,
+                    request_id="req-2",
+                    error=None,
+                )
+
+        adapter = MiniMaxAdapter(
+            model_identifier=DEFAULT_MODEL,
+            transport=_ProseTransport(),
+        )
+        from seharness.domain.enums import RoutingRole
+        from seharness.domain.requests import ModelRequest
+
+        response = adapter.invoke(ModelRequest(role=RoutingRole.PLANNING, prompt="hi", context={}))
+        assert response.error is None
+        assert response.parsed is None
+        assert response.raw_output == "Here is the plan: ..."
+
+    def test_invoke_parsed_preserves_raw_output(self) -> None:
+        """``raw_output`` is the original content_text regardless
+        of whether ``parsed`` succeeded; downstream consumers that
+        want the prose fallback can still read it.
+        """
+        from seharness.models.minimax import MiniMaxAdapter
+        from seharness.models.minimax_transport import (
+            DEFAULT_MODEL,
+            FakeMiniMaxTransport,
+        )
+
+        class _JsonTransport(FakeMiniMaxTransport):
+            def complete(self, request):  # type: ignore[override]
+                from seharness.models.minimax_transport import (
+                    MiniMaxTransportResponse,
+                )
+
+                return MiniMaxTransportResponse(
+                    content_text='{"plan_id": "p-1"}',
+                    usage_input_tokens=10,
+                    usage_output_tokens=5,
+                    request_id="req-3",
+                    error=None,
+                )
+
+        adapter = MiniMaxAdapter(
+            model_identifier=DEFAULT_MODEL,
+            transport=_JsonTransport(),
+        )
+        from seharness.domain.enums import RoutingRole
+        from seharness.domain.requests import ModelRequest
+
+        response = adapter.invoke(ModelRequest(role=RoutingRole.PLANNING, prompt="hi", context={}))
+        assert response.parsed == {"plan_id": "p-1"}
+        assert response.raw_output == '{"plan_id": "p-1"}'

@@ -30,6 +30,7 @@ based readiness so the production profile can no longer be lied to.
 
 from __future__ import annotations
 
+import json
 import os
 import time
 
@@ -74,6 +75,54 @@ _TRANSPORT_ERROR_KIND_MAP: dict[str, ErrorKind] = {
     "oversized_response": "malformed_output",
     "connection_failure": "provider_failure",
 }
+
+
+def _parse_structured_output(
+    content_text: str | None,
+) -> object | None:
+    """Best-effort JSON parse of ``content_text`` for structured payloads.
+
+    Cluster M3-4: the model-backed services parse plan / implementation /
+    review payloads through ``_structured_payload(response, schema)``,
+    which reads ``response.parsed``. The MiniMax transport returns
+    the text body in ``content_text``; this helper bridges the two
+    so a recorded / live response carrying a JSON object flows
+    through to the schema validator.
+
+    Behaviour:
+
+    - ``None`` / empty / whitespace → ``None``.
+    - JSON object ``{...}`` → ``dict``.
+    - JSON array ``[...]`` → ``list``.
+    - Anything else (scalar, JSON with leading prose, parse error) →
+      ``None``. We deliberately swallow ``json.JSONDecodeError`` because
+      the structured-output repair layer is responsible for retrying
+      malformed output; this helper is a no-op when the body is not
+      a clean JSON top-level value.
+
+    The parse is intentionally trivial — no regex, no markdown-strip,
+    no bracket extraction. If the model emits prose around the JSON
+    (e.g. ``"Here is the plan: {...}"``), the parse returns ``None``
+    and the caller sees ``requires_repair=True`` so the repair layer
+    can intervene. The recording fixtures in
+    ``tests/fixtures/minimax_m3_recordings/`` MUST therefore embed
+    clean JSON as the entire ``content_text``; mixed prose is not
+    supported by this helper.
+    """
+    if not content_text:
+        return None
+    stripped = content_text.strip()
+    if not stripped:
+        return None
+    # Only attempt parse when the body looks like JSON to avoid
+    # the cost of a try/except on every prose response.
+    if stripped[0] not in ("{", "["):
+        return None
+    try:
+        result: object = json.loads(stripped)
+    except (ValueError, TypeError):
+        return None
+    return result
 
 
 class MiniMaxAdapter(ModelAdapter):
@@ -357,11 +406,16 @@ class MiniMaxAdapter(ModelAdapter):
             )
 
         # Successful response. The raw_output is the text content;
-        # parsed is left to the structured-output repair layer.
+        # parsed is the result of a best-effort JSON parse of the
+        # content_text so model-backed services that read
+        # ``response.parsed`` can validate against their Pydantic
+        # schemas. When the body is not a clean JSON top-level value
+        # (e.g. prose, markdown-fenced JSON) ``parsed`` is None and
+        # the structured-output repair layer is expected to retry.
         return ModelResponse(
             provider=self.provider,
             model=self._model_identifier,
-            parsed=None,
+            parsed=_parse_structured_output(transport_response.content_text),
             raw_output=transport_response.content_text,
             usage=(
                 ModelUsage(

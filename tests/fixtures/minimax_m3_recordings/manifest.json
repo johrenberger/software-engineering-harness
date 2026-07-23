@@ -1,0 +1,49 @@
+{
+  "schema_version": "1",
+  "model": "MiniMax-M3",
+  "protocol": "native",
+  "endpoint_classification": "native",
+  "thinking_mode": true,
+  "service_tier": "standard",
+  "recording_kind": "synthetic_redacted_placeholder",
+  "redaction_policy": "no sk- prefixes, no Authorization: headers, no JWT-shaped tokens, no hex blobs >= 32 chars; all request_ids and run_ids use the [redacted-synthetic] literal; content_text is synthetic JSON payloads, never live model output",
+  "notes": [
+    "Cluster M3-4: offline vertical acceptance fixture set.",
+    "These recordings are SYNTHETIC. They were NOT captured from a real MiniMax-M3 call. They carry plausible JSON shapes that the model-backed services can validate against _SpecificationSchema, _PlanPayload, _ImplementationPayload, _ReviewPayload.",
+    "M3-5 (live MiniMax-M3 vertical acceptance) replaces this manifest with a sibling at tests/fixtures/minimax_m3_recordings_live/manifest.json with recording_kind='live_recording'. The offline test prefers the live manifest when present.",
+    "Re-run: any modification to a recording file MUST bump this manifest's sha256 entry for that call AND add a migration note explaining the drift."
+  ],
+  "calls": [
+    {
+      "phase": "specification",
+      "request_file": "spec_request.json",
+      "response_file": "spec_response.json",
+      "sha256": "pending"
+    },
+    {
+      "phase": "planning",
+      "request_file": "plan_request.json",
+      "response_file": "plan_response.json",
+      "sha256": "pending"
+    },
+    {
+      "phase": "implementation_test_patch",
+      "request_file": "implementation_test_patch_request.json",
+      "response_file": "implementation_test_patch_response.json",
+      "sha256": "pending"
+    },
+    {
+      "phase": "implementation_production_patch",
+      "request_file": "implementation_production_patch_request.json",
+      "response_file": "implementation_production_patch_response.json",
+      "sha256": "pending"
+    },
+    {
+      "phase": "review",
+      "request_file": "review_request.json",
+      "response_file": "review_response.json",
+      "sha256": "pending"
+    }
+  ],
+  "swapped_by": "M3-5 (live MiniMax-M3 vertical acceptance)"
+}

@@ -32,6 +32,7 @@ import os
 import signal as _signal
 import subprocess  # nosec B404 — gated by use_real_subprocess, validated below
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -78,11 +79,16 @@ class StubRunner:
         green_dir: Path,
         task_id: str,
         cancel: CancellationToken | None = None,
+        pending_changes: Sequence[str] | None = None,
     ) -> CommandResult:
         # ``StubRunner`` is synchronous and instant; cancellation is a
         # no-op. The parameter is accepted (and ignored) so callers
         # (the orchestrator) can pass the same cancel token to every
         # runner method without branching on the concrete runner type.
+        # ``pending_changes`` is accepted for parity with
+        # :class:`LLMDrivenTaskRunner`; the deterministic stub does
+        # not apply model-produced patches.
+        _ = pending_changes
         for d in (red_dir, green_dir):
             d.mkdir(parents=True, exist_ok=True)
             (d / "command.txt").write_text(f"pytest tests/unit/{task_id}.py --no-cov -q\n")
@@ -173,12 +179,20 @@ class LocalCommandRunner:
         green_dir: Path,
         task_id: str,
         cancel: CancellationToken | None = None,
+        pending_changes: Sequence[str] | None = None,
     ) -> CommandResult:
         # LocalCommandRunner.run_task is intentionally a thin shim
         # around the validation runner — the slice-7 TaskExecutionService
         # passes its own Runner callable that writes evidence; we
         # delegate here only for callers that want a single entry point.
-        return StubRunner().run_task(red_dir=red_dir, green_dir=green_dir, task_id=task_id)
+        # ``pending_changes`` is forwarded to the underlying stub so
+        # the signature matches :class:`LLMDrivenTaskRunner`'s.
+        return StubRunner().run_task(
+            red_dir=red_dir,
+            green_dir=green_dir,
+            task_id=task_id,
+            pending_changes=pending_changes,
+        )
 
     def run_validation(
         self,

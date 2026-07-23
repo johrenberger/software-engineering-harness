@@ -392,3 +392,220 @@ class TestBuilderDeterministicServiceRejection:
                         pass
 
                     assert _looks_like_deterministic_service(DeterministicPlanningService()) is True
+
+
+# ---------------------------------------------------------------------------
+# Cluster M3-4: build_minimax_m3_offline_composition()
+# ---------------------------------------------------------------------------
+
+
+from seharness.models.minimax_m3_composition import (  # noqa: E402
+    build_minimax_m3_offline_composition,
+)
+from seharness.models.minimax_transport import (  # noqa: E402
+    MiniMaxTransportResponse,
+    RecordingMiniMaxTransport,
+)
+
+
+def _make_offline_config(
+    *,
+    tmp_path: Path,
+    runtime_profile: RuntimeProfile = RuntimeProfile.TEST,
+    api_key: str | None = "sk-test-key-with-enough-length-to-pass",
+    model: str = "MiniMax-M3",
+    sandbox_config: SandboxConfig | None = None,
+) -> MiniMaxM3CompositionConfig:
+    """Offline-config helper: TEST profile by default."""
+    final_sandbox = sandbox_config or _make_sandbox_config(tmp_path)
+    return MiniMaxM3CompositionConfig(
+        api_key=api_key,
+        model=model,
+        runtime_profile=runtime_profile,
+        sandbox_config=final_sandbox,
+        provider_evidence_dir=tmp_path / "evidence",
+    )
+
+
+def _make_synthetic_responses() -> tuple[MiniMaxTransportResponse, ...]:
+    return (
+        MiniMaxTransportResponse(
+            content_text=(
+                '{"discovered_repo_profile_name": "repo-profile.json", '
+                '"repository_instructions": ["pyproject.toml"], '
+                '"validation_commands": ["test", "lint", "type_check"], '
+                '"description": "Add /health endpoint."}'
+            ),
+            usage_input_tokens=10,
+            usage_output_tokens=10,
+            request_id="offline-rec-1",
+            error=None,
+        ),
+        MiniMaxTransportResponse(
+            content_text=(
+                '{"plan_id": "plan-1", "tasks": [{"task_id": "t1", '
+                '"task_objective": "Add /health", "allowed_paths": '
+                '["main.py"], "order_index": 0}]}'
+            ),
+            usage_input_tokens=10,
+            usage_output_tokens=10,
+            request_id="offline-rec-2",
+            error=None,
+        ),
+    )
+
+
+class TestOfflineCompositionBasic:
+    """Happy-path: the offline factory returns a wired composition
+    with two distinct routers and a non-None evidence writer.
+    """
+
+    def test_offline_returns_full_result(self, tmp_path: Path) -> None:
+        config = _make_offline_config(tmp_path=tmp_path)
+        responses = _make_synthetic_responses()
+        transport = RecordingMiniMaxTransport(responses=responses)
+        result = build_minimax_m3_offline_composition(
+            config=config,
+            recording_transport=transport,
+            recording_responses=responses,
+        )
+        assert result.composition is not None
+        assert result.author_router is not None
+        assert result.review_router is not None
+        assert result.evidence_writer is not None
+        assert result.sandbox_config is not None
+
+    def test_author_and_review_routers_distinct(self, tmp_path: Path) -> None:
+        config = _make_offline_config(tmp_path=tmp_path)
+        responses = _make_synthetic_responses()
+        transport = RecordingMiniMaxTransport(responses=responses)
+        result = build_minimax_m3_offline_composition(
+            config=config,
+            recording_transport=transport,
+            recording_responses=responses,
+        )
+        assert result.author_router is not result.review_router
+
+    def test_evidence_writer_uses_configured_dir(self, tmp_path: Path) -> None:
+        evidence_dir = tmp_path / "evidence"
+        config = MiniMaxM3CompositionConfig(
+            api_key="sk-test-key-with-enough-length-to-pass",
+            model="MiniMax-M3",
+            runtime_profile=RuntimeProfile.TEST,
+            sandbox_config=_make_sandbox_config(tmp_path),
+            provider_evidence_dir=evidence_dir,
+        )
+        responses = _make_synthetic_responses()
+        transport = RecordingMiniMaxTransport(responses=responses)
+        result = build_minimax_m3_offline_composition(
+            config=config,
+            recording_transport=transport,
+            recording_responses=responses,
+        )
+        assert result.evidence_writer.evidence_dir == evidence_dir
+
+
+class TestOfflineCompositionRefusals:
+    """The offline factory refuses non-TEST profiles and missing
+    config the production builder also refuses (model, sandbox,
+    evidence dir, responses).
+    """
+
+    def test_production_profile_refused(self, tmp_path: Path) -> None:
+        config = _make_offline_config(tmp_path=tmp_path, runtime_profile=RuntimeProfile.PRODUCTION)
+        responses = _make_synthetic_responses()
+        transport = RecordingMiniMaxTransport(responses=responses)
+        with pytest.raises(ConfigurationError, match="runtime_profile must be TEST"):
+            build_minimax_m3_offline_composition(
+                config=config,
+                recording_transport=transport,
+                recording_responses=responses,
+            )
+
+    def test_development_profile_refused(self, tmp_path: Path) -> None:
+        config = _make_offline_config(tmp_path=tmp_path, runtime_profile=RuntimeProfile.DEVELOPMENT)
+        responses = _make_synthetic_responses()
+        transport = RecordingMiniMaxTransport(responses=responses)
+        with pytest.raises(ConfigurationError, match="runtime_profile must be TEST"):
+            build_minimax_m3_offline_composition(
+                config=config,
+                recording_transport=transport,
+                recording_responses=responses,
+            )
+
+    def test_non_m3_model_refused(self, tmp_path: Path) -> None:
+        config = _make_offline_config(tmp_path=tmp_path, model="MiniMax-M2.7")
+        responses = _make_synthetic_responses()
+        transport = RecordingMiniMaxTransport(responses=responses)
+        with pytest.raises(ConfigurationError, match="model must be"):
+            build_minimax_m3_offline_composition(
+                config=config,
+                recording_transport=transport,
+                recording_responses=responses,
+            )
+
+    def test_missing_sandbox_refused(self, tmp_path: Path) -> None:
+        config = _make_offline_config(tmp_path=tmp_path, sandbox_config=None)
+        # Bypass the helper's default by reconstructing manually.
+        config = MiniMaxM3CompositionConfig(
+            api_key="sk-test-key-with-enough-length-to-pass",
+            model="MiniMax-M3",
+            runtime_profile=RuntimeProfile.TEST,
+            sandbox_config=None,  # type: ignore[arg-type]
+            provider_evidence_dir=tmp_path / "evidence",
+        )
+        responses = _make_synthetic_responses()
+        transport = RecordingMiniMaxTransport(responses=responses)
+        with pytest.raises(ConfigurationError, match="sandbox_config is required"):
+            build_minimax_m3_offline_composition(
+                config=config,
+                recording_transport=transport,
+                recording_responses=responses,
+            )
+
+    def test_missing_evidence_dir_refused(self, tmp_path: Path) -> None:
+        config = MiniMaxM3CompositionConfig(
+            api_key="sk-test-key-with-enough-length-to-pass",
+            model="MiniMax-M3",
+            runtime_profile=RuntimeProfile.TEST,
+            sandbox_config=_make_sandbox_config(tmp_path),
+            provider_evidence_dir=None,  # type: ignore[arg-type]
+        )
+        responses = _make_synthetic_responses()
+        transport = RecordingMiniMaxTransport(responses=responses)
+        with pytest.raises(ConfigurationError, match="provider_evidence_dir is required"):
+            build_minimax_m3_offline_composition(
+                config=config,
+                recording_transport=transport,
+                recording_responses=responses,
+            )
+
+    def test_empty_responses_refused(self, tmp_path: Path) -> None:
+        config = _make_offline_config(tmp_path=tmp_path)
+        transport = RecordingMiniMaxTransport(responses=())
+        with pytest.raises(ConfigurationError, match="non-empty tuple"):
+            build_minimax_m3_offline_composition(
+                config=config,
+                recording_transport=transport,
+                recording_responses=(),
+            )
+
+    def test_api_key_not_required_for_offline_test(self, tmp_path: Path) -> None:
+        """Offline TEST mode does NOT require an api_key; that's a
+        PRODUCTION-only invariant.
+        """
+        config = MiniMaxM3CompositionConfig(
+            api_key=None,  # offline test doesn't need one
+            model="MiniMax-M3",
+            runtime_profile=RuntimeProfile.TEST,
+            sandbox_config=_make_sandbox_config(tmp_path),
+            provider_evidence_dir=tmp_path / "evidence",
+        )
+        responses = _make_synthetic_responses()
+        transport = RecordingMiniMaxTransport(responses=responses)
+        result = build_minimax_m3_offline_composition(
+            config=config,
+            recording_transport=transport,
+            recording_responses=responses,
+        )
+        assert result.composition is not None
