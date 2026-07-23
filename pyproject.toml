@@ -44,6 +44,13 @@ dev = [
     "types-aiofiles",
     "docker>=7.0,<8",
     "diff-cover>=10.0,<11",
+    # Cluster M3-4: the offline vertical acceptance test spawns a
+    # subprocess pytest against a fixture FastAPI repo; the subprocess
+    # Python must therefore have fastapi + httpx importable so the
+    # fixture repo's test_health.py can do `from fastapi.testclient import
+    # TestClient`. Declared here so requirements-ci.txt (regenerated
+    # via `uv export --extra dev`) picks it up for the CI runner.
+    "fastapi>=0.115,<0.140",
 ]
 
 [project.scripts]
