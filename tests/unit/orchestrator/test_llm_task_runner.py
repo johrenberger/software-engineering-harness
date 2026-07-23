@@ -258,6 +258,22 @@ class TestLLMDrivenTaskRunnerEndToEnd:
 
         # GREEN passed because /health is now defined.
         green_json = json.loads((green_dir / "result.json").read_text())
+        if green_json["exit_code"] != 0:
+            stderr_text = (
+                (green_dir / "stderr.txt").read_text()
+                if (green_dir / "stderr.txt").exists()
+                else "<no stderr.txt>"
+            )
+            stdout_text = (
+                (green_dir / "stdout.txt").read_text()
+                if (green_dir / "stdout.txt").exists()
+                else "<no stdout.txt>"
+            )
+            pytest.fail(
+                f"GREEN exit_code={green_json['exit_code']} (expected 0)\n"
+                f"--- pytest stdout ---\n{stdout_text}\n"
+                f"--- pytest stderr ---\n{stderr_text}"
+            )
         assert green_json["exit_code"] == 0
 
         # The runner's return value reflects GREEN.
@@ -342,6 +358,22 @@ class TestLLMDrivenTaskRunnerEndToEnd:
             pending_changes=[patch],
         )
         green_json = json.loads((green_dir / "result.json").read_text())
+        if green_json["exit_code"] != 0:
+            stderr_text = (
+                (green_dir / "stderr.txt").read_text()
+                if (green_dir / "stderr.txt").exists()
+                else "<no stderr.txt>"
+            )
+            stdout_text = (
+                (green_dir / "stdout.txt").read_text()
+                if (green_dir / "stdout.txt").exists()
+                else "<no stdout.txt>"
+            )
+            pytest.fail(
+                f"GREEN exit_code={green_json['exit_code']} (expected 0)\n"
+                f"--- pytest stdout ---\n{stdout_text}\n"
+                f"--- pytest stderr ---\n{stderr_text}"
+            )
         # covered_tests is a list of test ids; pytest reports at
         # least the one targeted test.
         covered = green_json["covered_tests"]

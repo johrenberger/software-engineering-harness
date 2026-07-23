@@ -330,9 +330,17 @@ class TestOfflineVerticalAcceptance:
         green_dir = red_dir.parent / "green"
         assert green_dir.exists(), f"GREEN evidence directory missing: {green_dir!s}"
         green_result = json.loads((green_dir / "result.json").read_text())
-        assert green_result["exit_code"] == 0, (
-            f"GREEN must pass after the patch is applied; got exit_code={green_result['exit_code']}"
-        )
+        if green_result["exit_code"] != 0:
+            stdout_path = green_dir / "stdout.txt"
+            stderr_path = green_dir / "stderr.txt"
+            stdout_text = stdout_path.read_text() if stdout_path.exists() else "<no stdout.txt>"
+            stderr_text = stderr_path.read_text() if stderr_path.exists() else "<no stderr.txt>"
+            assert green_result["exit_code"] == 0, (
+                f"GREEN must pass after the patch is applied; "
+                f"got exit_code={green_result['exit_code']}\n"
+                f"--- pytest stdout ---\n{stdout_text}\n"
+                f"--- pytest stderr ---\n{stderr_text}"
+            )
 
         # ---- Assertion 10: full validation passes ----
         assert ctx.validation_exit_code == 0, (
