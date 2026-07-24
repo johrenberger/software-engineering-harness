@@ -17,7 +17,7 @@ selects, configures, and authenticates against model providers.
 | **Provider credentials** | none required today — adapters fail closed | ✅ correct (no creds to leak) |
 | **`config/providers.toml` file** | not used; only `harness.yaml` is consulted | ⚠️ not yet |
 | **Env-var credential loading** (`SEHARNESS_PROVIDER_*_API_KEY`) | not wired | ⚠️ not yet |
-| **Live MiniMax HTTP client** | **DONE** (cluster N) — `HttpMiniMaxTransport` against `https://api.minimax.io/v1` (default OpenAI-compatible) + `MODELS_ENDPOINT` for `validate_model_against_account(...)`; bearer token read from env at call time; `__repr__` excludes endpoint; test-only `RecordingMiniMaxTransport` for offline replay | `src/seharness/models/minimax_transport.py` |
+| **Live MiniMax HTTP client** | **DONE** (clusters M3-1..M3-4) — `HttpMiniMaxTransport` against `https://api.minimax.io/v1` (default OpenAI-compatible) + `MODELS_ENDPOINT` for `validate_model_against_account(...)`; bearer token read from env at call time; `__repr__` excludes endpoint; test-only `RecordingMiniMaxTransport` for offline replay; **production model is `MiniMax-M3`** with no silent fallback to M2.7 (see `docs/vertical-acceptance.md`) | `src/seharness/models/minimax_transport.py`, `src/seharness/models/minimax_m3_composition.py` |
 | **Live Codex subprocess transport** | boundary class registered, `invoke()` fails closed | ⚠️ not yet |
 | **`delivery` routing slot** | default is `minimax` (per `router.py`); not in the example YAML above | ⚠️ partial |
 
@@ -31,12 +31,22 @@ identifiers are recognized today:
 | `minimax` | `LIVE` (HTTP) | Default planning + review (per SPEC §10). |
 | `codex` | `LOCAL` (subprocess) | Default implementation + remediation. |
 
-`MiniMaxAdapter` (`src/seharness/models/minimax.py`) is now backed by
+`MiniMaxAdapter` (`src/seharness/models/minimax.py`) is backed by
 the real `HttpMiniMaxTransport` (`src/seharness/models/minimax_transport.py`).
 The transport protocol is runtime-checkable; `FakeMiniMaxTransport`
-plus `RecordingMiniMaxTransport` round out the cluster N fixture
-suite. Bearer tokens are read from env at call time, never stored
-as fields; `__repr__` excludes endpoint URLs.
+plus `RecordingMiniMaxTransport` round out the fixture suite.
+Bearer tokens are read from env at call time, never stored as
+fields; `__repr__` excludes endpoint URLs.
+
+**Production model selection:** the configured production model is
+`MiniMax-M3` (PR #83 / commit `fe14120`). There is **no silent
+fallback** to M2.7 or any other model; the canonical
+`build_minimax_m3_local_composition(...)` factory
+(`src/seharness/models/minimax_m3_composition.py`) rejects any
+configured model other than `MiniMax-M3`. M2.7 remains available as
+a transport-compatibility option for catalog/contract tests and
+historical evidence (`docs/vertical-acceptance-cluster-n.md`), but
+is not a production target.
 
 `CodexAdapter` (`src/seharness/models/codex.py`) still fails closed
 in `invoke()`; the cluster-N work did not modify it.
@@ -174,10 +184,16 @@ fallback logic or the structured-output repair without breaking CI.
 ## See also
 
 - `docs/architecture-overview.md` — model-layer architecture.
+- `docs/vertical-acceptance.md` — current M3 vertical-acceptance
+  index.
+- `docs/m3-capability-matrix.md` — component-vs-integrated
+  capability matrix.
 - `docs/user/configure.md` — env-var configuration for the rest of
   the harness (Telegram, GitHub, dashboard).
 - `src/seharness/config.py` — full `HarnessConfig` schema.
 - `src/seharness/models/router.py` — `ModelRouter` implementation.
 - `src/seharness/models/base.py` — `ModelAdapter` contract.
+- `src/seharness/models/minimax_m3_composition.py` — canonical M3
+  production-local composition.
 - README's "What's partial" table — the user-facing honesty
   statement.

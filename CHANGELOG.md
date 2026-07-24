@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI `seharness run` now invokes the orchestrator (was: "not implemented").
 - `docs/architecture.md` describing the orchestrator topology.
 
+### Added — Cluster M3-6 (documentation and promotion)
+
+- **M3-6 docs.** `docs/vertical-acceptance.md` is now the
+  current MiniMax-M3 vertical-acceptance index. The cluster N
+  M2.7-era doc is renamed to
+  `docs/vertical-acceptance-cluster-n.md` and demoted to
+  historical transport evidence with a banner pointing to
+  the M3 index. New `docs/m3-capability-matrix.md`
+  distinguishes "component unit-tested" from "integrated
+  vertical proved" per phase.
+- **Provider/architecture overview updated.** `docs/providers.md`
+  and `docs/architecture-overview.md` now point at the M3
+  production path and explicitly state that there is no
+  silent fallback to M2.7.
+- **Smoke test docstring refreshed.**
+  `tests/e2e/test_minimax_live_smoke.py` docstring
+  reframes the test under the M3 corrective refinement
+  while preserving the skip-gate / fail-gate behavior.
+- **Vertical-acceptance doc test docstring refreshed.**
+  `tests/unit/docs/test_vertical_acceptance.py` docstring
+  notes that the structural assertions still hold against
+  the new M3 index doc.
+- **Scope check.** `plans/m3-6-scope-check.md` records the
+  M3-6 decisions (rename historical doc, separate
+  capability-matrix file, in-scope doc-test update, open
+  against `main` at `41bd49b`).
+
 ### Changed
 - `VerticalSlicePipeline` is now a thin adapter over `Orchestrator.start_run`
   instead of a phase-name loop. PipelineEvent/PipelineResult shapes

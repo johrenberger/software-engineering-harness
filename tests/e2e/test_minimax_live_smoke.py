@@ -1,7 +1,12 @@
-"""Cluster N — MiniMax live smoke test.
+"""MiniMax live smoke test (cluster M3 framing).
 
-This is the WP11 PR2 / "live-smoke" entry point. Per the
-targeted refinement workplan:
+This is the live-transport evidence entry point for the
+MiniMax-M3 production path. See
+``docs/vertical-acceptance.md`` for the current vertical
+acceptance index and ``docs/m3-capability-matrix.md`` for
+the component-vs-integrated capability breakdown.
+
+Behavior contract:
 
 - **Skip gate**: ``pytest.skip`` when ``RUN_MINIMAX_LIVE_TEST`` or
   ``MINIMAX_API_KEY`` is absent. The harness MUST NOT make a live
@@ -14,10 +19,14 @@ targeted refinement workplan:
   returned by the API, the request id, the current commit SHA,
   and the redacted assistant message are written to
   ``tests/e2e/_artifacts/minimax_live_smoke.json`` so a
-  credentialed operator can attach the evidence to PR #77
-  (vertical-acceptance).
-- **Draft-only**: per the workplan, PR #77 must REMAIN DRAFT
-  until the live acceptance test passes. This test is the gate.
+  credentialed operator can attach the evidence to the M3
+  vertical-acceptance index.
+- **Production model**: the corrective doc
+  (``plans/minimax-m3-corrective-processing-instructions.md``)
+  pins the production model to ``MiniMax-M3``. M2.7
+  remains valid for backwards-compatibility catalog probes
+  when the operator explicitly sets ``MINIMAX_MODEL``;
+  it is not a production target.
 
 The test is offline-safe by default (the skip gate fires
 without any network). CI is expected to run this only with
@@ -199,8 +208,10 @@ class TestMiniMaxLiveSmoke:
             pytest.fail(
                 "MINIMAX_MODEL is not set. The live smoke test "
                 "requires the operator to pick a model deliberately; "
-                "the harness MUST NOT default to MiniMax-M3 because "
-                "the live account may not expose it."
+                "the harness default is MiniMax-M3 (see "
+                "src/seharness/models/minimax_m3_composition.py), "
+                "but the smoke test will not auto-default because "
+                "the live account may not expose M3 yet."
             )
 
         adapter = MiniMaxAdapter(model_identifier=configured_model)
