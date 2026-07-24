@@ -1,8 +1,8 @@
-"""Cluster N PR8 \u2014 vertical-acceptance DRAFT evidence tests.
+"""Vertical-acceptance documentation tests (M3 framing).
 
-Pins that the vertical-acceptance documentation exists, references
-genuine live evidence captured against the credentialed endpoint,
-and stays DRAFT until a credentialed operator reviews.
+Pins that :file:`docs/vertical-acceptance.md` exists and carries
+the structural shape required by the M3 corrective refinement
+(``plans/minimax-m3-corrective-processing-instructions.md``).
 
 The tests verify:
 
@@ -12,11 +12,26 @@ The tests verify:
 - It references the live artifact path
   (``tests/e2e/_artifacts/minimax_live_smoke.json``) and the
   reproduction recipe.
-- It explicitly states "DRAFT" status.
+- It mentions ``DRAFT`` at least twice so that the M2.7
+  historical-transport-evidence callout and the stop-gate
+  reminder remain prominent in the doc.
 
 These tests are OFFLINE (no live calls required). The live
 artifact itself is git-ignored and not asserted on disk; the
 doc references it.
+
+History: this test was originally added in cluster N PR8
+(``fe14120`` era) to pin the cluster-N DRAFT vertical-acceptance
+doc. After the M3 corrective refinement, the doc at
+``docs/vertical-acceptance.md`` is now the M3 acceptance index;
+the cluster-N DRAFT doc has been renamed to
+``docs/vertical-acceptance-cluster-n.md`` and is preserved as
+historical transport evidence only. The structural assertions
+still hold because the M3 index preserves the 9-stage shape,
+the four module pins, the live artifact path, the reproduction
+recipe, and the ``DRAFT`` mentions (which now point at the M2.7
+historical callout and the stop-gate reminder rather than at a
+draft PR).
 """
 
 from __future__ import annotations
@@ -81,7 +96,9 @@ class TestVerticalAcceptanceDocContent:
 
     def test_doc_declares_draft_status(self, doc_text: str) -> None:
         assert "DRAFT" in doc_text
-        # Multiple DRAFT mentions expected for prominence.
+        # At least two DRAFT mentions expected so that the M2.7
+        # historical-transport-evidence callout and the stop-gate
+        # reminder both remain prominent in the M3 acceptance index.
         assert doc_text.upper().count("DRAFT") >= 2
 
 
