@@ -347,6 +347,7 @@ class ImplementationService(Protocol):
         ctx: RunContext,
         plan: Plan,
         task_id: str,
+        patch_kind: Literal["test_patch", "production_patch"] = "production_patch",
     ) -> ImplementationOutcome: ...
 
     last_evidence: ServiceEvidence | None = None
@@ -785,7 +786,9 @@ class DeterministicImplementationService:
         ctx: RunContext,
         plan: Plan,
         task_id: str,
+        patch_kind: Literal["test_patch", "production_patch"] = "production_patch",
     ) -> ImplementationOutcome:
+        _ = patch_kind
         return ImplementationOutcome(
             attempted=False,
             attempt_index=0,
@@ -1081,10 +1084,18 @@ class ModelBackedImplementationService:
         ctx: RunContext,
         plan: Plan,
         task_id: str,
+        patch_kind: Literal["test_patch", "production_patch"] = "production_patch",
     ) -> ImplementationOutcome:
         task = _find_task(plan, task_id)
+        patch_instruction = (
+            "Generate a unified diff that touches test paths only."
+            if patch_kind == "test_patch"
+            else "Generate a unified diff that touches production source paths only."
+        )
         prompt = (
             "Implement the following task with bounded changes.\n\n"
+            f"Patch kind: {patch_kind}\n"
+            f"Patch constraint: {patch_instruction}\n"
             f"Plan id: {plan.plan_id}\n"
             f"Task id: {task.task_id}\n"
             f"Objective: {task.objective}\n"
@@ -1098,6 +1109,7 @@ class ModelBackedImplementationService:
                 "template_version": self._template_version,
                 "task_id": task.task_id,
                 "allowed_paths": list(task.allowed_paths),
+                "patch_kind": patch_kind,
             },
             max_tokens=self._budget.max_tokens,
         )
