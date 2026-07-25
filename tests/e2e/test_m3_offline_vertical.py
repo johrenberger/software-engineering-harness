@@ -86,20 +86,20 @@ def _collect_responses_from_manifest() -> tuple[MiniMaxTransportResponse, ...]:
 
       1. specification       (author)
       2. planning            (author)
-      3. implementation      (author) — production_patch carries the
-                                     WRITE_FILE: main.py directive
-                                     the LLMDrivenTaskRunner applies
-                                     between RED and GREEN.
-      4. remediation         (author) — test_patch response is
-                                     consumed but unused; remediation
-                                     never applies patches to disk.
-      5. review              (review)
+      3. implementation test patch (author) — controlled unified diff
+                                     applied before RED.
+      4. implementation production patch (author) — controlled unified
+                                     diff applied between RED and GREEN.
+      5. remediation placeholder (author) — keeps the unconditional
+                                     remediation phase isolated.
+      6. review              (review)
     """
     ordered_phases = [
         "specification",
         "planning",
-        "implementation_production_patch",
         "implementation_test_patch",
+        "implementation_production_patch",
+        "remediation_placeholder",
         "review",
     ]
     responses: list[MiniMaxTransportResponse] = []
