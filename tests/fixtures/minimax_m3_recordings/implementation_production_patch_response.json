@@ -1,5 +1,5 @@
 {
-  "content_text": "{\"task_id\": \"task-001\", \"attempted_changes\": [\"WRITE_FILE: main.py\\nfrom fastapi import FastAPI\\n\\napp = FastAPI()\\n\\n\\n@app.get(\\\"/\\\")\\ndef root() -> dict[str, str]:\\n    return {\\\"msg\\\": \\\"fixture-repo\\\"}\\n\\n\\n@app.get(\\\"/items/{item_id}\\\")\\ndef read_item(item_id: int) -> dict[str, object]:\\n    return {\\\"item_id\\\": item_id}\\n\\n\\n@app.get(\\\"/health\\\")\\ndef health() -> dict[str, str]:\\n    return {\\\"status\\\": \\\"ok\\\"}\\n\"]}",
+  "content_text": "{\"task_id\":\"task-001\",\"attempted_changes\":[\"{\\\"diff_text\\\":\\\"diff --git a/main.py b/main.py\\\\n--- a/main.py\\\\n+++ b/main.py\\\\n@@ -24,3 +24,8 @@ app = FastAPI()\\\\n @app.get(\\\\\\\"/items/{item_id}\\\\\\\")\\\\n def read_item(item_id: int) -> dict[str, object]:\\\\n     return {\\\\\\\"item_id\\\\\\\": item_id}\\\\n+\\\\n+\\\\n+@app.get(\\\\\\\"/health\\\\\\\")\\\\n+def health() -> dict[str, str]:\\\\n+    return {\\\\\\\"status\\\\\\\": \\\\\\\"ok\\\\\\\"}\\\\n\\\",\\\"task_id\\\":\\\"task-001\\\",\\\"kind\\\":\\\"production_patch\\\",\\\"target_paths\\\":[\\\"main.py\\\"]}\"]}",
   "usage_input_tokens": 500,
   "usage_output_tokens": 320,
   "request_id": "[redacted-synthetic]",
