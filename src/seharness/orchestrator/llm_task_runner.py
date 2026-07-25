@@ -56,6 +56,12 @@ from pathlib import Path
 from typing import Any
 
 from seharness.execution.evidence import FailureKind
+from seharness.orchestrator.controlled_patches import (
+    PatchPolicyChecker,
+    PatchValidator,
+    SandboxPatchApplier,
+    parse_unified_diff,
+)
 from seharness.orchestrator.runner import CommandResult
 from seharness.sandbox.cancellation import CancellationToken
 
@@ -168,6 +174,51 @@ def apply_write_directives(
         written.append(target)
     return tuple(written)
 
+
+
+def apply_controlled_patch_changes(
+    raw: Sequence[str],
+    *,
+    repo_root: Path,
+    allowed_paths: Sequence[str],
+    expected_kind: str,
+) -> tuple[Path, ...]:
+    """Validate and apply model-produced unified-diff envelopes.
+
+    Each attempted change is a JSON UnifiedDiffSchema. Schema, declared
+    target purity, operator policy, and test/production path separation
+    are checked before git apply mutates the fixture checkout.
+    """
+    applied: list[Path] = []
+    for index, raw_entry in enumerate(raw):
+        try:
+            payload = json.loads(raw_entry)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"attempted_changes[{index}] is not a JSON unified-diff envelope"
+            ) from exc
+        patch = parse_unified_diff(payload)
+        if patch.kind != expected_kind:
+            raise ValueError(
+                f"attempted_changes[{index}] has kind {patch.kind!r}; "
+                f"expected {expected_kind!r}"
+            )
+        parsed = PatchValidator.parse(patch.diff_text)
+        PatchValidator.validate_purity(parsed, patch.target_paths)
+        PatchPolicyChecker.check_paths_within_policy(
+            parsed, policy_allowed_paths=allowed_paths
+        )
+        test_paths = tuple(
+            path for path in parsed.touched_paths
+            if path == "test" or path.startswith(("test/", "tests/"))
+        )
+        if expected_kind == "test_patch" and len(test_paths) != len(parsed.touched_paths):
+            raise ValueError("test_patch may touch test paths only")
+        if expected_kind == "production_patch" and test_paths:
+            raise ValueError("production_patch may not touch test paths")
+        result = SandboxPatchApplier(sandbox_dir=repo_root).apply(parsed)
+        applied.extend(repo_root / path for path in result.applied_paths)
+    return tuple(applied)
 
 def _run_pytest(
     *,
@@ -289,6 +340,7 @@ class LLMDrivenTaskRunner:
         green_dir: Path,
         task_id: str,
         cancel: CancellationToken | None = None,
+        pending_test_changes: Sequence[str] | None = None,
         pending_changes: Sequence[str] | None = None,
     ) -> CommandResult:
         """Run RED → apply patch → run GREEN, then write evidence.
@@ -321,7 +373,14 @@ class LLMDrivenTaskRunner:
             except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
                 base_sha = ""
 
-        # 2. RED — run pytest BEFORE any patch.
+        # 2. Apply the model-generated test patch, then run RED.
+        if pending_test_changes:
+            apply_controlled_patch_changes(
+                pending_test_changes,
+                repo_root=self._repo_root,
+                allowed_paths=self._allowed_paths,
+                expected_kind="test_patch",
+            )
         red_result = _run_pytest(
             cwd=self._repo_root,
             target=self._pytest_target,
@@ -351,14 +410,14 @@ class LLMDrivenTaskRunner:
             json.dumps(red_payload, indent=2, sort_keys=True) + "\n"
         )
 
-        # 3. Apply the patch (if any).
+        # 3. Apply the distinct production patch after RED.
         if pending_changes:
-            directives = parse_write_directives(
+            apply_controlled_patch_changes(
                 pending_changes,
                 repo_root=self._repo_root,
                 allowed_paths=self._allowed_paths,
+                expected_kind="production_patch",
             )
-            apply_write_directives(directives, repo_root=self._repo_root)
 
         # 4. GREEN — run pytest AFTER the patch.
         green_result = _run_pytest(
@@ -483,6 +542,7 @@ def _extract_passed_tests(stdout: str) -> tuple[str, ...]:
 __all__ = [
     "WRITE_FILE_HEADER",
     "LLMDrivenTaskRunner",
+    "apply_controlled_patch_changes",
     "apply_write_directives",
     "parse_write_directives",
 ]
