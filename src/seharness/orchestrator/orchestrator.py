@@ -1354,6 +1354,21 @@ def _phase_specification(
     )
 
 
+def _load_persisted_plan(*, ctx: RunContext, run_dir: Path) -> Plan:
+    """Return the exact plan accepted during the planning phase.
+
+    Model-backed planning persists a validated rich Plan to plan.json.
+    Rebuilding it in later phases discards model task ids, objectives,
+    and path policy, so persisted state is the canonical hand-off.
+    Legacy/resume paths without the artifact keep the deterministic
+    fallback.
+    """
+    plan_path = run_dir / "plan.json"
+    if plan_path.is_file():
+        return Plan.model_validate_json(plan_path.read_text())
+    return _PlanBuilder.build(ctx=ctx)
+
+
 def _phase_planning(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
@@ -1385,7 +1400,7 @@ def _phase_planning(
 def _phase_implementation(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
-    plan = _PlanBuilder.build(ctx=ctx)
+    plan = _load_persisted_plan(ctx=ctx, run_dir=run_dir)
     task = plan.tasks[0]
     # Use the slice-7 TaskExecutionService for the heavy lifting. The
     # service's TaskEvidenceLayout appends ``execution/<task_id>`` to
@@ -1407,18 +1422,33 @@ def _phase_implementation(
     # between RED and GREEN. The default deterministic composition
     # raises on ``execute`` because there's no router, so we
     # only invoke the service when the composition is model-backed.
+    pending_test_changes: tuple[str, ...] = ()
     pending_changes: tuple[str, ...] = ()
     from seharness.orchestrator.services import (  # noqa: PLC0415
         ModelBackedImplementationService,
     )
 
     if isinstance(orch._services.implementation, ModelBackedImplementationService):
-        impl_request_ctx = ctx
-        impl_outcome = orch._services.implementation.execute(
-            ctx=impl_request_ctx, plan=plan, task_id=task.task_id
+        test_outcome = orch._services.implementation.execute(
+            ctx=ctx,
+            plan=plan,
+            task_id=task.task_id,
+            patch_kind="test_patch",
         )
-        if impl_outcome.structured is not None:
-            pending_changes = tuple(getattr(impl_outcome.structured, "attempted_changes", ()) or ())
+        if test_outcome.structured is not None:
+            pending_test_changes = tuple(
+                getattr(test_outcome.structured, "attempted_changes", ()) or ()
+            )
+        production_outcome = orch._services.implementation.execute(
+            ctx=ctx,
+            plan=plan,
+            task_id=task.task_id,
+            patch_kind="production_patch",
+        )
+        if production_outcome.structured is not None:
+            pending_changes = tuple(
+                getattr(production_outcome.structured, "attempted_changes", ()) or ()
+            )
 
     def _runner(r: Path, g: Path) -> None:
         orch._runner.run_task(
@@ -1426,6 +1456,7 @@ def _phase_implementation(
             green_dir=g,
             task_id=task.task_id,
             cancel=orch._cancel_token_for(str(ctx.run_id)),
+            pending_test_changes=pending_test_changes,
             pending_changes=pending_changes,
         )
 
@@ -1484,7 +1515,7 @@ def _phase_validation(
             new_ctx,
             "remediation exhausted: skipping validation",
         )
-    plan = _PlanBuilder.build(ctx=ctx)
+    plan = _load_persisted_plan(ctx=ctx, run_dir=run_dir)
     task = plan.tasks[0]
     if not task.validation_commands:
         # Cluster WP1 / story WP1.4: surface the SKIPPED state in the
@@ -1525,7 +1556,7 @@ def _phase_remediation(
     # invoking the service so the first call counts; once the budget
     # is exhausted we route to ``failed`` / ``blocked`` rather than
     # silently completing a run that hit remediation cap.
-    plan = _PlanBuilder.build(ctx=ctx)
+    plan = _load_persisted_plan(ctx=ctx, run_dir=run_dir)
     next_attempt = ctx.remediation_attempts + 1
     new_ctx = replace(ctx, remediation_attempts=next_attempt)
     if next_attempt > orch._config.max_remediation_attempts:
@@ -1550,7 +1581,7 @@ def _phase_remediation(
 def _phase_review(
     orch: Orchestrator, *, spec: PhaseSpec, ctx: RunContext, run_dir: Path
 ) -> tuple[PhaseOutcome, RunContext, str]:
-    plan = _PlanBuilder.build(ctx=ctx)
+    plan = _load_persisted_plan(ctx=ctx, run_dir=run_dir)
     # Cluster WP3 (story H): delegate to the configured
     # ``ReviewService`` with a *fresh* context — the SPEC requires
     # review never to receive prior implementation chat history or

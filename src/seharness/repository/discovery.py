@@ -595,9 +595,20 @@ def derive_allowed_paths(profile: RepositoryProfile) -> tuple[str, ...]:
     paths: list[str] = []
     for root in profile.source_roots:
         paths.append(f"{root}/")
+    # Single-file and other flat-layout applications have no package
+    # directory, but their top-level modules are still production
+    # source. Surface those exact files so planning does not require a
+    # test-only override (for example, a FastAPI app in main.py).
+    repo_path = Path(profile.path)
+    if not profile.source_roots:
+        excluded = {"setup.py", "conftest.py"}
+        paths.extend(
+            child.name
+            for child in sorted(repo_path.glob("*.py"))
+            if child.is_file() and child.name not in excluded
+        )
     for root in profile.test_roots:
         paths.append(f"{root}/")
-    repo_path = Path(profile.path)
     if (repo_path / "docs").is_dir():
         paths.append("docs/")
     # Deduplicate while preserving order.

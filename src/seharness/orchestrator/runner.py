@@ -79,6 +79,7 @@ class StubRunner:
         green_dir: Path,
         task_id: str,
         cancel: CancellationToken | None = None,
+        pending_test_changes: Sequence[str] | None = None,
         pending_changes: Sequence[str] | None = None,
     ) -> CommandResult:
         # ``StubRunner`` is synchronous and instant; cancellation is a
@@ -88,6 +89,7 @@ class StubRunner:
         # ``pending_changes`` is accepted for parity with
         # :class:`LLMDrivenTaskRunner`; the deterministic stub does
         # not apply model-produced patches.
+        _ = pending_test_changes
         _ = pending_changes
         for d in (red_dir, green_dir):
             d.mkdir(parents=True, exist_ok=True)
@@ -179,6 +181,7 @@ class LocalCommandRunner:
         green_dir: Path,
         task_id: str,
         cancel: CancellationToken | None = None,
+        pending_test_changes: Sequence[str] | None = None,
         pending_changes: Sequence[str] | None = None,
     ) -> CommandResult:
         # LocalCommandRunner.run_task is intentionally a thin shim
@@ -191,6 +194,7 @@ class LocalCommandRunner:
             red_dir=red_dir,
             green_dir=green_dir,
             task_id=task_id,
+            pending_test_changes=pending_test_changes,
             pending_changes=pending_changes,
         )
 

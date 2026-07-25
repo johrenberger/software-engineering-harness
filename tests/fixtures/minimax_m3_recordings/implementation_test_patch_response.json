@@ -1,5 +1,5 @@
 {
-  "content_text": "{\"task_id\": \"task-001\", \"attempted_changes\": []}",
+  "content_text": "{\"task_id\":\"task-001\",\"attempted_changes\":[\"{\\\"diff_text\\\":\\\"diff --git a/tests/test_health.py b/tests/test_health.py\\\\n--- a/tests/test_health.py\\\\n+++ b/tests/test_health.py\\\\n@@ -13,6 +13,7 @@ def test_health_returns_ok() -> None:\\\\n     client = TestClient(app)\\\\n     response = client.get(\\\\\\\"/health\\\\\\\")\\\\n+    assert response.headers[\\\\\\\"content-type\\\\\\\"].startswith(\\\\\\\"application/json\\\\\\\")\\\\n     assert response.status_code == 200\\\\n     payload = response.json()\\\\n     assert payload == {\\\\\\\"status\\\\\\\": \\\\\\\"ok\\\\\\\"}\\\\n\\\",\\\"task_id\\\":\\\"task-001\\\",\\\"kind\\\":\\\"test_patch\\\",\\\"target_paths\\\":[\\\"tests/test_health.py\\\"]}\"]}",
   "usage_input_tokens": 400,
   "usage_output_tokens": 250,
   "request_id": "[redacted-synthetic]",

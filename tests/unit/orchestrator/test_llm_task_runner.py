@@ -27,6 +27,7 @@ from seharness.controller.run_ledger import RunLedger  # noqa: F401
 from seharness.orchestrator.llm_task_runner import (
     WRITE_FILE_HEADER,
     LLMDrivenTaskRunner,
+    apply_controlled_patch_changes,
     apply_write_directives,
     parse_write_directives,
 )
@@ -220,6 +221,38 @@ def _make_fastapi_fixture_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def _patch_envelope(*, kind: str, target_path: str, diff_text: str) -> str:
+    return json.dumps(
+        {
+            "diff_text": diff_text,
+            "task_id": "task-001",
+            "kind": kind,
+            "target_paths": [target_path],
+        }
+    )
+
+
+def _health_production_patch() -> str:
+    return _patch_envelope(
+        kind="production_patch",
+        target_path="main.py",
+        diff_text=(
+            "diff --git a/main.py b/main.py\n"
+            "--- a/main.py\n"
+            "+++ b/main.py\n"
+            "@@ -5,3 +5,8 @@ app = FastAPI()\n"
+            " @app.get('/')\n"
+            " def root() -> dict[str, str]:\n"
+            "     return {'msg': 'fixture'}\n"
+            "+\n"
+            "+\n"
+            "+@app.get('/health')\n"
+            "+def health() -> dict[str, str]:\n"
+            "+    return {'status': 'ok'}\n"
+        ),
+    )
+
+
 class TestLLMDrivenTaskRunnerEndToEnd:
     """End-to-end: RED fails, patch applied, GREEN passes, final
     diff captured. This is the offline vertical acceptance's
@@ -229,13 +262,7 @@ class TestLLMDrivenTaskRunnerEndToEnd:
     def test_red_fails_then_green_passes(self, tmp_path: Path) -> None:
         repo = _make_fastapi_fixture_repo(tmp_path)
 
-        # Production patch: full new main.py content with /health.
-        new_main_py = (
-            "from fastapi import FastAPI\n\napp = FastAPI()\n\n"
-            "@app.get('/')\ndef root() -> dict[str, str]:\n    return {'msg': 'fixture'}\n\n"
-            "@app.get('/health')\ndef health() -> dict[str, str]:\n    return {'status': 'ok'}\n"
-        )
-        patch = f"{WRITE_FILE_HEADER} main.py\n{new_main_py}"
+        patch = _health_production_patch()
 
         runner = LLMDrivenTaskRunner(
             repo_root=repo,
@@ -324,8 +351,19 @@ class TestLLMDrivenTaskRunnerEndToEnd:
         )
         red_dir = tmp_path / "red"
         green_dir = tmp_path / "green"
-        bad_patch = f"{WRITE_FILE_HEADER} tests/test_health.py\n# hijack\n"
-        with pytest.raises(ValueError, match="outside the sandbox"):
+        bad_patch = _patch_envelope(
+            kind="production_patch",
+            target_path="tests/test_health.py",
+            diff_text=(
+                "diff --git a/tests/test_health.py b/tests/test_health.py\n"
+                "--- a/tests/test_health.py\n"
+                "+++ b/tests/test_health.py\n"
+                "@@ -1,1 +1,2 @@\n"
+                " from fastapi.testclient import TestClient\n"
+                "+# hijack\n"
+            ),
+        )
+        with pytest.raises(ValueError, match="outside policy"):
             runner.run_task(
                 red_dir=red_dir,
                 green_dir=green_dir,
@@ -339,11 +377,7 @@ class TestLLMDrivenTaskRunnerEndToEnd:
         ``required_tests`` field.
         """
         repo = _make_fastapi_fixture_repo(tmp_path)
-        new_main_py = (
-            "from fastapi import FastAPI\n\napp = FastAPI()\n\n"
-            "@app.get('/health')\ndef health() -> dict[str, str]:\n    return {'status': 'ok'}\n"
-        )
-        patch = f"{WRITE_FILE_HEADER} main.py\n{new_main_py}"
+        patch = _health_production_patch()
         runner = LLMDrivenTaskRunner(
             repo_root=repo,
             pytest_target="tests/test_health.py",
@@ -379,3 +413,65 @@ class TestLLMDrivenTaskRunnerEndToEnd:
         covered = green_json["covered_tests"]
         assert isinstance(covered, list)
         assert any("test_health" in t for t in covered)
+
+
+class TestControlledPatchRoleBoundaries:
+    def test_test_patch_rejects_source_path(self, tmp_path: Path) -> None:
+        patch = _patch_envelope(
+            kind="test_patch",
+            target_path="main.py",
+            diff_text=(
+                "diff --git a/main.py b/main.py\n"
+                "--- /dev/null\n"
+                "+++ b/main.py\n"
+                "@@ -0,0 +1 @@\n"
+                "+unsafe = True\n"
+            ),
+        )
+        with pytest.raises(ValueError, match="test paths only"):
+            apply_controlled_patch_changes(
+                [patch],
+                repo_root=tmp_path,
+                allowed_paths=("main.py", "tests/"),
+                expected_kind="test_patch",
+            )
+
+    def test_production_patch_rejects_test_path(self, tmp_path: Path) -> None:
+        patch = _patch_envelope(
+            kind="production_patch",
+            target_path="tests/test_x.py",
+            diff_text=(
+                "diff --git a/tests/test_x.py b/tests/test_x.py\n"
+                "--- /dev/null\n"
+                "+++ b/tests/test_x.py\n"
+                "@@ -0,0 +1 @@\n"
+                "+def test_x(): pass\n"
+            ),
+        )
+        with pytest.raises(ValueError, match="may not touch test paths"):
+            apply_controlled_patch_changes(
+                [patch],
+                repo_root=tmp_path,
+                allowed_paths=("main.py", "tests/"),
+                expected_kind="production_patch",
+            )
+
+    def test_declared_target_must_match_diff(self, tmp_path: Path) -> None:
+        patch = _patch_envelope(
+            kind="production_patch",
+            target_path="other.py",
+            diff_text=(
+                "diff --git a/main.py b/main.py\n"
+                "--- /dev/null\n"
+                "+++ b/main.py\n"
+                "@@ -0,0 +1 @@\n"
+                "+safe = True\n"
+            ),
+        )
+        with pytest.raises(ValueError, match="outside declared target_paths"):
+            apply_controlled_patch_changes(
+                [patch],
+                repo_root=tmp_path,
+                allowed_paths=("main.py",),
+                expected_kind="production_patch",
+            )

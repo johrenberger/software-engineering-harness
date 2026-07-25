@@ -86,20 +86,20 @@ def _collect_responses_from_manifest() -> tuple[MiniMaxTransportResponse, ...]:
 
       1. specification       (author)
       2. planning            (author)
-      3. implementation      (author) — production_patch carries the
-                                     WRITE_FILE: main.py directive
-                                     the LLMDrivenTaskRunner applies
-                                     between RED and GREEN.
-      4. remediation         (author) — test_patch response is
-                                     consumed but unused; remediation
-                                     never applies patches to disk.
-      5. review              (review)
+      3. implementation test patch (author) — controlled unified diff
+                                     applied before RED.
+      4. implementation production patch (author) — controlled unified
+                                     diff applied between RED and GREEN.
+      5. remediation placeholder (author) — keeps the unconditional
+                                     remediation phase isolated.
+      6. review              (review)
     """
     ordered_phases = [
         "specification",
         "planning",
-        "implementation_production_patch",
         "implementation_test_patch",
+        "implementation_production_patch",
+        "remediation_placeholder",
         "review",
     ]
     responses: list[MiniMaxTransportResponse] = []
@@ -194,45 +194,13 @@ class TestOfflineVerticalAcceptance:
             allowed_paths=("main.py", "tests/"),
         )
 
-        # ---- Cluster M3-4 offline override of _PlanBuilder ----
-        # The canonical ``_PlanBuilder.build`` derives
-        # ``allowed_paths`` from the discovered repository profile
-        # (source_roots + test_roots). The fixture is a flat-layout
-        # Python repo with no ``src/`` directory, so the profile
-        # yields ``allowed_paths=("tests/",)`` — that lets
-        # ``TaskExecutionService`` revert the production patch
-        # (``main.py``). Override the builder so the M3 plan
-        # carries ``main.py`` + ``tests/test_health.py`` as the
-        # sandbox's allowed paths. This is the only place M3-4
-        # diverges from the canonical plan builder; the divergence
-        # is scoped to the offline test.
-        from seharness.orchestrator import orchestrator as _orch_mod
-
-        _original_plan_build = _orch_mod._PlanBuilder.build
-
-        def _m3_4_plan_build(*, ctx):  # type: ignore[no-untyped-def]
-            plan = _original_plan_build(ctx=ctx)
-            task = plan.tasks[0]
-            new_task = task.model_copy(
-                update={
-                    "allowed_paths": ("main.py", "tests/test_health.py"),
-                    "validation_commands": ("python -m pytest",),
-                }
-            )
-            return plan.model_copy(update={"tasks": (new_task,)})
-
-        _orch_mod._PlanBuilder.build = staticmethod(_m3_4_plan_build)
-
-        # ---- Run the orchestrator ----
+        # ---- Run the canonical orchestrator without private planner overrides ----
         run_id = RunId("m3-4-offline-acceptance-001")
-        try:
-            pipeline_result = orch.start_run(
-                feature_description="Add /health endpoint",
-                repo_path=str(repo_path),
-                run_id=run_id,
-            )
-        finally:
-            _orch_mod._PlanBuilder.build = _original_plan_build
+        pipeline_result = orch.start_run(
+            feature_description="Add /health endpoint",
+            repo_path=str(repo_path),
+            run_id=run_id,
+        )
 
         run_dir = execution_root / str(run_id)
         ctx = pipeline_result.context

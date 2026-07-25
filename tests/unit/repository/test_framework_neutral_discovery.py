@@ -27,6 +27,7 @@ from seharness.repository.discovery import (
     FrameworkIndicator,
     PackageManager,
     RepositoryError,
+    derive_allowed_paths,
     inspect_repository,
 )
 
@@ -132,6 +133,17 @@ class TestSourceRootDetection:
     def test_finds_flat_layout(self, poetry_project: Path) -> None:
         p = inspect_repository(poetry_project)
         assert any(root.endswith("demo") for root in p.source_roots)
+
+    def test_single_file_project_exposes_top_level_module_as_allowed_path(
+        self, tmp_path: Path
+    ) -> None:
+        _write_pyproject(tmp_path, '[project]\nname = "x"\n')
+        (tmp_path / "main.py").write_text("app = object()\n")
+        (tmp_path / "tests").mkdir()
+        profile = inspect_repository(tmp_path)
+
+        assert profile.source_roots == ()
+        assert derive_allowed_paths(profile) == ("main.py", "tests/")
 
     def test_multiple_source_roots(self, tmp_path: Path) -> None:
         _write_pyproject(tmp_path, '[project]\nname = "x"\n')

@@ -347,6 +347,7 @@ class ImplementationService(Protocol):
         ctx: RunContext,
         plan: Plan,
         task_id: str,
+        patch_kind: Literal["test_patch", "production_patch"] = "production_patch",
     ) -> ImplementationOutcome: ...
 
     last_evidence: ServiceEvidence | None = None
@@ -740,16 +741,28 @@ class ModelBackedPlanningService:
             msg = f"plan malformed: {exc}"
             raise RuntimeError(msg) from exc
         self.last_plan = plan_schema
-        # The deterministic builder fills in the rich Plan
-        # (requirement traces, validation commands from
-        # discovery, depends_on). Cluster N keeps this seam
-        # narrow; PR #77 wires model-produced tasks into the
-        # rich Plan dataclass.
+        # Build the rich task metadata from repository discovery, then
+        # overlay the validated model plan. Downstream phases must
+        # execute the plan that M3 produced, not silently rebuild and
+        # substitute a deterministic plan.
         from seharness.orchestrator.orchestrator import (  # noqa: PLC0415
             _PlanBuilder,
         )
 
-        return _PlanBuilder.build(ctx=ctx)
+        base_plan = _PlanBuilder.build(ctx=ctx)
+        template_task = base_plan.tasks[0]
+        ordered_tasks = sorted(plan_schema.tasks, key=lambda task: task.order_index)
+        tasks = tuple(
+            template_task.model_copy(
+                update={
+                    "task_id": model_task.task_id,
+                    "objective": model_task.task_objective,
+                    "allowed_paths": model_task.allowed_paths,
+                }
+            )
+            for model_task in ordered_tasks
+        )
+        return base_plan.model_copy(update={"plan_id": plan_schema.plan_id, "tasks": tasks})
 
 
 class DeterministicImplementationService:
@@ -771,7 +784,9 @@ class DeterministicImplementationService:
         ctx: RunContext,
         plan: Plan,
         task_id: str,
+        patch_kind: Literal["test_patch", "production_patch"] = "production_patch",
     ) -> ImplementationOutcome:
+        _ = patch_kind
         return ImplementationOutcome(
             attempted=False,
             attempt_index=0,
@@ -1067,10 +1082,18 @@ class ModelBackedImplementationService:
         ctx: RunContext,
         plan: Plan,
         task_id: str,
+        patch_kind: Literal["test_patch", "production_patch"] = "production_patch",
     ) -> ImplementationOutcome:
         task = _find_task(plan, task_id)
+        patch_instruction = (
+            "Generate a unified diff that touches test paths only."
+            if patch_kind == "test_patch"
+            else "Generate a unified diff that touches production source paths only."
+        )
         prompt = (
             "Implement the following task with bounded changes.\n\n"
+            f"Patch kind: {patch_kind}\n"
+            f"Patch constraint: {patch_instruction}\n"
             f"Plan id: {plan.plan_id}\n"
             f"Task id: {task.task_id}\n"
             f"Objective: {task.objective}\n"
@@ -1084,6 +1107,7 @@ class ModelBackedImplementationService:
                 "template_version": self._template_version,
                 "task_id": task.task_id,
                 "allowed_paths": list(task.allowed_paths),
+                "patch_kind": patch_kind,
             },
             max_tokens=self._budget.max_tokens,
         )
