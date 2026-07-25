@@ -1,0 +1,7 @@
+{
+  "content_text": "{\"task_id\":\"task-001\",\"attempted_changes\":[]}",
+  "usage_input_tokens": 100,
+  "usage_output_tokens": 20,
+  "request_id": "[redacted-synthetic]",
+  "error": null
+}
