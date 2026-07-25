@@ -39,6 +39,12 @@
       "sha256": "pending"
     },
     {
+      "phase": "remediation_placeholder",
+      "request_file": "implementation_test_patch_request.json",
+      "response_file": "remediation_placeholder_response.json",
+      "sha256": "pending"
+    },
+    {
       "phase": "review",
       "request_file": "review_request.json",
       "response_file": "review_response.json",
