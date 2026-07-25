@@ -740,16 +740,30 @@ class ModelBackedPlanningService:
             msg = f"plan malformed: {exc}"
             raise RuntimeError(msg) from exc
         self.last_plan = plan_schema
-        # The deterministic builder fills in the rich Plan
-        # (requirement traces, validation commands from
-        # discovery, depends_on). Cluster N keeps this seam
-        # narrow; PR #77 wires model-produced tasks into the
-        # rich Plan dataclass.
+        # Build the rich task metadata from repository discovery, then
+        # overlay the validated model plan. Downstream phases must
+        # execute the plan that M3 produced, not silently rebuild and
+        # substitute a deterministic plan.
         from seharness.orchestrator.orchestrator import (  # noqa: PLC0415
             _PlanBuilder,
         )
 
-        return _PlanBuilder.build(ctx=ctx)
+        base_plan = _PlanBuilder.build(ctx=ctx)
+        template_task = base_plan.tasks[0]
+        ordered_tasks = sorted(plan_schema.tasks, key=lambda task: task.order_index)
+        tasks = tuple(
+            template_task.model_copy(
+                update={
+                    "task_id": model_task.task_id,
+                    "objective": model_task.task_objective,
+                    "allowed_paths": model_task.allowed_paths,
+                }
+            )
+            for model_task in ordered_tasks
+        )
+        return base_plan.model_copy(
+            update={"plan_id": plan_schema.plan_id, "tasks": tasks}
+        )
 
 
 class DeterministicImplementationService:
