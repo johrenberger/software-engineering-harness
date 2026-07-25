@@ -175,7 +175,6 @@ def apply_write_directives(
     return tuple(written)
 
 
-
 def apply_controlled_patch_changes(
     raw: Sequence[str],
     *,
@@ -200,16 +199,14 @@ def apply_controlled_patch_changes(
         patch = parse_unified_diff(payload)
         if patch.kind != expected_kind:
             raise ValueError(
-                f"attempted_changes[{index}] has kind {patch.kind!r}; "
-                f"expected {expected_kind!r}"
+                f"attempted_changes[{index}] has kind {patch.kind!r}; expected {expected_kind!r}"
             )
         parsed = PatchValidator.parse(patch.diff_text)
         PatchValidator.validate_purity(parsed, patch.target_paths)
-        PatchPolicyChecker.check_paths_within_policy(
-            parsed, policy_allowed_paths=allowed_paths
-        )
+        PatchPolicyChecker.check_paths_within_policy(parsed, policy_allowed_paths=allowed_paths)
         test_paths = tuple(
-            path for path in parsed.touched_paths
+            path
+            for path in parsed.touched_paths
             if path == "test" or path.startswith(("test/", "tests/"))
         )
         if expected_kind == "test_patch" and len(test_paths) != len(parsed.touched_paths):
@@ -219,6 +216,7 @@ def apply_controlled_patch_changes(
         result = SandboxPatchApplier(sandbox_dir=repo_root).apply(parsed)
         applied.extend(repo_root / path for path in result.applied_paths)
     return tuple(applied)
+
 
 def _run_pytest(
     *,

@@ -762,9 +762,7 @@ class ModelBackedPlanningService:
             )
             for model_task in ordered_tasks
         )
-        return base_plan.model_copy(
-            update={"plan_id": plan_schema.plan_id, "tasks": tasks}
-        )
+        return base_plan.model_copy(update={"plan_id": plan_schema.plan_id, "tasks": tasks})
 
 
 class DeterministicImplementationService:

@@ -221,9 +221,7 @@ def _make_fastapi_fixture_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _patch_envelope(
-    *, kind: str, target_path: str, diff_text: str
-) -> str:
+def _patch_envelope(*, kind: str, target_path: str, diff_text: str) -> str:
     return json.dumps(
         {
             "diff_text": diff_text,
