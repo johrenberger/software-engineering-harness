@@ -1422,18 +1422,33 @@ def _phase_implementation(
     # between RED and GREEN. The default deterministic composition
     # raises on ``execute`` because there's no router, so we
     # only invoke the service when the composition is model-backed.
+    pending_test_changes: tuple[str, ...] = ()
     pending_changes: tuple[str, ...] = ()
     from seharness.orchestrator.services import (  # noqa: PLC0415
         ModelBackedImplementationService,
     )
 
     if isinstance(orch._services.implementation, ModelBackedImplementationService):
-        impl_request_ctx = ctx
-        impl_outcome = orch._services.implementation.execute(
-            ctx=impl_request_ctx, plan=plan, task_id=task.task_id
+        test_outcome = orch._services.implementation.execute(
+            ctx=ctx,
+            plan=plan,
+            task_id=task.task_id,
+            patch_kind="test_patch",
         )
-        if impl_outcome.structured is not None:
-            pending_changes = tuple(getattr(impl_outcome.structured, "attempted_changes", ()) or ())
+        if test_outcome.structured is not None:
+            pending_test_changes = tuple(
+                getattr(test_outcome.structured, "attempted_changes", ()) or ()
+            )
+        production_outcome = orch._services.implementation.execute(
+            ctx=ctx,
+            plan=plan,
+            task_id=task.task_id,
+            patch_kind="production_patch",
+        )
+        if production_outcome.structured is not None:
+            pending_changes = tuple(
+                getattr(production_outcome.structured, "attempted_changes", ()) or ()
+            )
 
     def _runner(r: Path, g: Path) -> None:
         orch._runner.run_task(
@@ -1441,6 +1456,7 @@ def _phase_implementation(
             green_dir=g,
             task_id=task.task_id,
             cancel=orch._cancel_token_for(str(ctx.run_id)),
+            pending_test_changes=pending_test_changes,
             pending_changes=pending_changes,
         )
 
